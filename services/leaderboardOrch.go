@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"gorm.io/gorm"
-	"predictionOddsBot/models"
+	"perfectOddsBot/models"
 )
 
 func ShowLeaderboard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {

@@ -8,8 +8,8 @@ import (
 	"gorm.io/gorm/logger"
 	"log"
 	"os"
-	"predictionOddsBot/models"
-	"predictionOddsBot/services"
+	"perfectOddsBot/models"
+	"perfectOddsBot/services"
 )
 
 var db *gorm.DB

@@ -1,4 +1,4 @@
-module predictionOddsBot
+module perfectOddsBot
 
 go 1.22
 

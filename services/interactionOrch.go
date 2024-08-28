@@ -5,7 +5,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"gorm.io/gorm"
 	"log"
-	"predictionOddsBot/models"
+	"perfectOddsBot/models"
 	"strconv"
 	"strings"
 )
