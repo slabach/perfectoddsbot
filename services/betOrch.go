@@ -42,7 +42,7 @@ func CreateBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 	db.Create(&bet)
 
 	embed := &discordgo.MessageEmbed{
-		Title:       fmt.Sprintf("📢 New Bet Created (ID: %d)", bet.ID),
+		Title:       fmt.Sprintf("📢 New Bet Created", bet.ID),
 		Description: description,
 		Fields: []*discordgo.MessageEmbedField{
 			{
