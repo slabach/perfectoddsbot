@@ -104,7 +104,7 @@ func interactionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	case discordgo.InteractionApplicationCommand:
 		services.HandleSlashCommand(s, i, db)
 	case discordgo.InteractionMessageComponent:
-		services.HandleComponentInteraction(s, i)
+		services.HandleComponentInteraction(s, i, db)
 	case discordgo.InteractionModalSubmit:
 		services.HandleModalSubmit(s, i, db)
 	}

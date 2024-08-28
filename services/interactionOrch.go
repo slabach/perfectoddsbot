@@ -10,10 +10,50 @@ import (
 	"strings"
 )
 
-func HandleComponentInteraction(s *discordgo.Session, i *discordgo.InteractionCreate) {
+func HandleComponentInteraction(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
 	customID := i.MessageComponentData().CustomID
 
+	log.Printf("Handling interaction with customID: %s", customID)
+
+	if strings.HasPrefix(customID, "bet_") {
+		// Handle placing a bet
+		var betID uint
+		var option string
+		_, err := fmt.Sscanf(customID, "bet_%d_%s", &betID, &option)
+		if err != nil {
+			log.Printf("Error parsing bet customID: %v", err)
+			return
+		}
+
+		err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseModal,
+			Data: &discordgo.InteractionResponseData{
+				Title:    "Enter Bet Amount",
+				CustomID: fmt.Sprintf("submit_bet_%d_%s", betID, option),
+				Components: []discordgo.MessageComponent{
+					discordgo.ActionsRow{
+						Components: []discordgo.MessageComponent{
+							discordgo.TextInput{
+								CustomID:    "bet_amount",
+								Label:       "Bet Amount",
+								Style:       discordgo.TextInputShort,
+								Placeholder: "Enter amount",
+								Required:    true,
+							},
+						},
+					},
+				},
+			},
+		})
+		if err != nil {
+			log.Printf("Error presenting modal: %v", err)
+			return
+		}
+		return
+	}
+
 	if strings.HasPrefix(customID, "resolve_bet_") {
+		// Handle resolving a bet
 		betID, err := strconv.Atoi(strings.TrimPrefix(customID, "resolve_bet_"))
 		if err != nil {
 			log.Printf("Error parsing bet ID: %v", err)
@@ -29,6 +69,7 @@ func HandleComponentInteraction(s *discordgo.Session, i *discordgo.InteractionCr
 				},
 			})
 			if err != nil {
+				log.Printf("Error sending unauthorized message: %v", err)
 				return
 			}
 			return
@@ -58,6 +99,63 @@ func HandleComponentInteraction(s *discordgo.Session, i *discordgo.InteractionCr
 			log.Printf("Error presenting modal: %v", err)
 			return
 		}
+		return
+	}
+
+	if strings.HasPrefix(customID, "lock_bet_") {
+		// Handle locking a bet
+		betID, err := strconv.Atoi(strings.TrimPrefix(customID, "lock_bet_"))
+		if err != nil {
+			log.Printf("Error parsing bet ID: %v", err)
+			return
+		}
+
+		if !IsAdmin(s, i) {
+			err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "You are not authorized to use this command.",
+					Flags:   discordgo.MessageFlagsEphemeral,
+				},
+			})
+			if err != nil {
+				log.Printf("Error sending unauthorized message: %v", err)
+				return
+			}
+			return
+		}
+
+		var bet models.Bet
+		result := db.First(&bet, "id = ?", betID)
+		if result.Error != nil || bet.ID == 0 {
+			err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "Bet not found.",
+					Flags:   discordgo.MessageFlagsEphemeral,
+				},
+			})
+			if err != nil {
+				log.Printf("Error sending bet not found message: %v", err)
+				return
+			}
+			return
+		}
+
+		bet.Active = false
+		db.Save(&bet)
+
+		err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "Bet has been locked and is no longer accepting new bets.",
+			},
+		})
+		if err != nil {
+			log.Printf("Error sending bet locked message: %v", err)
+			return
+		}
+		return
 	}
 }
 
@@ -84,12 +182,16 @@ func HandleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, db 
 	}
 
 	var betID uint
-	var option int
+	var option string
+	var optionVal int
 
-	_, err := fmt.Sscanf(customID, "placebet_%d_%d", &betID, &option)
+	log.Printf(customID)
+	_, err := fmt.Sscanf(customID, "submit_bet_%d_%s", &betID, &option)
 	if err != nil {
 		log.Printf("Error parsing modal customID for placing a bet: %v", err)
 		return
+	} else {
+		_, err = fmt.Sscanf(option, "option%d", &optionVal)
 	}
 
 	amountStr := i.ModalSubmitData().Components[0].(*discordgo.ActionsRow).Components[0].(*discordgo.TextInput).Value
@@ -104,6 +206,7 @@ func HandleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, db 
 			},
 		})
 		if err != nil {
+			log.Printf("Error placing bet: %v", err)
 			return
 		}
 		return
@@ -129,6 +232,7 @@ func HandleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, db 
 			},
 		})
 		if err != nil {
+			log.Printf("Error sending message: %v", err)
 			return
 		}
 		return
@@ -154,7 +258,7 @@ func HandleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, db 
 	betEntry := models.BetEntry{
 		UserID: user.ID,
 		BetID:  betID,
-		Option: option,
+		Option: optionVal,
 		Amount: amount,
 	}
 	db.Create(&betEntry)
@@ -163,7 +267,7 @@ func HandleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, db 
 	db.Save(&user)
 
 	optionName := bet.Option1
-	if option == 2 {
+	if optionVal == 2 {
 		optionName = bet.Option2
 	}
 
