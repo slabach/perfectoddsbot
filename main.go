@@ -94,6 +94,9 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		log.Printf("Error fetching or creating user: %v", result.Error)
 		return
 	}
+	if result.RowsAffected == 1 {
+		user.Points = 1000
+	}
 
 	user.Points += 1
 	db.Save(&user)

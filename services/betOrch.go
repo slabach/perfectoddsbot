@@ -79,7 +79,7 @@ func CreateBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 	if IsAdmin(s, i) {
 		buttons = append(buttons,
 			discordgo.Button{
-				Label:    "Lock Bet",
+				Label:    "Close Betting",
 				Style:    discordgo.DangerButton,
 				CustomID: fmt.Sprintf("lock_bet_%d", bet.ID),
 				Emoji: &discordgo.ComponentEmoji{
