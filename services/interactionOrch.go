@@ -148,7 +148,7 @@ func HandleComponentInteraction(s *discordgo.Session, i *discordgo.InteractionCr
 		err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
-				Content: "Bet has been locked and is no longer accepting new bets.",
+				Content: fmt.Sprintf("Bet '%s' has been locked and is no longer accepting new bets.", bet.Description),
 			},
 		})
 		if err != nil {
@@ -178,6 +178,16 @@ func HandleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, db 
 		}
 
 		ResolveBetByID(s, i, betID, winningOption, db)
+
+		_, err = s.ChannelMessageEditComplex(&discordgo.MessageEdit{
+			ID:         i.Message.ID,
+			Channel:    i.ChannelID,
+			Components: &[]discordgo.MessageComponent{},
+		})
+		if err != nil {
+			log.Printf("Error removing buttons from the message: %v", err)
+			return
+		}
 		return
 	}
 

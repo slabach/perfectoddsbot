@@ -34,6 +34,9 @@ func ShowLeaderboard(s *discordgo.Session, i *discordgo.InteractionCreate, db *g
 		if err == nil {
 			username = member.User.GlobalName
 		}
+		if username == "" {
+			username = member.User.Username
+		}
 		description += fmt.Sprintf("**%d. %s** - %d points\n", idx+1, username, user.Points)
 	}
 

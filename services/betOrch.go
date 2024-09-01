@@ -42,7 +42,7 @@ func CreateBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 	db.Create(&bet)
 
 	embed := &discordgo.MessageEmbed{
-		Title:       fmt.Sprintf("📢 New Bet Created", bet.ID),
+		Title:       fmt.Sprint("📢 New Bet Created"),
 		Description: description,
 		Fields: []*discordgo.MessageEmbedField{
 			{
@@ -156,7 +156,7 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 		winningOptionName = bet.Option2
 	}
 
-	response := fmt.Sprintf("Bet **%d** has been resolved!\n**%s** is the winning option.\nTotal payout: **%d** points.", bet.ID, winningOptionName, totalPayout)
+	response := fmt.Sprintf("Bet '%s' has been resolved!\n**%s** is the winning option.\nTotal payout: **%d** points.", bet.Description, winningOptionName, totalPayout)
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
