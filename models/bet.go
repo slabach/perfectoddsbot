@@ -12,4 +12,5 @@ type Bet struct {
 	BetsOption1 int
 	BetsOption2 int
 	MessageID   string
+	ChannelID   string
 }

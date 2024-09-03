@@ -38,6 +38,8 @@ func CreateBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 		Odds2:       odds2,
 		Active:      true,
 		GuildID:     guildID,
+		MessageID:   i.Message.ID,
+		ChannelID:   i.ChannelID,
 	}
 	db.Create(&bet)
 

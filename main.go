@@ -1,11 +1,14 @@
 package main
 
 import (
+	"database/sql"
+	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"github.com/joho/godotenv"
+	_ "github.com/microsoft/go-mssqldb"
+	"github.com/xo/dburl"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 	"log"
 	"os"
 	"perfectOddsBot/models"
@@ -15,24 +18,32 @@ import (
 var db *gorm.DB
 
 func init() {
-	err := godotenv.Load()
+	err := godotenv.Load(".env")
 	if err != nil {
 		log.Fatalf("Error loading .env file")
 	}
 
-	connString := os.Getenv("MYSQL_URL")
-	if connString == "" {
-		log.Fatalf("MYSQL_URL not set in environment variables")
+	mysqlURL, ok := os.LookupEnv("MYSQL_URL")
+	if ok == false {
+		fmt.Println("MYSQL_URL not found")
+		return
 	}
 
-	db, err = gorm.Open(mysql.Open(connString+"?charset=utf8mb4&parseTime=True&loc=Local"), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Warn),
-	})
+	u, err := dburl.Parse(mysqlURL + "?charset=utf8mb4&parseTime=True&loc=Local")
 	if err != nil {
-		log.Fatalf("failed to connect to database: %v", err)
+		fmt.Println(err)
+		return
 	}
 
-	err = db.AutoMigrate(&models.User{}, &models.Bet{}, &models.BetEntry{})
+	db, err = gorm.Open(mysql.Open(u.DSN), &gorm.Config{})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	err = db.AutoMigrate(
+		&models.User{}, &models.Bet{}, &models.BetEntry{},
+	)
 	if err != nil {
 		log.Fatalf("Error migrating database: %v", err)
 	}
@@ -70,6 +81,20 @@ func main() {
 
 		}
 	}(dg)
+
+	// Close the database connection when the main function finishes
+	defer func(db *gorm.DB) {
+		sqlDB, err := db.DB()
+		if err != nil {
+			log.Fatalln(err)
+		}
+		defer func(sqlDB *sql.DB) {
+			err := sqlDB.Close()
+			if err != nil {
+				log.Fatalln(err)
+			}
+		}(sqlDB)
+	}(db)
 
 	err = services.RegisterCommands(dg)
 	if err != nil {
