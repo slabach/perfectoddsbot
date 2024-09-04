@@ -38,8 +38,6 @@ func CreateBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 		Odds2:       odds2,
 		Active:      true,
 		GuildID:     guildID,
-		MessageID:   i.Message.ID,
-		ChannelID:   i.ChannelID,
 	}
 	db.Create(&bet)
 
@@ -134,7 +132,7 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 	}
 
 	var entries []models.BetEntry
-	db.Where("bet_id = ? AND option = ?", bet.ID, winningOption).Find(&entries)
+	db.Where("bet_id = ? AND `option` = ?", bet.ID, winningOption).Find(&entries)
 
 	totalPayout := 0
 	for _, entry := range entries {

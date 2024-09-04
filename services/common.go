@@ -62,5 +62,6 @@ func CalculatePayout(amount int, option int, bet models.Bet) int {
 	if odds > 0 {
 		return amount + (amount*odds)/100
 	}
+
 	return amount + (amount*100)/-odds
 }
