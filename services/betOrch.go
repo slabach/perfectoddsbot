@@ -126,6 +126,7 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 			},
 		})
 		if err != nil {
+			fmt.Println(err)
 			return
 		}
 		return
@@ -166,4 +167,60 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 	if err != nil {
 		return
 	}
+}
+
+func MyOpenBets(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
+	var bets []models.BetEntry
+	result := db.Preload("Bet").Find("user_id = ? AND bet.active == 1", i.User.ID, &bets)
+	if result.Error != nil {
+		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "Error finding active bets.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+	}
+
+	if len(bets) == 0 {
+		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "You have no active bets.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+	} else {
+		response := fmt.Sprintf("You have %d active bets.\n", len(bets))
+
+		for _, bet := range bets {
+			if bet.Option == 1 {
+				response += fmt.Sprintf("* `%s` - Your Bet: $%d on %s.\n", bet.Bet.Description, bet.Amount, bet.Bet.Option1)
+			} else {
+				response += fmt.Sprintf("* `%s` - Your Bet: $%d on %s.\n", bet.Bet.Description, bet.Amount, bet.Bet.Option2)
+			}
+		}
+
+		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: response,
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+	}
+
+	return
 }

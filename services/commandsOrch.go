@@ -18,6 +18,8 @@ func HandleSlashCommand(s *discordgo.Session, i *discordgo.InteractionCreate, db
 		GivePoints(s, i, db)
 	case "resetpoints":
 		ResetPoints(s, i, db)
+	case "mybets":
+		MyOpenBets(s, i, db)
 	}
 }
 
