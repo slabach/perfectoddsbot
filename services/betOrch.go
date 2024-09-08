@@ -115,6 +115,7 @@ func CreateBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 
 func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID int, winningOption int, db *gorm.DB) {
 	var bet models.Bet
+	winnersList := ""
 	result := db.First(&bet, "id = ? AND guild_id = ?", betID, i.GuildID)
 	if result.Error != nil || bet.ID == 0 {
 		response := "Bet not found or already resolved."
@@ -147,17 +148,22 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 		user.Points += payout
 		db.Save(&user)
 		totalPayout += payout
+
+		if payout > 0 {
+			username := GetUsername(s, i, user.DiscordID)
+			winnersList += fmt.Sprintf("%s - $%d\n", username, payout)
+		}
 	}
 
 	bet.Active = false
-	db.Save(&bet)
+	db.Model(&bet).UpdateColumn("paid", true).UpdateColumn("active", false)
 
 	winningOptionName := bet.Option1
 	if winningOption == 2 {
 		winningOptionName = bet.Option2
 	}
 
-	response := fmt.Sprintf("Bet '%s' has been resolved!\n**%s** is the winning option.\nTotal payout: **%d** points.", bet.Description, winningOptionName, totalPayout)
+	response := fmt.Sprintf("Bet '%s' has been resolved!\n**%s** is the winning option.\nTotal payout: **%d** points.\n**Winners:**\n%s", bet.Description, winningOptionName, totalPayout, winnersList)
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
@@ -169,58 +175,62 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 	}
 }
 
+func ResolveBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
+	options := i.ApplicationCommandData().Options
+	betid := int(options[0].IntValue())
+	option := int(options[1].IntValue())
+	ResolveBetByID(s, i, betid, option, db)
+
+}
+
 func MyOpenBets(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
 	var bets []models.BetEntry
-	result := db.Preload("Bet").Find("user_id = ? AND bet.active == 1", i.User.ID, &bets)
+	userID := i.Member.User.ID
+
+	result := db.
+		Preload("Bet").
+		Joins("JOIN bets ON bet_entries.bet_id = bets.id").
+		Joins("JOIN users ON bet_entries.user_id = users.id").
+		Where("users.discord_id = ? AND bets.paid = 0 AND bets.guild_id = ?", userID, i.GuildID).
+		Find(&bets)
 	if result.Error != nil {
 		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
 				Content: "Error finding active bets.",
-				Flags:   discordgo.MessageFlagsEphemeral,
+				Flags:   discordgo.MessageFlagsEphemeral, // Send this response as ephemeral
 			},
 		})
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
+		return
 	}
 
+	var response string
 	if len(bets) == 0 {
-		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Content: "You have no active bets.",
-				Flags:   discordgo.MessageFlagsEphemeral,
-			},
-		})
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
+		response = "You have no active bets."
 	} else {
-		response := fmt.Sprintf("You have %d active bets.\n", len(bets))
-
+		response = fmt.Sprintf("You have %d active bets:\n", len(bets))
 		for _, bet := range bets {
 			if bet.Option == 1 {
-				response += fmt.Sprintf("* `%s` - Your Bet: $%d on %s.\n", bet.Bet.Description, bet.Amount, bet.Bet.Option1)
+				response += fmt.Sprintf("* `%s` - $%d on %s.\n", bet.Bet.Description, bet.Amount, bet.Bet.Option1)
 			} else {
-				response += fmt.Sprintf("* `%s` - Your Bet: $%d on %s.\n", bet.Bet.Description, bet.Amount, bet.Bet.Option2)
+				response += fmt.Sprintf("* `%s` - $%d on %s.\n", bet.Bet.Description, bet.Amount, bet.Bet.Option2)
 			}
-		}
-
-		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Content: response,
-				Flags:   discordgo.MessageFlagsEphemeral,
-			},
-		})
-		if err != nil {
-			fmt.Println(err)
-			return
 		}
 	}
 
-	return
+	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: response,
+			Flags:   discordgo.MessageFlagsEphemeral,
+		},
+	})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 }

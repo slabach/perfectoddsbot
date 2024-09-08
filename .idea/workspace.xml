@@ -4,11 +4,14 @@
     <option name="autoReloadType" value="ALL" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="bd392634-edfc-4939-9193-cbe764a8640f" name="Changes" comment="enhancements">
-      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+    <list default="true" id="bd392634-edfc-4939-9193-cbe764a8640f" name="Changes" comment="fix query">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/models/bet.go" beforeDir="false" afterPath="$PROJECT_DIR$/models/bet.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/services/betOrch.go" beforeDir="false" afterPath="$PROJECT_DIR$/services/betOrch.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/commandsOrch.go" beforeDir="false" afterPath="$PROJECT_DIR$/services/commandsOrch.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/services/common.go" beforeDir="false" afterPath="$PROJECT_DIR$/services/common.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/interactionOrch.go" beforeDir="false" afterPath="$PROJECT_DIR$/services/interactionOrch.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/leaderboardOrch.go" beforeDir="false" afterPath="$PROJECT_DIR$/services/leaderboardOrch.go" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -91,7 +94,8 @@
     <MESSAGE value="bug fixes" />
     <MESSAGE value="remove id from title" />
     <MESSAGE value="enhancements" />
-    <option name="LAST_COMMIT_MESSAGE" value="enhancements" />
+    <MESSAGE value="fix query" />
+    <option name="LAST_COMMIT_MESSAGE" value="fix query" />
   </component>
   <component name="VgoProject">
     <settings-migrated>true</settings-migrated>

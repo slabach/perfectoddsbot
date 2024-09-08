@@ -8,6 +8,7 @@ type Bet struct {
 	Odds1       int
 	Odds2       int
 	Active      bool
+	Paid        bool `gorm:"default:false"`
 	GuildID     string
 	BetsOption1 int
 	BetsOption2 int

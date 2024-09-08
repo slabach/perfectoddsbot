@@ -29,14 +29,8 @@ func ShowLeaderboard(s *discordgo.Session, i *discordgo.InteractionCreate, db *g
 
 	description := ""
 	for idx, user := range users {
-		member, err := s.GuildMember(guildID, user.DiscordID)
-		username := "Unknown User"
-		if err == nil {
-			username = member.User.GlobalName
-		}
-		if username == "" {
-			username = member.User.Username
-		}
+		username := GetUsername(s, i, user.DiscordID)
+
 		description += fmt.Sprintf("**%d. %s** - %d points\n", idx+1, username, user.Points)
 	}
 

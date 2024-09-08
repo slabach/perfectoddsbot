@@ -20,6 +20,8 @@ func HandleSlashCommand(s *discordgo.Session, i *discordgo.InteractionCreate, db
 		ResetPoints(s, i, db)
 	case "mybets":
 		MyOpenBets(s, i, db)
+	case "resolvebet":
+		ResolveBet(s, i, db)
 	}
 }
 
@@ -126,6 +128,28 @@ func RegisterCommands(s *discordgo.Session) error {
 					Required:    false,
 				},
 			},
+		},
+		{
+			Name:        "resolvebet",
+			Description: "Manually resolve bet",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Name:        "bet",
+					Description: "Bet Id",
+					Type:        discordgo.ApplicationCommandOptionInteger,
+					Required:    true,
+				},
+				{
+					Name:        "winningoption",
+					Description: "Winning Option",
+					Type:        discordgo.ApplicationCommandOptionInteger,
+					Required:    true,
+				},
+			},
+		},
+		{
+			Name:        "mybets",
+			Description: "Show your current open, active bets",
 		},
 	}
 

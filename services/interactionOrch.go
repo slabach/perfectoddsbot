@@ -251,7 +251,7 @@ func HandleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, db 
 	var bet models.Bet
 	result = db.First(&bet, "id = ? AND guild_id = ? AND active = ?", betID, guildID, true)
 	if result.Error != nil || bet.ID == 0 {
-		response := "This bet is no longer active or does not exist."
+		response := "This bet is closed."
 		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
