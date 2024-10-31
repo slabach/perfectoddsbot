@@ -1,14 +1,17 @@
-package services
+package betService
 
 import (
 	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"gorm.io/gorm"
 	"perfectOddsBot/models"
+	"perfectOddsBot/services/common"
+	"perfectOddsBot/services/messages"
+	"strconv"
 )
 
-func CreateBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
-	if !IsAdmin(s, i) {
+func CreateCustomBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
+	if !common.IsAdmin(s, i) {
 		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
@@ -17,6 +20,7 @@ func CreateBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 			},
 		})
 		if err != nil {
+			common.SendError(s, i, err, db)
 			return
 		}
 		return
@@ -31,13 +35,15 @@ func CreateBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 	guildID := i.GuildID
 
 	bet := models.Bet{
-		Description: description,
-		Option1:     option1,
-		Option2:     option2,
-		Odds1:       odds1,
-		Odds2:       odds2,
-		Active:      true,
-		GuildID:     guildID,
+		Description:  description,
+		Option1:      option1,
+		Option2:      option2,
+		Odds1:        odds1,
+		Odds2:        odds2,
+		Active:       true,
+		GuildID:      guildID,
+		ChannelID:    i.ChannelID,
+		AdminCreated: true,
 	}
 	db.Create(&bet)
 
@@ -47,55 +53,17 @@ func CreateBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 		Fields: []*discordgo.MessageEmbedField{
 			{
 				Name:  fmt.Sprintf("1️⃣ %s", option1),
-				Value: fmt.Sprintf("Odds: %s", FormatOdds(odds1)),
+				Value: fmt.Sprintf("Odds: %s", common.FormatOdds(float64(odds1))),
 			},
 			{
 				Name:  fmt.Sprintf("2️⃣ %s", option2),
-				Value: fmt.Sprintf("Odds: %s", FormatOdds(odds2)),
+				Value: fmt.Sprintf("Odds: %s", common.FormatOdds(float64(odds2))),
 			},
 		},
 		Color: 0x3498db,
 	}
 
-	buttons := []discordgo.MessageComponent{
-		discordgo.Button{
-			Label:    option1,
-			Style:    discordgo.PrimaryButton,
-			CustomID: fmt.Sprintf("bet_%d_option1", bet.ID),
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "🟡",
-			},
-		},
-		discordgo.Button{
-			Label:    option2,
-			Style:    discordgo.SuccessButton,
-			CustomID: fmt.Sprintf("bet_%d_option2", bet.ID),
-			Emoji: &discordgo.ComponentEmoji{
-				Name: "🟡",
-			},
-		},
-	}
-
-	if IsAdmin(s, i) {
-		buttons = append(buttons,
-			discordgo.Button{
-				Label:    "Close Betting",
-				Style:    discordgo.DangerButton,
-				CustomID: fmt.Sprintf("lock_bet_%d", bet.ID),
-				Emoji: &discordgo.ComponentEmoji{
-					Name: "🔒",
-				},
-			},
-			discordgo.Button{
-				Label:    "Resolve Bet",
-				Style:    discordgo.SecondaryButton,
-				CustomID: fmt.Sprintf("resolve_bet_%d", bet.ID),
-				Emoji: &discordgo.ComponentEmoji{
-					Name: "✅",
-				},
-			},
-		)
-	}
+	buttons := messages.GetAllButtonList(s, i, option1, option2, bet.ID)
 
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -108,14 +76,25 @@ func CreateBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 			},
 		},
 	})
+
+	msg, err := s.InteractionResponse(i.Interaction)
 	if err != nil {
+		common.SendError(s, i, err, db)
 		return
 	}
+
+	if bet.MessageID == nil {
+		bet.MessageID = &msg.ID
+		db.Save(&bet)
+	}
+
+	return
 }
 
 func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID int, winningOption int, db *gorm.DB) {
 	var bet models.Bet
 	winnersList := ""
+	loserList := ""
 	result := db.First(&bet, "id = ? AND guild_id = ?", betID, i.GuildID)
 	if result.Error != nil || bet.ID == 0 {
 		response := "Bet not found or already resolved."
@@ -127,7 +106,7 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 			},
 		})
 		if err != nil {
-			fmt.Println(err)
+			common.SendError(s, i, err, db)
 			return
 		}
 		return
@@ -144,14 +123,14 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 			continue
 		}
 
-		payout := CalculatePayout(entry.Amount, winningOption, bet)
+		payout := common.CalculatePayout(entry.Amount, winningOption, bet)
 		user.Points += payout
 		db.Save(&user)
 		totalPayout += payout
 
 		if payout > 0 {
-			username := GetUsername(s, i, user.DiscordID)
-			winnersList += fmt.Sprintf("%s - $%d\n", username, payout)
+			username := common.GetUsername(s, i, user.DiscordID)
+			winnersList += fmt.Sprintf("%s - Won $%d\n", username, payout)
 		}
 	}
 
@@ -163,7 +142,7 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 		winningOptionName = bet.Option2
 	}
 
-	response := fmt.Sprintf("Bet '%s' has been resolved!\n**%s** is the winning option.\nTotal payout: **%d** points.\n**Winners:**\n%s", bet.Description, winningOptionName, totalPayout, winnersList)
+	response := fmt.Sprintf("Bet '%s' has been resolved!\n**%s** is the winning option.\nTotal payout: **%d** points.\n**Winners:**\n%s\n**Losers:**\n%s", bet.Description, winningOptionName, totalPayout, winnersList, loserList)
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
@@ -171,6 +150,7 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 		},
 	})
 	if err != nil {
+		common.SendError(s, i, err, db)
 		return
 	}
 }
@@ -202,7 +182,7 @@ func MyOpenBets(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.D
 			},
 		})
 		if err != nil {
-			fmt.Println(err)
+			common.SendError(s, i, err, db)
 			return
 		}
 		return
@@ -230,7 +210,116 @@ func MyOpenBets(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.D
 		},
 	})
 	if err != nil {
-		fmt.Println(err)
+		common.SendError(s, i, err, db)
 		return
 	}
+}
+
+func CreateCFBBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
+	options := i.ApplicationCommandData().Options
+	betID, err := strconv.Atoi(options[0].StringValue())
+	if err != nil {
+		common.SendError(s, i, err, db)
+		return
+	}
+	guildID := i.GuildID
+
+	var dbBet models.Bet
+	result := db.
+		Where("api_id = ? AND paid = 0 AND guild_id = ?", betID, i.GuildID).
+		Find(&dbBet)
+	if result.Error != nil {
+		common.SendError(s, i, result.Error, db)
+		return
+	}
+
+	if result.RowsAffected == 0 {
+		cfbdBet, err := common.GetCfbdBet(betID)
+		if err != nil {
+			common.SendError(s, i, err, db)
+			return
+		}
+
+		line, err := common.PickLine(cfbdBet.Lines)
+		if err != nil {
+			common.SendError(s, i, err, db)
+			return
+		}
+
+		cfbdBetID := strconv.Itoa(cfbdBet.ID)
+
+		lineValue, err := strconv.ParseFloat(line.Spread, 64)
+		if err != nil {
+			common.SendError(s, i, err, db)
+			return
+		}
+
+		dbBet = models.Bet{
+			Description:   fmt.Sprintf("%s @ %s", cfbdBet.AwayTeam, cfbdBet.HomeTeam),
+			Option1:       fmt.Sprintf("%s %s", cfbdBet.HomeTeam, common.FormatOdds(lineValue)),
+			Option2:       fmt.Sprintf("%s %s", cfbdBet.AwayTeam, common.FormatOdds(lineValue*-1)),
+			Odds1:         -110,
+			Odds2:         -110,
+			Active:        true,
+			GuildID:       guildID,
+			ChannelID:     i.ChannelID,
+			GameStartDate: &cfbdBet.StartDate,
+			ApiID:         &cfbdBetID,
+		}
+		db.Create(&dbBet)
+	}
+
+	buttons := messages.GetAllButtonList(s, i, dbBet.Option1, dbBet.Option2, dbBet.ID)
+	embed := &discordgo.MessageEmbed{
+		Title:       fmt.Sprint("📢 New Bet Created"),
+		Description: dbBet.Description,
+		Fields: []*discordgo.MessageEmbedField{
+			{
+				Name:  fmt.Sprintf("1️⃣ %s", dbBet.Option1),
+				Value: fmt.Sprintf("Odds: %s", common.FormatOdds(-110)),
+			},
+			{
+				Name:  fmt.Sprintf("2️⃣ %s", dbBet.Option2),
+				Value: fmt.Sprintf("Odds: %s", common.FormatOdds(-110)),
+			},
+		},
+		Color: 0x3498db,
+	}
+
+	interactionData := discordgo.InteractionResponseData{
+		Embeds: []*discordgo.MessageEmbed{embed},
+		Components: []discordgo.MessageComponent{
+			discordgo.ActionsRow{
+				Components: buttons,
+			},
+		},
+	}
+
+	var adminCreated bool
+	if !common.IsAdmin(s, i) {
+		if !dbBet.AdminCreated {
+			adminCreated = false
+		}
+		interactionData.Flags = discordgo.MessageFlagsEphemeral
+	} else {
+		adminCreated = true
+	}
+	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &interactionData,
+	})
+
+	msg, err := s.InteractionResponse(i.Interaction)
+	if err != nil {
+		common.SendError(s, i, err, db)
+		return
+	}
+
+	if dbBet.MessageID == nil {
+		dbBet.AdminCreated = adminCreated
+		dbBet.MessageID = &msg.ID
+		db.Save(&dbBet)
+	}
+
+	return
 }

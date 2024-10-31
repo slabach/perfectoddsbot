@@ -6,6 +6,9 @@ import (
 	"gorm.io/gorm"
 	"log"
 	"perfectOddsBot/models"
+	"perfectOddsBot/services/betService"
+	"perfectOddsBot/services/common"
+	"perfectOddsBot/services/messages"
 	"strconv"
 	"strings"
 )
@@ -60,7 +63,7 @@ func HandleComponentInteraction(s *discordgo.Session, i *discordgo.InteractionCr
 			return
 		}
 
-		if !IsAdmin(s, i) {
+		if !common.IsAdmin(s, i) {
 			err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
@@ -110,7 +113,7 @@ func HandleComponentInteraction(s *discordgo.Session, i *discordgo.InteractionCr
 			return
 		}
 
-		if !IsAdmin(s, i) {
+		if !common.IsAdmin(s, i) {
 			err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
@@ -145,6 +148,20 @@ func HandleComponentInteraction(s *discordgo.Session, i *discordgo.InteractionCr
 		bet.Active = false
 		db.Save(&bet)
 
+		_, err = s.ChannelMessageEditComplex(&discordgo.MessageEdit{
+			ID:      i.Message.ID,
+			Channel: i.ChannelID,
+			Components: &[]discordgo.MessageComponent{
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{messages.GetResolveButton(bet.ID)},
+				},
+			},
+		})
+		if err != nil {
+			log.Printf("Error removing buttons from the message: %v", err)
+			return
+		}
+
 		err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
@@ -177,7 +194,7 @@ func HandleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, db 
 			return
 		}
 
-		ResolveBetByID(s, i, betID, winningOption, db)
+		betService.ResolveBetByID(s, i, betID, winningOption, db)
 
 		_, err = s.ChannelMessageEditComplex(&discordgo.MessageEdit{
 			ID:         i.Message.ID,
@@ -226,9 +243,13 @@ func HandleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, db 
 	guildID := i.GuildID
 
 	var user models.User
+	username := common.GetUsername(s, i, userID)
 	result := db.FirstOrCreate(&user, models.User{DiscordID: userID, GuildID: guildID})
 	if result.RowsAffected == 1 {
 		user.Points = 1000
+		if user.Username == nil {
+			user.Username = &username
+		}
 		db.Save(&user)
 	}
 

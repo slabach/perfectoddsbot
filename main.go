@@ -6,12 +6,12 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/joho/godotenv"
 	_ "github.com/microsoft/go-mssqldb"
-	"github.com/xo/dburl"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"log"
 	"os"
 	"perfectOddsBot/models"
+	"perfectOddsBot/scheduler"
 	"perfectOddsBot/services"
 )
 
@@ -29,20 +29,14 @@ func init() {
 		return
 	}
 
-	u, err := dburl.Parse(mysqlURL + "?charset=utf8mb4&parseTime=True&loc=Local")
+	db, err = gorm.Open(mysql.Open(mysqlURL + "?charset=utf8&parseTime=True&loc=Local"))
 	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	db, err = gorm.Open(mysql.Open(u.DSN), &gorm.Config{})
-	if err != nil {
-		fmt.Println(err)
+		log.Fatalln(err)
 		return
 	}
 
 	err = db.AutoMigrate(
-		&models.User{}, &models.Bet{}, &models.BetEntry{},
+		&models.Bet{}, &models.BetEntry{}, &models.ErrorLog{}, &models.User{},
 	)
 	if err != nil {
 		log.Fatalf("Error migrating database: %v", err)
@@ -100,6 +94,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error registering commands: %v", err)
 	}
+
+	// cron scheduled processes
+	scheduler.SetupCron(dg, db)
 
 	log.Println("Bot is running. Press CTRL+C to exit.")
 	select {}
