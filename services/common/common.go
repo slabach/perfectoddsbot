@@ -98,8 +98,8 @@ func CalculatePayout(amount int, option int, bet models.Bet) int {
 	return amount + (amount*100)/-odds
 }
 
-func GetUsername(s *discordgo.Session, i *discordgo.InteractionCreate, userId string) string {
-	member, err := s.GuildMember(i.GuildID, userId)
+func GetUsername(s *discordgo.Session, guildId string, userId string) string {
+	member, err := s.GuildMember(guildId, userId)
 	username := "Unknown User"
 	if err == nil {
 		username = member.User.GlobalName

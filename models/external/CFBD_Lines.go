@@ -10,10 +10,10 @@ type CFBD_BettingLines struct {
 	StartDate      time.Time   `json:"startDate"`
 	HomeTeam       string      `json:"homeTeam"`
 	HomeConference string      `json:"homeConference"`
-	HomeScore      any         `json:"homeScore"`
+	HomeScore      *int        `json:"homeScore"`
 	AwayTeam       string      `json:"awayTeam"`
 	AwayConference string      `json:"awayConference"`
-	AwayScore      any         `json:"awayScore"`
+	AwayScore      *int        `json:"awayScore"`
 	Lines          []CFBD_Line `json:"lines"`
 }
 

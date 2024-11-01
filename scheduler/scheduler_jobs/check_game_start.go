@@ -11,7 +11,7 @@ import (
 func CheckGameStart(s *discordgo.Session, db *gorm.DB) error {
 	var betList []models.Bet
 
-	result := db.Where("paid = 0 AND active = 0 AND api_id IS NOT NULL").Find(&betList)
+	result := db.Where("paid = 0 AND active = 1 AND cfbd_id IS NOT NULL").Find(&betList)
 	if result.Error != nil {
 		return result.Error
 	}
@@ -26,7 +26,9 @@ func CheckGameStart(s *discordgo.Session, db *gorm.DB) error {
 		currentTimeEST := time.Now().In(est)
 
 		if bet.GameStartDate != nil {
-			if currentTimeEST.Before(*bet.GameStartDate) {
+			t := bet.GameStartDate.In(est)
+
+			if currentTimeEST.After(t) {
 
 				bet.Active = false
 				db.Save(&bet)
@@ -37,7 +39,28 @@ func CheckGameStart(s *discordgo.Session, db *gorm.DB) error {
 					Components: &[]discordgo.MessageComponent{},
 				})
 				if err != nil {
-					return fmt.Errorf("error removing buttons from the message: %v", err)
+					fmt.Println(err)
+				}
+
+				var secondaryMsgs []models.BetMessage
+				secondaryResult := db.Where("active = 1 AND bet_id = ?", bet.ID).Find(&secondaryMsgs)
+				if secondaryResult.Error != nil {
+					continue
+				}
+				if len(secondaryMsgs) > 0 {
+					for _, msg := range secondaryMsgs {
+						msg.Active = false
+						db.Save(&msg)
+
+						_, err = s.ChannelMessageEditComplex(&discordgo.MessageEdit{
+							ID:         *msg.MessageID,
+							Channel:    msg.ChannelID,
+							Components: &[]discordgo.MessageComponent{},
+						})
+						if err != nil {
+							continue
+						}
+					}
 				}
 			}
 		}

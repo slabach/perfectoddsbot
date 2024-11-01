@@ -1,4 +1,4 @@
-package messages
+package messageService
 
 import (
 	"fmt"
@@ -20,6 +20,18 @@ func GetAllButtonList(s *discordgo.Session, i *discordgo.InteractionCreate, opt1
 		lockBtn := GetLockButton(betId)
 		buttons = append(buttons, lockBtn)
 		buttons = append(buttons, resolveBtn)
+	}
+
+	return buttons
+}
+
+func GetBetOnlyButtonsList(opt1 string, opt2 string, betId uint) []discordgo.MessageComponent {
+	var buttons []discordgo.MessageComponent
+
+	betButtons := GetBetButtons(opt1, opt2, betId)
+
+	for _, betButton := range betButtons {
+		buttons = append(buttons, betButton)
 	}
 
 	return buttons

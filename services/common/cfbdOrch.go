@@ -5,11 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
-	"gorm.io/gorm"
 	"perfectOddsBot/models/external"
 )
 
-func ListCFBGames(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
+func ListCFBGames(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	cfbUrl := "https://api.collegefootballdata.com/lines?"
 	pfWeekUrl := "https://api.perfectfall.com/week-season"
 	conferenceList := []string{"Big Ten", "ACC", "SEC", "Big 12"}
@@ -71,6 +70,38 @@ func ListCFBGames(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 		fmt.Println(err)
 		return
 	}
+}
+
+func GetCFBGames() ([]external.CFBD_BettingLines, error) {
+	cfbUrl := "https://api.collegefootballdata.com/lines?"
+	pfWeekUrl := "https://api.perfectfall.com/week-season"
+
+	weekResp, err := PFWrapper(pfWeekUrl)
+	if err != nil {
+		return []external.CFBD_BettingLines{}, err
+	}
+	defer weekResp.Body.Close()
+
+	var calendar external.CalendarData
+	err = json.NewDecoder(weekResp.Body).Decode(&calendar)
+	if err != nil {
+		return []external.CFBD_BettingLines{}, err
+	}
+
+	linesUrl := fmt.Sprintf("%syear=%d&seasonType=%s&week=%d", cfbUrl, calendar.Season.Year, calendar.Week.WeekType, calendar.Week.WeekNum)
+	linesResp, err := CFBDWrapper(linesUrl)
+	if err != nil {
+		return []external.CFBD_BettingLines{}, err
+	}
+	defer linesResp.Body.Close()
+
+	var bettingLines []external.CFBD_BettingLines
+	err = json.NewDecoder(linesResp.Body).Decode(&bettingLines)
+	if err != nil {
+		return []external.CFBD_BettingLines{}, err
+	}
+
+	return bettingLines, nil
 }
 
 func GetCfbdBet(betid int) (external.CFBD_BettingLines, error) {

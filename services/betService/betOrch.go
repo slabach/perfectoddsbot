@@ -6,8 +6,9 @@ import (
 	"gorm.io/gorm"
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/common"
-	"perfectOddsBot/services/messages"
+	"perfectOddsBot/services/messageService"
 	"strconv"
+	"time"
 )
 
 func CreateCustomBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
@@ -30,8 +31,14 @@ func CreateCustomBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *g
 	description := options[0].StringValue()
 	option1 := options[1].StringValue()
 	option2 := options[2].StringValue()
-	odds1 := int(options[3].IntValue())
-	odds2 := int(options[4].IntValue())
+	odds1 := -110
+	odds2 := -110
+	if options[3] != nil {
+		odds1 = int(options[3].IntValue())
+	}
+	if options[4] != nil {
+		odds2 = int(options[4].IntValue())
+	}
 	guildID := i.GuildID
 
 	bet := models.Bet{
@@ -63,7 +70,7 @@ func CreateCustomBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *g
 		Color: 0x3498db,
 	}
 
-	buttons := messages.GetAllButtonList(s, i, option1, option2, bet.ID)
+	buttons := messageService.GetAllButtonList(s, i, option1, option2, bet.ID)
 
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -129,7 +136,7 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 		totalPayout += payout
 
 		if payout > 0 {
-			username := common.GetUsername(s, i, user.DiscordID)
+			username := common.GetUsername(s, user.GuildID, user.DiscordID)
 			winnersList += fmt.Sprintf("%s - Won $%d\n", username, payout)
 		}
 	}
@@ -153,14 +160,6 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 		common.SendError(s, i, err, db)
 		return
 	}
-}
-
-func ResolveBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
-	options := i.ApplicationCommandData().Options
-	betid := int(options[0].IntValue())
-	option := int(options[1].IntValue())
-	ResolveBetByID(s, i, betid, option, db)
-
 }
 
 func MyOpenBets(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
@@ -226,7 +225,7 @@ func CreateCFBBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 
 	var dbBet models.Bet
 	result := db.
-		Where("api_id = ? AND paid = 0 AND guild_id = ?", betID, i.GuildID).
+		Where("cfbd_id = ? AND paid = 0 AND guild_id = ?", betID, i.GuildID).
 		Find(&dbBet)
 	if result.Error != nil {
 		common.SendError(s, i, result.Error, db)
@@ -254,8 +253,16 @@ func CreateCFBBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 			return
 		}
 
+		// Convert to Eastern Time
+		loc, err := time.LoadLocation("America/New_York")
+		if err != nil {
+			panic(err)
+		}
+		t := cfbdBet.StartDate.In(loc)
+		formattedTime := t.Format("Mon 03:04 pm MST")
+
 		dbBet = models.Bet{
-			Description:   fmt.Sprintf("%s @ %s", cfbdBet.AwayTeam, cfbdBet.HomeTeam),
+			Description:   fmt.Sprintf("%s @ %s (%s)", cfbdBet.AwayTeam, cfbdBet.HomeTeam, formattedTime),
 			Option1:       fmt.Sprintf("%s %s", cfbdBet.HomeTeam, common.FormatOdds(lineValue)),
 			Option2:       fmt.Sprintf("%s %s", cfbdBet.AwayTeam, common.FormatOdds(lineValue*-1)),
 			Odds1:         -110,
@@ -264,14 +271,16 @@ func CreateCFBBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 			GuildID:       guildID,
 			ChannelID:     i.ChannelID,
 			GameStartDate: &cfbdBet.StartDate,
-			ApiID:         &cfbdBetID,
+			CfbdID:        &cfbdBetID,
+			AdminCreated:  common.IsAdmin(s, i),
+			Spread:        &lineValue,
 		}
 		db.Create(&dbBet)
 	}
 
-	buttons := messages.GetAllButtonList(s, i, dbBet.Option1, dbBet.Option2, dbBet.ID)
+	buttons := messageService.GetBetOnlyButtonsList(dbBet.Option1, dbBet.Option2, dbBet.ID)
 	embed := &discordgo.MessageEmbed{
-		Title:       fmt.Sprint("📢 New Bet Created"),
+		Title:       fmt.Sprint("📢 New Bet Created (Will Auto Close & Resolve)"),
 		Description: dbBet.Description,
 		Fields: []*discordgo.MessageEmbedField{
 			{
@@ -295,15 +304,6 @@ func CreateCFBBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 		},
 	}
 
-	var adminCreated bool
-	if !common.IsAdmin(s, i) {
-		if !dbBet.AdminCreated {
-			adminCreated = false
-		}
-		interactionData.Flags = discordgo.MessageFlagsEphemeral
-	} else {
-		adminCreated = true
-	}
 	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &interactionData,
@@ -315,11 +315,22 @@ func CreateCFBBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 		return
 	}
 
-	if dbBet.MessageID == nil {
-		dbBet.AdminCreated = adminCreated
+	if dbBet.MessageID != nil {
+		db.Create(&models.BetMessage{
+			Active:    true,
+			BetID:     dbBet.ID,
+			MessageID: &msg.ID,
+			ChannelID: msg.ChannelID,
+		})
+	} else {
 		dbBet.MessageID = &msg.ID
-		db.Save(&dbBet)
 	}
+
+	if common.IsAdmin(s, i) {
+		dbBet.AdminCreated = common.IsAdmin(s, i)
+	}
+
+	db.Save(&dbBet)
 
 	return
 }

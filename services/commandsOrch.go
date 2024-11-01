@@ -22,13 +22,12 @@ func HandleSlashCommand(s *discordgo.Session, i *discordgo.InteractionCreate, db
 		ResetPoints(s, i, db)
 	case "my-bets":
 		betService.MyOpenBets(s, i, db)
-	case "resolve-bet":
-		betService.ResolveBet(s, i, db)
 	case "list-cfb-games":
-		common.ListCFBGames(s, i, db)
+		common.ListCFBGames(s, i)
 	case "create-cfb-bet":
 		betService.CreateCFBBet(s, i, db)
-
+	case "set-betting-channel":
+		SetBettingChannel(s, i, db)
 	}
 }
 
@@ -56,7 +55,7 @@ func RegisterCommands(s *discordgo.Session) error {
 		},
 		{
 			Name:        "create-bet",
-			Description: "🛡 Create a new bet",
+			Description: "🛡 Create a new bet - ADMIN ONLY",
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Name:        "description",
@@ -78,21 +77,21 @@ func RegisterCommands(s *discordgo.Session) error {
 				},
 				{
 					Name:        "odds1",
-					Description: "Odds for option 1 (e.g., +150 or -200)",
+					Description: "Odds for option 1 (e.g., +150 or -200) // *Optional: Default -110",
 					Type:        discordgo.ApplicationCommandOptionInteger,
-					Required:    true,
+					Required:    false,
 				},
 				{
 					Name:        "odds2",
-					Description: "Odds for option 2 (e.g., +150 or -200)",
+					Description: "Odds for option 2 (e.g., +150 or -200) // *Optional: Default -110",
 					Type:        discordgo.ApplicationCommandOptionInteger,
-					Required:    true,
+					Required:    false,
 				},
 			},
 		},
 		{
 			Name:        "give-points",
-			Description: "🛡 Give points to a user",
+			Description: "🛡 Give points to a user - ADMIN ONLY",
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Name:        "user",
@@ -110,7 +109,7 @@ func RegisterCommands(s *discordgo.Session) error {
 		},
 		{
 			Name:        "reset-points",
-			Description: "🛡 Reset all users' points to a default value",
+			Description: "🛡 Reset all users' points to a default value - ADMIN ONLY",
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Name:        "amount",
@@ -119,6 +118,10 @@ func RegisterCommands(s *discordgo.Session) error {
 					Required:    false,
 				},
 			},
+		},
+		{
+			Name:        "set-betting-channel",
+			Description: "🛡 Sets the current channel to the main channel for payouts to be sent to - ADMIN ONLY",
 		},
 		{
 			Name:        "my-points",
