@@ -111,7 +111,7 @@ func main() {
 	select {}
 }
 
-func messageCreate(m *discordgo.MessageCreate) {
+func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if m.Author.Bot {
 		return
 	}

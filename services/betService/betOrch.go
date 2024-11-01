@@ -193,10 +193,14 @@ func MyOpenBets(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.D
 	} else {
 		response = fmt.Sprintf("You have %d active bets:\n", len(bets))
 		for _, bet := range bets {
-			if bet.Option == 1 {
-				response += fmt.Sprintf("* `%s` - $%d on %s.\n", bet.Bet.Description, bet.Amount, bet.Bet.Option1)
+			if bet.Spread != nil {
+				response += fmt.Sprintf("* `%s` - $%d on Home %s.\n", bet.Bet.Description, bet.Amount, common.FormatOdds(*bet.Spread))
 			} else {
-				response += fmt.Sprintf("* `%s` - $%d on %s.\n", bet.Bet.Description, bet.Amount, bet.Bet.Option2)
+				if bet.Option == 1 {
+					response += fmt.Sprintf("* `%s` - $%d on %.1f.\n", bet.Bet.Description, bet.Amount, bet.Bet.Option1)
+				} else {
+					response += fmt.Sprintf("* `%s` - $%d on %s.\n", bet.Bet.Description, bet.Amount, bet.Bet.Option2)
+				}
 			}
 		}
 	}
