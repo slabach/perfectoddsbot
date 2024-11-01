@@ -6,6 +6,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/joho/godotenv"
 	_ "github.com/microsoft/go-mssqldb"
+	"github.com/xo/dburl"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"log"
@@ -30,9 +31,15 @@ func init() {
 		return
 	}
 
-	db, err = gorm.Open(mysql.Open(mysqlURL + "?charset=utf8&parseTime=True&loc=Local"))
+	u, err := dburl.Parse(mysqlURL + "?charset=utf8mb4&parseTime=True&loc=Local")
 	if err != nil {
-		log.Fatalln(err)
+		fmt.Println(err)
+		return
+	}
+
+	db, err = gorm.Open(mysql.Open(u.DSN), &gorm.Config{})
+	if err != nil {
+		fmt.Println(err)
 		return
 	}
 
