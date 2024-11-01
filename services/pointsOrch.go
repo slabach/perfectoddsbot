@@ -5,6 +5,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"gorm.io/gorm"
 	"perfectOddsBot/models"
+	"perfectOddsBot/services/common"
 )
 
 func ShowPoints(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
@@ -32,7 +33,7 @@ func ShowPoints(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.D
 }
 
 func GivePoints(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
-	if !IsAdmin(s, i) {
+	if !common.IsAdmin(s, i) {
 		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
@@ -88,7 +89,7 @@ func GivePoints(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.D
 }
 
 func ResetPoints(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
-	if !IsAdmin(s, i) {
+	if !common.IsAdmin(s, i) {
 		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{

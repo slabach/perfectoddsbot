@@ -4,40 +4,58 @@ import (
 	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"gorm.io/gorm"
+	"perfectOddsBot/services/betService"
+	"perfectOddsBot/services/common"
 )
 
 func HandleSlashCommand(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
 	switch i.ApplicationCommandData().Name {
-	case "points":
+	case "my-points":
 		ShowPoints(s, i, db)
 	case "leaderboard":
 		ShowLeaderboard(s, i, db)
-	case "createbet":
-		CreateBet(s, i, db)
-	case "givepoints":
+	case "create-bet":
+		betService.CreateCustomBet(s, i, db)
+	case "give-points":
 		GivePoints(s, i, db)
-	case "resetpoints":
+	case "reset-points":
 		ResetPoints(s, i, db)
-	case "mybets":
-		MyOpenBets(s, i, db)
-	case "resolvebet":
-		ResolveBet(s, i, db)
+	case "my-bets":
+		betService.MyOpenBets(s, i, db)
+	case "list-cfb-games":
+		common.ListCFBGames(s, i)
+	case "create-cfb-bet":
+		betService.CreateCFBBet(s, i, db)
+	case "set-betting-channel":
+		SetBettingChannel(s, i, db)
 	}
 }
 
 func RegisterCommands(s *discordgo.Session) error {
 	commands := []*discordgo.ApplicationCommand{
 		{
-			Name:        "points",
-			Description: "Show your current points",
+			Name:        "list-cfb-games",
+			Description: "List this weeks CFB games and their current lines",
 		},
 		{
 			Name:        "leaderboard",
 			Description: "Show the top users by points",
 		},
 		{
-			Name:        "createbet",
-			Description: "Create a new bet",
+			Name:        "create-cfb-bet",
+			Description: "Create a new College Football bet",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Name:        "game-id",
+					Description: "Game ID",
+					Type:        discordgo.ApplicationCommandOptionString,
+					Required:    true,
+				},
+			},
+		},
+		{
+			Name:        "create-bet",
+			Description: "🛡 Create a new bet - ADMIN ONLY",
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Name:        "description",
@@ -59,49 +77,21 @@ func RegisterCommands(s *discordgo.Session) error {
 				},
 				{
 					Name:        "odds1",
-					Description: "Odds for option 1 (e.g., +150 or -200)",
+					Description: "Odds for option 1 (e.g., +150 or -200) // *Optional: Default -110",
 					Type:        discordgo.ApplicationCommandOptionInteger,
-					Required:    true,
+					Required:    false,
 				},
 				{
 					Name:        "odds2",
-					Description: "Odds for option 2 (e.g., +150 or -200)",
+					Description: "Odds for option 2 (e.g., +150 or -200) // *Optional: Default -110",
 					Type:        discordgo.ApplicationCommandOptionInteger,
-					Required:    true,
+					Required:    false,
 				},
 			},
 		},
 		{
-			Name:        "placebet",
-			Description: "Place a bet on an active bet",
-			Options: []*discordgo.ApplicationCommandOption{
-				{
-					Name:        "betid",
-					Description: "ID of the bet",
-					Type:        discordgo.ApplicationCommandOptionInteger,
-					Required:    true,
-				},
-				{
-					Name:        "option",
-					Description: "Option to bet on (1 or 2)",
-					Type:        discordgo.ApplicationCommandOptionInteger,
-					Required:    true,
-					Choices: []*discordgo.ApplicationCommandOptionChoice{
-						{Name: "Option 1", Value: 1},
-						{Name: "Option 2", Value: 2},
-					},
-				},
-				{
-					Name:        "amount",
-					Description: "Amount of points to bet",
-					Type:        discordgo.ApplicationCommandOptionInteger,
-					Required:    true,
-				},
-			},
-		},
-		{
-			Name:        "givepoints",
-			Description: "Give points to a user",
+			Name:        "give-points",
+			Description: "🛡 Give points to a user - ADMIN ONLY",
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Name:        "user",
@@ -118,8 +108,8 @@ func RegisterCommands(s *discordgo.Session) error {
 			},
 		},
 		{
-			Name:        "resetpoints",
-			Description: "Reset all users' points to a default value",
+			Name:        "reset-points",
+			Description: "🛡 Reset all users' points to a default value - ADMIN ONLY",
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Name:        "amount",
@@ -130,25 +120,15 @@ func RegisterCommands(s *discordgo.Session) error {
 			},
 		},
 		{
-			Name:        "resolvebet",
-			Description: "Manually resolve bet",
-			Options: []*discordgo.ApplicationCommandOption{
-				{
-					Name:        "bet",
-					Description: "Bet Id",
-					Type:        discordgo.ApplicationCommandOptionInteger,
-					Required:    true,
-				},
-				{
-					Name:        "winningoption",
-					Description: "Winning Option",
-					Type:        discordgo.ApplicationCommandOptionInteger,
-					Required:    true,
-				},
-			},
+			Name:        "set-betting-channel",
+			Description: "🛡 Sets the current channel to the main channel for payouts to be sent to - ADMIN ONLY",
 		},
 		{
-			Name:        "mybets",
+			Name:        "my-points",
+			Description: "Show your current points",
+		},
+		{
+			Name:        "my-bets",
 			Description: "Show your current open, active bets",
 		},
 	}

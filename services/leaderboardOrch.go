@@ -5,6 +5,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"gorm.io/gorm"
 	"perfectOddsBot/models"
+	"perfectOddsBot/services/common"
 )
 
 func ShowLeaderboard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
@@ -29,7 +30,7 @@ func ShowLeaderboard(s *discordgo.Session, i *discordgo.InteractionCreate, db *g
 
 	description := ""
 	for idx, user := range users {
-		username := GetUsername(s, i, user.DiscordID)
+		username := common.GetUsername(s, user.GuildID, user.DiscordID)
 
 		description += fmt.Sprintf("**%d. %s** - %d points\n", idx+1, username, user.Points)
 	}

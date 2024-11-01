@@ -12,7 +12,9 @@ import (
 	"log"
 	"os"
 	"perfectOddsBot/models"
+	"perfectOddsBot/scheduler"
 	"perfectOddsBot/services"
+	"perfectOddsBot/services/interactionService"
 )
 
 var db *gorm.DB
@@ -42,7 +44,8 @@ func init() {
 	}
 
 	err = db.AutoMigrate(
-		&models.User{}, &models.Bet{}, &models.BetEntry{},
+		&models.Bet{}, &models.BetEntry{}, &models.BetMessage{}, &models.ErrorLog{},
+		&models.Guild{}, &models.User{},
 	)
 	if err != nil {
 		log.Fatalf("Error migrating database: %v", err)
@@ -101,11 +104,14 @@ func main() {
 		log.Fatalf("Error registering commands: %v", err)
 	}
 
+	// cron scheduled processes
+	scheduler.SetupCron(dg, db)
+
 	log.Println("Bot is running. Press CTRL+C to exit.")
 	select {}
 }
 
-func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
+func messageCreate(m *discordgo.MessageCreate) {
 	if m.Author.Bot {
 		return
 	}
@@ -128,12 +134,24 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 }
 
 func interactionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	// the first time a guild interacts with the bot, add their guild to the guild list and set betting channel to
+	// current channel. this channel can be overridden later using an admin command
+	var guild models.Guild
+	guildResult := db.Where("guild_id = ?", i.GuildID).Find(&guild)
+	if guildResult.RowsAffected == 0 {
+		guild = models.Guild{
+			GuildID:      i.GuildID,
+			BetChannelID: i.ChannelID,
+		}
+		db.Create(&guild)
+	}
+
 	switch i.Type {
 	case discordgo.InteractionApplicationCommand:
 		services.HandleSlashCommand(s, i, db)
 	case discordgo.InteractionMessageComponent:
-		services.HandleComponentInteraction(s, i, db)
+		interactionService.HandleComponentInteraction(s, i, db)
 	case discordgo.InteractionModalSubmit:
-		services.HandleModalSubmit(s, i, db)
+		interactionService.HandleModalSubmit(s, i, db)
 	}
 }
