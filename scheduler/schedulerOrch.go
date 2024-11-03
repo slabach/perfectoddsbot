@@ -14,7 +14,6 @@ func SetupCron(s *discordgo.Session, db *gorm.DB) {
 
 	_, err := cronService.AddFunc("0 0 */1 * 8-12 *", func() {
 		// // Every hour, August through December
-		fmt.Println("running check game end")
 		err := scheduler_jobs.CheckGameEnd(s, db)
 		if err != nil {
 			fmt.Println(err)
