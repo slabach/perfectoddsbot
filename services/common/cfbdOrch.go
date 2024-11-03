@@ -15,6 +15,7 @@ func ListCFBGames(s *discordgo.Session, i *discordgo.InteractionCreate) {
 
 	weekResp, err := PFWrapper(pfWeekUrl)
 	if err != nil {
+		fmt.Println(err)
 		return
 	}
 	defer weekResp.Body.Close()
@@ -29,6 +30,7 @@ func ListCFBGames(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	linesUrl := fmt.Sprintf("%syear=%d&seasonType=%s&week=%d", cfbUrl, calendar.Season.Year, calendar.Week.WeekType, calendar.Week.WeekNum)
 	linesResp, err := CFBDWrapper(linesUrl)
 	if err != nil {
+		fmt.Println(err)
 		return
 	}
 	defer linesResp.Body.Close()

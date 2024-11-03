@@ -14,7 +14,7 @@ import (
 func CheckGameEnd(s *discordgo.Session, db *gorm.DB) error {
 	var dbBetList []models.Bet
 
-	result := db.Where("paid = 0 AND active = 1 AND cfbd_id IS NOT NULL").Find(&dbBetList)
+	result := db.Where("paid = 0 AND active = 0 AND cfbd_id IS NOT NULL").Find(&dbBetList)
 	if result.Error != nil {
 		return result.Error
 	}
@@ -36,7 +36,7 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) error {
 				scoreDiff := *obj.HomeScore - *obj.AwayScore
 
 				var betEntries []models.BetEntry
-				entriesResult := db.Where("").Find(&betEntries)
+				entriesResult := db.Where("bet_id = ?", bet.ID).Find(&betEntries)
 				if entriesResult.RowsAffected == 0 {
 					return errors.New("no bets placed")
 				}

@@ -112,10 +112,9 @@ func GetUsername(s *discordgo.Session, guildId string, userId string) string {
 }
 
 func CFBDWrapper(requestUrl string) (*http.Response, error) {
-	cfbdKey, ok := os.LookupEnv("CFBD_TOKEN")
-	if ok == false {
-		fmt.Println("CFBD_TOKEN not found")
-		return nil, errors.New("CFBD_TOKEN not found")
+	cfbdKey := os.Getenv("CFBD_TOKEN")
+	if cfbdKey == "" {
+		log.Fatalf("CFBD_TOKEN not set in environment variables")
 	}
 
 	client := &http.Client{}
@@ -138,10 +137,9 @@ func CFBDWrapper(requestUrl string) (*http.Response, error) {
 }
 
 func PFWrapper(requestUrl string) (*http.Response, error) {
-	pfKey, ok := os.LookupEnv("PF_Token")
-	if ok == false {
-		fmt.Println("PF_Token not found")
-		return nil, errors.New("PF_Token not found")
+	pfKey := os.Getenv("PF_Token")
+	if pfKey == "" {
+		log.Fatalf("PF_Token not set in environment variables")
 	}
 
 	client := &http.Client{}
@@ -157,6 +155,7 @@ func PFWrapper(requestUrl string) (*http.Response, error) {
 	}
 
 	if resp.StatusCode != 200 {
+		fmt.Println(resp.StatusCode)
 		resp.Body.Close()
 		return nil, err
 	}
