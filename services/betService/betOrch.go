@@ -33,11 +33,13 @@ func CreateCustomBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *g
 	option2 := options[2].StringValue()
 	odds1 := -110
 	odds2 := -110
-	if options[3] != nil {
-		odds1 = int(options[3].IntValue())
-	}
-	if options[4] != nil {
-		odds2 = int(options[4].IntValue())
+	if len(options) > 3 {
+		if options[3] != nil {
+			odds1 = int(options[3].IntValue())
+		}
+		if len(options) > 4 && options[4] != nil {
+			odds2 = int(options[4].IntValue())
+		}
 	}
 	guildID := i.GuildID
 
