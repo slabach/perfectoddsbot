@@ -50,12 +50,13 @@ func ListCFBGames(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		for _, bet := range bettingLines {
 			if Contains(conferenceList, bet.HomeConference) || Contains(conferenceList, bet.AwayConference) {
 				line, lineErr := PickLine(bet.Lines)
-				lineText := fmt.Sprintf("* `%s @ %s` \n", bet.AwayTeam, bet.HomeTeam)
+				lineText := fmt.Sprintf("* `%s @ %s`", bet.AwayTeam, bet.HomeTeam)
 				if lineErr != nil {
-					lineText += fmt.Sprintf("  : No line available\n")
+					lineText += "- No line available \n"
 				} else {
-					lineText += fmt.Sprintf("  : %s\n  * Game ID: *%d*\n", line.FormattedSpread, bet.ID)
+					lineText += fmt.Sprintf(" (%d):  %s \n", bet.ID, line.FormattedSpread)
 				}
+
 				response += lineText
 			}
 		}
@@ -95,7 +96,15 @@ func GetCFBGames() ([]external.CFBD_BettingLines, error) {
 	if err != nil {
 		return []external.CFBD_BettingLines{}, err
 	}
-	defer linesResp.Body.Close()
+	if linesResp != nil {
+		if linesResp.Body != nil {
+			defer linesResp.Body.Close()
+		} else {
+			return nil, errors.New("CFB Lines Empty")
+		}
+	} else {
+		return nil, errors.New("CFB Lines Empty")
+	}
 
 	var bettingLines []external.CFBD_BettingLines
 	err = json.NewDecoder(linesResp.Body).Decode(&bettingLines)

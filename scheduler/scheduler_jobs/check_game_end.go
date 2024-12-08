@@ -97,6 +97,13 @@ func ResolveCFBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB) error {
 		}
 		username := common.GetUsername(s, user.GuildID, user.DiscordID)
 
+		betOption := "Home"
+		spread := *entry.Spread
+		if entry.Option == 2 {
+			spread = *entry.Spread * -1
+			betOption = "Away"
+		}
+
 		if entry.AutoCloseWin {
 			payout := common.CalculatePayout(entry.Amount, entry.Option, bet)
 			user.Points += payout
@@ -104,10 +111,10 @@ func ResolveCFBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB) error {
 			totalPayout += payout
 
 			if payout > 0 {
-				winnersList += fmt.Sprintf("%s - Bet: %.1f - **Won $%d**\n", username, *entry.Spread, payout)
+				winnersList += fmt.Sprintf("%s - Bet: %s %.1f - **Won $%d**\n", username, betOption, spread, payout)
 			}
 		} else {
-			winnersList += fmt.Sprintf("%s - Bet: %.1f - **Lost $%d**\n", username, *entry.Spread, entry.Amount)
+			loserList += fmt.Sprintf("%s - Bet: %.1f - **Lost $%d**\n", username, *entry.Spread, entry.Amount)
 		}
 	}
 

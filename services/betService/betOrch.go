@@ -103,7 +103,6 @@ func CreateCustomBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *g
 func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID int, winningOption int, db *gorm.DB) {
 	var bet models.Bet
 	winnersList := ""
-	loserList := ""
 	result := db.First(&bet, "id = ? AND guild_id = ?", betID, i.GuildID)
 	if result.Error != nil || bet.ID == 0 {
 		response := "Bet not found or already resolved."
@@ -151,7 +150,7 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 		winningOptionName = bet.Option2
 	}
 
-	response := fmt.Sprintf("Bet '%s' has been resolved!\n**%s** is the winning option.\nTotal payout: **%d** points.\n**Winners:**\n%s\n**Losers:**\n%s", bet.Description, winningOptionName, totalPayout, winnersList, loserList)
+	response := fmt.Sprintf("Bet '%s' has been resolved!\n**%s** is the winning option.\nTotal payout: **%d** points.\n**Winners:**\n%s\n", bet.Description, winningOptionName, totalPayout, winnersList)
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
