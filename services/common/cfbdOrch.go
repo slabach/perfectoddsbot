@@ -27,7 +27,11 @@ func ListCFBGames(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		return
 	}
 
-	linesUrl := fmt.Sprintf("%syear=%d&seasonType=%s&week=%d", cfbUrl, calendar.Season.Year, calendar.Week.WeekType, calendar.Week.WeekNum)
+	var weekNum = calendar.Week.WeekNum
+	if weekNum > calendar.MaxRegWeek {
+		weekNum = 1
+	}
+	linesUrl := fmt.Sprintf("%syear=%d&seasonType=%s&week=%d", cfbUrl, calendar.Season.Year, calendar.Week.WeekType, weekNum)
 	linesResp, err := CFBDWrapper(linesUrl)
 	if err != nil {
 		fmt.Println(err)
@@ -91,7 +95,11 @@ func GetCFBGames() ([]external.CFBD_BettingLines, error) {
 		return []external.CFBD_BettingLines{}, err
 	}
 
-	linesUrl := fmt.Sprintf("%syear=%d&seasonType=%s&week=%d", cfbUrl, calendar.Season.Year, calendar.Week.WeekType, calendar.Week.WeekNum)
+	var weekNum = calendar.Week.WeekNum
+	if weekNum > calendar.MaxRegWeek {
+		weekNum = 1
+	}
+	linesUrl := fmt.Sprintf("%syear=%d&seasonType=%s&week=%d", cfbUrl, calendar.Season.Year, calendar.Week.WeekType, weekNum)
 	linesResp, err := CFBDWrapper(linesUrl)
 	if err != nil {
 		return []external.CFBD_BettingLines{}, err
@@ -132,7 +140,12 @@ func GetCfbdBet(betid int) (external.CFBD_BettingLines, error) {
 		return external.CFBD_BettingLines{}, err
 	}
 
-	linesUrl := fmt.Sprintf("%syear=%d&seasonType=%s&week=%d", cfbUrl, calendar.Season.Year, calendar.Week.WeekType, calendar.Week.WeekNum)
+	var weekNum = calendar.Week.WeekNum
+	if weekNum > calendar.MaxRegWeek {
+		weekNum = 1
+	}
+	linesUrl := fmt.Sprintf("%syear=%d&seasonType=%s&week=%d", cfbUrl, calendar.Season.Year, calendar.Week.WeekType, weekNum)
+	fmt.Println(linesUrl)
 	linesResp, err := CFBDWrapper(linesUrl)
 	if err != nil {
 		return external.CFBD_BettingLines{}, err

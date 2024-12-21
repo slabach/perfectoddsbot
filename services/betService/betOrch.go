@@ -268,7 +268,8 @@ func CreateCFBBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 		// Convert to Eastern Time
 		loc, err := time.LoadLocation("America/New_York")
 		if err != nil {
-			panic(err)
+			common.SendError(s, i, err, db)
+			return
 		}
 		t := cfbdBet.StartDate.In(loc)
 		formattedTime := t.Format("Mon 03:04 pm MST")
