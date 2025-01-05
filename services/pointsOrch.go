@@ -19,7 +19,7 @@ func ShowPoints(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.D
 		db.Save(&user)
 	}
 
-	response := fmt.Sprintf("You have **%d** points.", user.Points)
+	response := fmt.Sprintf("You have **%.2f** points.", user.Points)
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
@@ -73,7 +73,7 @@ func GivePoints(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.D
 		user.Points = 1000
 	}
 
-	user.Points += amount
+	user.Points += float64(amount)
 	db.Save(&user)
 
 	response := fmt.Sprintf("Successfully gave **%d** points to **%s**.", amount, targetUser.Username)

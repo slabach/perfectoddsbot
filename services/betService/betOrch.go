@@ -123,7 +123,7 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 	var entries []models.BetEntry
 	db.Where("bet_id = ? AND `option` = ?", bet.ID, winningOption).Find(&entries)
 
-	totalPayout := 0
+	totalPayout := 0.0
 	for _, entry := range entries {
 		var user models.User
 		db.First(&user, "id = ?", entry.UserID)

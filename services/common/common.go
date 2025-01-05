@@ -83,7 +83,7 @@ func FormatOdds(odds float64) string {
 	return response
 }
 
-func CalculatePayout(amount int, option int, bet models.Bet) int {
+func CalculatePayout(amount int, option int, bet models.Bet) float64 {
 	var odds int
 	if option == 1 {
 		odds = bet.Odds1
@@ -92,10 +92,10 @@ func CalculatePayout(amount int, option int, bet models.Bet) int {
 	}
 
 	if odds > 0 {
-		return amount + (amount*odds)/100
+		return float64(amount + (amount*odds)/100)
 	}
 
-	return amount + (amount*100)/-odds
+	return float64(amount + (amount*100)/-odds)
 }
 
 func GetUsername(s *discordgo.Session, guildId string, userId string) string {

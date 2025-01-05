@@ -1,7 +1,6 @@
 package scheduler_jobs
 
 import (
-	"errors"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"gorm.io/gorm"
@@ -18,6 +17,7 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) error {
 	if result.Error != nil {
 		return result.Error
 	}
+	fmt.Println(dbBetList)
 
 	cfbdList, err := common.GetCFBGames()
 	if err != nil {
@@ -32,13 +32,16 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) error {
 	for _, bet := range dbBetList {
 		betCfbdId, _ := strconv.Atoi(*bet.CfbdID)
 		if obj, found := betMap[betCfbdId]; found {
+			fmt.Println(obj.ID)
 			if obj.HomeScore != nil && obj.AwayScore != nil {
 				scoreDiff := *obj.HomeScore - *obj.AwayScore
 
 				var betEntries []models.BetEntry
 				entriesResult := db.Where("bet_id = ?", bet.ID).Find(&betEntries)
 				if entriesResult.RowsAffected == 0 {
-					return errors.New("no bets placed")
+					bet.Paid = true
+					db.Save(&bet)
+					continue
 				}
 
 				for _, entry := range betEntries {
@@ -88,7 +91,7 @@ func ResolveCFBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB) error {
 	var entries []models.BetEntry
 	db.Where("bet_id = ?", bet.ID).Find(&entries)
 
-	totalPayout := 0
+	totalPayout := 0.0
 	for _, entry := range entries {
 		var user models.User
 		db.First(&user, "id = ?", entry.UserID)

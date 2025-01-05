@@ -55,7 +55,7 @@ func SubmitBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 		db.Save(&user)
 	}
 
-	if user.Points < amount {
+	if user.Points < float64(amount) {
 		response := "You do not have enough points to place this bet."
 		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -98,7 +98,7 @@ func SubmitBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 	}
 	db.Create(&betEntry)
 
-	user.Points -= amount
+	user.Points -= float64(amount)
 	db.Save(&user)
 
 	optionName := bet.Option1

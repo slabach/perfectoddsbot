@@ -129,7 +129,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		user.Points = 1000
 	}
 
-	user.Points += 1
+	user.Points += 0.5
 	db.Save(&user)
 }
 

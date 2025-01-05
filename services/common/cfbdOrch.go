@@ -145,7 +145,6 @@ func GetCfbdBet(betid int) (external.CFBD_BettingLines, error) {
 		weekNum = 1
 	}
 	linesUrl := fmt.Sprintf("%syear=%d&seasonType=%s&week=%d", cfbUrl, calendar.Season.Year, calendar.Week.WeekType, weekNum)
-	fmt.Println(linesUrl)
 	linesResp, err := CFBDWrapper(linesUrl)
 	if err != nil {
 		return external.CFBD_BettingLines{}, err
