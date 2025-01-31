@@ -112,9 +112,22 @@ func GetUsername(s *discordgo.Session, guildId string, userId string) string {
 }
 
 func CFBDWrapper(requestUrl string) (*http.Response, error) {
-	cfbdKey := os.Getenv("CFBD_TOKEN")
-	if cfbdKey == "" {
-		log.Fatalf("CFBD_TOKEN not set in environment variables")
+	var cfbdKey string
+	getEnv, ok := os.LookupEnv("ENV")
+	if ok == false {
+		return nil, fmt.Errorf("ENV not found")
+	}
+
+	if getEnv == "production" {
+		cfbdKey, ok = os.LookupEnv("CFBD_TOKEN")
+		if ok == false {
+			return nil, fmt.Errorf("CFBD_TOKEN not set in environment variables")
+		}
+	} else {
+		cfbdKey = os.Getenv("CFBD_TOKEN")
+		if cfbdKey == "" {
+			return nil, fmt.Errorf("CFBD_TOKEN not set in environment variables")
+		}
 	}
 
 	client := &http.Client{}
@@ -137,9 +150,22 @@ func CFBDWrapper(requestUrl string) (*http.Response, error) {
 }
 
 func PFWrapper(requestUrl string) (*http.Response, error) {
-	pfKey := os.Getenv("PF_Token")
-	if pfKey == "" {
-		log.Fatalf("PF_Token not set in environment variables")
+	var pfKey string
+	getEnv, ok := os.LookupEnv("ENV")
+	if ok == false {
+		return nil, fmt.Errorf("ENV not found")
+	}
+
+	if getEnv == "production" {
+		pfKey, ok = os.LookupEnv("PF_Token")
+		if ok == false {
+			return nil, fmt.Errorf("PF_Token not set in environment variables")
+		}
+	} else {
+		pfKey = os.Getenv("PF_Token")
+		if pfKey == "" {
+			return nil, fmt.Errorf("PF_Token not set in environment variables")
+		}
 	}
 
 	client := &http.Client{}

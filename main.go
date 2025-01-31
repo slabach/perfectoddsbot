@@ -18,30 +18,64 @@ import (
 )
 
 var db *gorm.DB
+var err error
+var discordToken string
 
 func init() {
-	err := godotenv.Load(".env")
-	if err != nil {
-		log.Fatalf("Error loading .env file")
+	if err := godotenv.Load(); err != nil {
+		log.Print("No .env file found")
 	}
+}
 
-	mysqlURL, ok := os.LookupEnv("MYSQL_URL")
+func main() {
+	getEnv, ok := os.LookupEnv("ENV")
 	if ok == false {
-		fmt.Println("MYSQL_URL not found")
+		fmt.Println("ENV not found")
 		return
 	}
 
-	u, err := dburl.Parse(mysqlURL + "?charset=utf8mb4&parseTime=True&loc=Local")
-	if err != nil {
-		fmt.Println(err)
-		return
+	// Connect to the database
+	if getEnv == "production" {
+		mysqlURL, ok := os.LookupEnv("MYSQL_URL")
+		if ok == false {
+			fmt.Println("MYSQL_URL not found")
+			return
+		}
+
+		u, err := dburl.Parse(mysqlURL + "?charset=utf8&parseTime=True&loc=Local")
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		db, err = gorm.Open(mysql.Open(u.DSN), &gorm.Config{})
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+	} else {
+		connString := os.Getenv("MYSQL_URL")
+
+		db, err = gorm.Open(mysql.Open(connString + "?charset=utf8&parseTime=True&loc=Local"))
+		if err != nil {
+			log.Fatalln(err)
+			return
+		}
 	}
 
-	db, err = gorm.Open(mysql.Open(u.DSN), &gorm.Config{})
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
+	// Close the database connection when the main function finishes
+	defer func(db *gorm.DB) {
+		sqlDB, err := db.DB()
+		if err != nil {
+			log.Fatalln(err)
+		}
+		defer func(sqlDB *sql.DB) {
+			err := sqlDB.Close()
+			if err != nil {
+				log.Fatalln(err)
+			}
+		}(sqlDB)
+	}(db)
 
 	err = db.AutoMigrate(
 		&models.Bet{}, &models.BetEntry{}, &models.BetMessage{}, &models.ErrorLog{},
@@ -50,9 +84,7 @@ func init() {
 	if err != nil {
 		log.Fatalf("Error migrating database: %v", err)
 	}
-}
 
-func main() {
 	token := os.Getenv("DISCORD_BOT_TOKEN")
 	if token == "" {
 		log.Fatalf("DISCORD_BOT_TOKEN not set in environment variables")
