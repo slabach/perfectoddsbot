@@ -14,6 +14,8 @@ import (
 	"perfectOddsBot/models"
 	"perfectOddsBot/scheduler"
 	"perfectOddsBot/services"
+	"perfectOddsBot/services/common"
+	"perfectOddsBot/services/guildService"
 	"perfectOddsBot/services/interactionService"
 )
 
@@ -151,6 +153,13 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	guildID := m.GuildID
 	userID := m.Author.ID
 
+	// getting guild info to create the guild record if it doesn't exist already
+	_, err := guildService.GetGuildInfo(s, db, guildID, m.ChannelID)
+	if err != nil {
+		common.SendError(s, nil, err, db)
+		log.Printf("Error getting guild info: %v", err)
+	}
+
 	var user models.User
 	result := db.FirstOrCreate(&user, models.User{DiscordID: userID, GuildID: guildID})
 	if result.Error != nil {
@@ -166,16 +175,10 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 }
 
 func interactionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	// the first time a guild interacts with the bot, add their guild to the guild list and set betting channel to
-	// current channel. this channel can be overridden later using an admin command
-	var guild models.Guild
-	guildResult := db.Where("guild_id = ?", i.GuildID).Find(&guild)
-	if guildResult.RowsAffected == 0 {
-		guild = models.Guild{
-			GuildID:      i.GuildID,
-			BetChannelID: i.ChannelID,
-		}
-		db.Create(&guild)
+	// getting guild info to create the guild record if it doesn't exist already
+	_, err := guildService.GetGuildInfo(s, db, i.GuildID, i.ChannelID)
+	if err != nil {
+		common.SendError(s, i, err, db)
 	}
 
 	switch i.Type {

@@ -5,7 +5,9 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"gorm.io/gorm"
 	"perfectOddsBot/models"
+	"perfectOddsBot/services/cfbdService"
 	"perfectOddsBot/services/common"
+	"perfectOddsBot/services/guildService"
 	"perfectOddsBot/services/messageService"
 	"strconv"
 	"time"
@@ -235,6 +237,16 @@ func CreateCFBBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 	}
 	guildID := i.GuildID
 
+	guild, err := guildService.GetGuildInfo(s, db, guildID, i.ChannelID)
+	if err != nil {
+		common.SendError(s, i, err, db)
+		return
+	}
+	if !guild.PremiumEnabled {
+		common.SendError(s, i, fmt.Errorf("Your server must have the premium subscription in order to enable this feature"), db)
+		return
+	}
+
 	var dbBet models.Bet
 	result := db.
 		Where("cfbd_id = ? AND paid = 0 AND guild_id = ?", betID, i.GuildID).
@@ -245,7 +257,7 @@ func CreateCFBBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 	}
 
 	if result.RowsAffected == 0 {
-		cfbdBet, err := common.GetCfbdBet(betID)
+		cfbdBet, err := cfbdService.GetCfbdBet(betID)
 		if err != nil {
 			common.SendError(s, i, err, db)
 			return

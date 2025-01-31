@@ -6,7 +6,9 @@ import (
 	"gorm.io/gorm"
 	"perfectOddsBot/models"
 	"perfectOddsBot/models/external"
+	"perfectOddsBot/services/cfbdService"
 	"perfectOddsBot/services/common"
+	"perfectOddsBot/services/guildService"
 	"strconv"
 )
 
@@ -19,7 +21,7 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) error {
 	}
 	fmt.Println(dbBetList)
 
-	cfbdList, err := common.GetCFBGames()
+	cfbdList, err := cfbdService.GetCFBGames()
 	if err != nil {
 		return err
 	}
@@ -82,10 +84,9 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) error {
 func ResolveCFBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB) error {
 	winnersList := ""
 	loserList := ""
-	var guild models.Guild
-	guildResult := db.Where("guild_id = ?", bet.GuildID).Find(&guild)
-	if guildResult.Error != nil {
-		return guildResult.Error
+	guild, err := guildService.GetGuildInfo(s, db, bet.GuildID, bet.ChannelID)
+	if err != nil {
+		return err
 	}
 
 	var entries []models.BetEntry
@@ -126,7 +127,7 @@ func ResolveCFBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB) error {
 	db.Model(&bet).UpdateColumn("paid", true).UpdateColumn("active", false)
 
 	response := fmt.Sprintf("Bet '%s' has been resolved!\nTotal payout: **%.1f** points.\n**Winners:**\n%s\n**Losers:**\n%s", bet.Description, totalPayout, winnersList, loserList)
-	_, err := s.ChannelMessageSendComplex(guild.BetChannelID, &discordgo.MessageSend{
+	_, err = s.ChannelMessageSendComplex(guild.BetChannelID, &discordgo.MessageSend{
 		Content: response,
 	})
 	if err != nil {

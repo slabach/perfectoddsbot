@@ -5,7 +5,8 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"gorm.io/gorm"
 	"perfectOddsBot/services/betService"
-	"perfectOddsBot/services/common"
+	"perfectOddsBot/services/cfbdService"
+	"perfectOddsBot/services/guildService"
 )
 
 func HandleSlashCommand(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
@@ -23,11 +24,11 @@ func HandleSlashCommand(s *discordgo.Session, i *discordgo.InteractionCreate, db
 	case "my-bets":
 		betService.MyOpenBets(s, i, db)
 	case "list-cfb-games":
-		common.ListCFBGames(s, i)
+		cfbdService.ListCFBGames(s, i, db)
 	case "create-cfb-bet":
 		betService.CreateCFBBet(s, i, db)
 	case "set-betting-channel":
-		SetBettingChannel(s, i, db)
+		guildService.SetBettingChannel(s, i, db)
 	}
 }
 
