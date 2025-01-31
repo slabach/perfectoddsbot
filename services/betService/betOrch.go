@@ -33,11 +33,13 @@ func CreateCustomBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *g
 	option2 := options[2].StringValue()
 	odds1 := -110
 	odds2 := -110
-	if options[3] != nil {
-		odds1 = int(options[3].IntValue())
-	}
-	if options[4] != nil {
-		odds2 = int(options[4].IntValue())
+	if len(options) > 3 {
+		if options[3] != nil {
+			odds1 = int(options[3].IntValue())
+		}
+		if len(options) > 4 && options[4] != nil {
+			odds2 = int(options[4].IntValue())
+		}
 	}
 	guildID := i.GuildID
 
@@ -101,7 +103,6 @@ func CreateCustomBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *g
 func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID int, winningOption int, db *gorm.DB) {
 	var bet models.Bet
 	winnersList := ""
-	loserList := ""
 	result := db.First(&bet, "id = ? AND guild_id = ?", betID, i.GuildID)
 	if result.Error != nil || bet.ID == 0 {
 		response := "Bet not found or already resolved."
@@ -122,7 +123,7 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 	var entries []models.BetEntry
 	db.Where("bet_id = ? AND `option` = ?", bet.ID, winningOption).Find(&entries)
 
-	totalPayout := 0
+	totalPayout := 0.0
 	for _, entry := range entries {
 		var user models.User
 		db.First(&user, "id = ?", entry.UserID)
@@ -137,7 +138,7 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 
 		if payout > 0 {
 			username := common.GetUsername(s, user.GuildID, user.DiscordID)
-			winnersList += fmt.Sprintf("%s - Won $%d\n", username, payout)
+			winnersList += fmt.Sprintf("%s - Won $%.1f\n", username, payout)
 		}
 	}
 
@@ -149,7 +150,7 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 		winningOptionName = bet.Option2
 	}
 
-	response := fmt.Sprintf("Bet '%s' has been resolved!\n**%s** is the winning option.\nTotal payout: **%d** points.\n**Winners:**\n%s\n**Losers:**\n%s", bet.Description, winningOptionName, totalPayout, winnersList, loserList)
+	response := fmt.Sprintf("Bet '%s' has been resolved!\n**%s** is the winning option.\nTotal payout: **%.1f** points.\n**Winners:**\n%s\n", bet.Description, winningOptionName, totalPayout, winnersList)
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
@@ -204,7 +205,7 @@ func MyOpenBets(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.D
 				}
 			} else {
 				if bet.Option == 1 {
-					response += fmt.Sprintf("* `%s` - $%d on %.1f.\n", bet.Bet.Description, bet.Amount, bet.Bet.Option1)
+					response += fmt.Sprintf("* `%s` - $%d on %s.\n", bet.Bet.Description, bet.Amount, bet.Bet.Option1)
 				} else {
 					response += fmt.Sprintf("* `%s` - $%d on %s.\n", bet.Bet.Description, bet.Amount, bet.Bet.Option2)
 				}
@@ -243,12 +244,6 @@ func CreateCFBBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 		return
 	}
 
-	// Convert to Eastern Time
-	est, err := time.LoadLocation("America/New_York")
-	if err != nil {
-		panic(err)
-	}
-
 	if result.RowsAffected == 0 {
 		cfbdBet, err := common.GetCfbdBet(betID)
 		if err != nil {
@@ -270,30 +265,15 @@ func CreateCFBBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 			return
 		}
 
-		// game start time
-		t := cfbdBet.StartDate.In(est)
-		// Get the current time in EST
-		currentTimeEST := time.Now().In(est)
-
-		if currentTimeEST.After(t) {
-			cantBetMsg := "Game has already begun."
-			if cfbdBet.HomeScore != nil && cfbdBet.AwayScore != nil {
-				cantBetMsg = "Game has already ended."
-			}
-			err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Content: fmt.Sprintf("%s You can no longer create a bet for this game.", cantBetMsg),
-					Flags:   discordgo.MessageFlagsEphemeral,
-				},
-			})
-			if err != nil {
-				common.SendError(s, i, err, db)
-			}
+		// Convert to Eastern Time
+		loc, err := time.LoadLocation("America/New_York")
+		if err != nil {
+			common.SendError(s, i, err, db)
 			return
 		}
-
+		t := cfbdBet.StartDate.In(loc)
 		formattedTime := t.Format("Mon 03:04 pm MST")
+
 		dbBet = models.Bet{
 			Description:   fmt.Sprintf("%s @ %s (%s)", cfbdBet.AwayTeam, cfbdBet.HomeTeam, formattedTime),
 			Option1:       fmt.Sprintf("%s %s", cfbdBet.HomeTeam, common.FormatOdds(lineValue)),
@@ -309,29 +289,6 @@ func CreateCFBBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 			Spread:        &lineValue,
 		}
 		db.Create(&dbBet)
-	} else {
-		// game start time
-		t := dbBet.GameStartDate.In(est)
-		// Get the current time in EST
-		currentTimeEST := time.Now().In(est)
-
-		if currentTimeEST.After(t) {
-			cantBetMsg := "Game has already begun."
-			if dbBet.Paid {
-				cantBetMsg = "Game has already ended."
-			}
-			err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Content: fmt.Sprintf("%s You can no longer create a bet for this game.", cantBetMsg),
-					Flags:   discordgo.MessageFlagsEphemeral,
-				},
-			})
-			if err != nil {
-				common.SendError(s, i, err, db)
-			}
-			return
-		}
 	}
 
 	buttons := messageService.GetBetOnlyButtonsList(dbBet.Option1, dbBet.Option2, dbBet.ID)
