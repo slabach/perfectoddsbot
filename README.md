@@ -1,6 +1,6 @@
 # PerfectOddsBot
 
-PerfectOddsBot is a Discord bot designed to manage and interact with betting odds within a Discord server. The bot allows users to place bets, view leaderboards, and admins can lock and resolve bets.
+PerfectOddsBot is a Discord bot designed to create and manage bets with imaginary points. The bot allows users to place bets & view leaderboards. Admins can create and manage bets and bot settings
 
 ## Features
 
@@ -15,18 +15,18 @@ PerfectOddsBot is a Discord bot designed to manage and interact with betting odd
 
 ### Slash Commands
 
-| Command                | Description                                                                     | Admin Only | Ephemeral |
-|------------------------|---------------------------------------------------------------------------------|------------|-----------|
-| `/create-bet`          | Create a new bet with specified options and odds.                               | Yes        | No        |
-| `/create-cfb-bet`      | Create new CFB bet for provided game id                                         | No         | No        |
-| `/resolve-bet`         | Resolve an existing bet by specifying the winning option.                       | Yes        | No        |
-| `/give-points`         | Give points to a specific user.                                                 | Yes        | No        |
-| `/reset-points`        | Reset all users' points to 1000.                                                | Yes        | No        |
-| `/leaderboard`         | Display the leaderboard with the top users based on points.                     | No         | No        |
-| `/my-points`           | Display your current point total                                                | No         | Yes       |
-| `/my-bets`             | Display your active bets not yet resolved                                       | No         | Yes       |
-| `/list-cfb-games`      | List all CFB games for current week and their spreads                           | No         | Yes       |
-| `/set-betting-channel` | Set the current channel to your Server's 'bet channel' where auto msgs get sent | Yes        | Yes       |
+| Command                | Description                                                                     | Admin Only |  Premium  | Ephemeral |
+|------------------------|---------------------------------------------------------------------------------|------------|-----------|-----------|
+| `/create-bet`          | Create a new bet with specified options and odds.                               | Yes        | No        | No        |
+| `/create-cfb-bet`      | Create new CFB bet for provided game id                                         | No         | Yes       | No        |
+| `/resolve-bet`         | Resolve an existing bet by specifying the winning option.                       | Yes        | No        | No        |
+| `/give-points`         | Give points to a specific user.                                                 | Yes        | No        | No        |
+| `/reset-points`        | Reset all users' points to 1000.                                                | Yes        | No        | No        |
+| `/leaderboard`         | Display the leaderboard with the top users based on points.                     | No         | No        | No        |
+| `/my-points`           | Display your current point total                                                | No         | No        | Yes       |
+| `/my-bets`             | Display your active bets not yet resolved                                       | No         | No        | Yes       |
+| `/list-cfb-games`      | List all CFB games for current week and their spreads                           | No         | Yes       | Yes       |
+| `/set-betting-channel` | Set the current channel to your Server's 'bet channel' where auto msgs get sent | Yes        | No        | Yes       |
 
 ### Interactions (Buttons)
 
