@@ -25,22 +25,52 @@ func init() {
 		log.Fatalf("Error loading .env file")
 	}
 
-	mysqlURL, ok := os.LookupEnv("MYSQL_URL")
+	getEnv, ok := os.LookupEnv("ENV")
 	if ok == false {
-		fmt.Println("MYSQL_URL not found")
+		fmt.Println("ENV not found")
 		return
 	}
 
-	u, err := dburl.Parse(mysqlURL + "?charset=utf8mb4&parseTime=True&loc=Local")
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
+	//u, err := dburl.Parse(mysqlURL + "?charset=utf8mb4&parseTime=True&loc=Local")
+	//if err != nil {
+	//	fmt.Println(err)
+	//	return
+	//}
+	//
+	//db, err = gorm.Open(mysql.Open(u.DSN), &gorm.Config{})
+	//db, err = gorm.Open(mysql.Open(mysqlURL + "?charset=utf8&parseTime=True&loc=Local"))
+	//if err != nil {
+	//	fmt.Println(err)
+	//	return
+	//}
 
-	db, err = gorm.Open(mysql.Open(u.DSN), &gorm.Config{})
-	if err != nil {
-		fmt.Println(err)
-		return
+	if getEnv == "production" {
+		mysqlURL, ok := os.LookupEnv("MYSQL_URL")
+		if ok == false {
+			fmt.Println("MYSQL_URL not found")
+			return
+		}
+
+		u, err := dburl.Parse(mysqlURL + "?charset=utf8&parseTime=True&loc=Local")
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		db, err = gorm.Open(mysql.Open(u.DSN), &gorm.Config{})
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+	} else {
+		connString := os.Getenv("MYSQL_URL")
+
+		db, err = gorm.Open(mysql.Open(connString + "?charset=utf8&parseTime=True&loc=Local"))
+		if err != nil {
+			log.Fatalln(err)
+			return
+		}
+
 	}
 
 	err = db.AutoMigrate(

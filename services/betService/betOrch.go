@@ -243,6 +243,12 @@ func CreateCFBBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 		return
 	}
 
+	// Convert to Eastern Time
+	est, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		panic(err)
+	}
+
 	if result.RowsAffected == 0 {
 		cfbdBet, err := common.GetCfbdBet(betID)
 		if err != nil {
@@ -264,14 +270,30 @@ func CreateCFBBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 			return
 		}
 
-		// Convert to Eastern Time
-		loc, err := time.LoadLocation("America/New_York")
-		if err != nil {
-			panic(err)
-		}
-		t := cfbdBet.StartDate.In(loc)
-		formattedTime := t.Format("Mon 03:04 pm MST")
+		// game start time
+		t := cfbdBet.StartDate.In(est)
+		// Get the current time in EST
+		currentTimeEST := time.Now().In(est)
 
+		if currentTimeEST.After(t) {
+			cantBetMsg := "Game has already begun."
+			if cfbdBet.HomeScore != nil && cfbdBet.AwayScore != nil {
+				cantBetMsg = "Game has already ended."
+			}
+			err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: fmt.Sprintf("%s You can no longer create a bet for this game.", cantBetMsg),
+					Flags:   discordgo.MessageFlagsEphemeral,
+				},
+			})
+			if err != nil {
+				common.SendError(s, i, err, db)
+			}
+			return
+		}
+
+		formattedTime := t.Format("Mon 03:04 pm MST")
 		dbBet = models.Bet{
 			Description:   fmt.Sprintf("%s @ %s (%s)", cfbdBet.AwayTeam, cfbdBet.HomeTeam, formattedTime),
 			Option1:       fmt.Sprintf("%s %s", cfbdBet.HomeTeam, common.FormatOdds(lineValue)),
@@ -287,6 +309,29 @@ func CreateCFBBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 			Spread:        &lineValue,
 		}
 		db.Create(&dbBet)
+	} else {
+		// game start time
+		t := dbBet.GameStartDate.In(est)
+		// Get the current time in EST
+		currentTimeEST := time.Now().In(est)
+
+		if currentTimeEST.After(t) {
+			cantBetMsg := "Game has already begun."
+			if dbBet.Paid {
+				cantBetMsg = "Game has already ended."
+			}
+			err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: fmt.Sprintf("%s You can no longer create a bet for this game.", cantBetMsg),
+					Flags:   discordgo.MessageFlagsEphemeral,
+				},
+			})
+			if err != nil {
+				common.SendError(s, i, err, db)
+			}
+			return
+		}
 	}
 
 	buttons := messageService.GetBetOnlyButtonsList(dbBet.Option1, dbBet.Option2, dbBet.ID)
