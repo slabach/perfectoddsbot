@@ -114,10 +114,10 @@ func ResolveCFBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB) error {
 			totalPayout += payout
 
 			if payout > 0 {
-				winnersList += fmt.Sprintf("%s - Bet: %s %.1f - **Won $%d**\n", username, betOption, spread, payout)
+				winnersList += fmt.Sprintf("%s - Bet: %s %s - **Won $%.1f**\n", username, betOption, common.FormatOdds(spread), payout)
 			}
 		} else {
-			loserList += fmt.Sprintf("%s - Bet: %.1f - **Lost $%d**\n", username, *entry.Spread, entry.Amount)
+			loserList += fmt.Sprintf("%s - Bet: %s %s - **Lost $%d**\n", username, betOption, common.FormatOdds(*entry.Spread*-1), entry.Amount)
 		}
 	}
 
@@ -125,7 +125,7 @@ func ResolveCFBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB) error {
 	db.Save(&bet)
 	db.Model(&bet).UpdateColumn("paid", true).UpdateColumn("active", false)
 
-	response := fmt.Sprintf("Bet '%s' has been resolved!\nTotal payout: **%d** points.\n**Winners:**\n%s\n**Losers:**\n%s", bet.Description, totalPayout, winnersList, loserList)
+	response := fmt.Sprintf("Bet '%s' has been resolved!\nTotal payout: **%.1f** points.\n**Winners:**\n%s\n**Losers:**\n%s", bet.Description, totalPayout, winnersList, loserList)
 	_, err := s.ChannelMessageSendComplex(guild.BetChannelID, &discordgo.MessageSend{
 		Content: response,
 	})

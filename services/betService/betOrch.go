@@ -138,7 +138,7 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 
 		if payout > 0 {
 			username := common.GetUsername(s, user.GuildID, user.DiscordID)
-			winnersList += fmt.Sprintf("%s - Won $%d\n", username, payout)
+			winnersList += fmt.Sprintf("%s - Won $%.1f\n", username, payout)
 		}
 	}
 
@@ -150,7 +150,7 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 		winningOptionName = bet.Option2
 	}
 
-	response := fmt.Sprintf("Bet '%s' has been resolved!\n**%s** is the winning option.\nTotal payout: **%d** points.\n**Winners:**\n%s\n", bet.Description, winningOptionName, totalPayout, winnersList)
+	response := fmt.Sprintf("Bet '%s' has been resolved!\n**%s** is the winning option.\nTotal payout: **%.1f** points.\n**Winners:**\n%s\n", bet.Description, winningOptionName, totalPayout, winnersList)
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
@@ -205,7 +205,7 @@ func MyOpenBets(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.D
 				}
 			} else {
 				if bet.Option == 1 {
-					response += fmt.Sprintf("* `%s` - $%d on %.1f.\n", bet.Bet.Description, bet.Amount, bet.Bet.Option1)
+					response += fmt.Sprintf("* `%s` - $%d on %s.\n", bet.Bet.Description, bet.Amount, bet.Bet.Option1)
 				} else {
 					response += fmt.Sprintf("* `%s` - $%d on %s.\n", bet.Bet.Description, bet.Amount, bet.Bet.Option2)
 				}

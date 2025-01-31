@@ -32,7 +32,7 @@ func ShowLeaderboard(s *discordgo.Session, i *discordgo.InteractionCreate, db *g
 	for idx, user := range users {
 		username := common.GetUsername(s, user.GuildID, user.DiscordID)
 
-		description += fmt.Sprintf("**%d. %s** - %.2f points\n", idx+1, username, user.Points)
+		description += fmt.Sprintf("**%d. %s** - %.1f points\n", idx+1, username, user.Points)
 	}
 
 	embed := &discordgo.MessageEmbed{

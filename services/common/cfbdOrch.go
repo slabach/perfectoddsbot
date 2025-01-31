@@ -87,6 +87,12 @@ func GetCFBGames() ([]external.CFBD_BettingLines, error) {
 	if err != nil {
 		return []external.CFBD_BettingLines{}, err
 	}
+	if weekResp == nil {
+		return []external.CFBD_BettingLines{}, fmt.Errorf("GetCFBGames: weekResp is empty")
+	}
+	if weekResp.Body == nil {
+		return []external.CFBD_BettingLines{}, fmt.Errorf("GetCFBGames: weekResp.Body is empty")
+	}
 	defer weekResp.Body.Close()
 
 	var calendar external.CalendarData
