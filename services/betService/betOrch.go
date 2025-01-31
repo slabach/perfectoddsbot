@@ -243,7 +243,7 @@ func CreateCFBBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 		return
 	}
 	if !guild.PremiumEnabled {
-		common.SendError(s, i, fmt.Errorf("your server must have the premium subscription in order to enable this feature"), db)
+		common.SendError(s, i, fmt.Errorf("Your server must have the premium subscription in order to enable this feature"), db)
 		return
 	}
 
