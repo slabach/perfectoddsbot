@@ -1,19 +1,32 @@
-package common
+package cfbdService
 
 import (
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
+	"gorm.io/gorm"
 	"perfectOddsBot/models/external"
+	"perfectOddsBot/services/common"
+	"perfectOddsBot/services/guildService"
 )
 
-func ListCFBGames(s *discordgo.Session, i *discordgo.InteractionCreate) {
+func ListCFBGames(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
 	cfbUrl := "https://api.collegefootballdata.com/lines?"
 	pfWeekUrl := "https://api.perfectfall.com/week-season"
 	conferenceList := []string{"Big Ten", "ACC", "SEC", "Big 12"}
 
-	weekResp, err := PFWrapper(pfWeekUrl)
+	guild, err := guildService.GetGuildInfo(s, db, i.GuildID, i.ChannelID)
+	if err != nil {
+		common.SendError(s, i, err, db)
+		return
+	}
+	if !guild.PremiumEnabled {
+		common.SendError(s, i, fmt.Errorf("Your server must have the premium subscription in order to enable this feature"), db)
+		return
+	}
+
+	weekResp, err := common.PFWrapper(pfWeekUrl)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -32,7 +45,7 @@ func ListCFBGames(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		weekNum = 1
 	}
 	linesUrl := fmt.Sprintf("%syear=%d&seasonType=%s&week=%d", cfbUrl, calendar.Season.Year, calendar.Week.WeekType, weekNum)
-	linesResp, err := CFBDWrapper(linesUrl)
+	linesResp, err := common.CFBDWrapper(linesUrl)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -52,8 +65,8 @@ func ListCFBGames(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	} else {
 		response = fmt.Sprintf("Lines for week %d - \n", calendar.Week.WeekNum)
 		for _, bet := range bettingLines {
-			if Contains(conferenceList, bet.HomeConference) || Contains(conferenceList, bet.AwayConference) {
-				line, lineErr := PickLine(bet.Lines)
+			if common.Contains(conferenceList, bet.HomeConference) || common.Contains(conferenceList, bet.AwayConference) {
+				line, lineErr := common.PickLine(bet.Lines)
 				lineText := fmt.Sprintf("* `%s @ %s`", bet.AwayTeam, bet.HomeTeam)
 				if lineErr != nil {
 					lineText += "- No line available \n"
@@ -83,7 +96,7 @@ func GetCFBGames() ([]external.CFBD_BettingLines, error) {
 	cfbUrl := "https://api.collegefootballdata.com/lines?"
 	pfWeekUrl := "https://api.perfectfall.com/week-season"
 
-	weekResp, err := PFWrapper(pfWeekUrl)
+	weekResp, err := common.PFWrapper(pfWeekUrl)
 	if err != nil {
 		return []external.CFBD_BettingLines{}, err
 	}
@@ -106,7 +119,7 @@ func GetCFBGames() ([]external.CFBD_BettingLines, error) {
 		weekNum = 1
 	}
 	linesUrl := fmt.Sprintf("%syear=%d&seasonType=%s&week=%d", cfbUrl, calendar.Season.Year, calendar.Week.WeekType, weekNum)
-	linesResp, err := CFBDWrapper(linesUrl)
+	linesResp, err := common.CFBDWrapper(linesUrl)
 	if err != nil {
 		return []external.CFBD_BettingLines{}, err
 	}
@@ -133,7 +146,7 @@ func GetCfbdBet(betid int) (external.CFBD_BettingLines, error) {
 	cfbUrl := "https://api.collegefootballdata.com/lines?"
 	pfWeekUrl := "https://api.perfectfall.com/week-season"
 
-	weekResp, err := PFWrapper(pfWeekUrl)
+	weekResp, err := common.PFWrapper(pfWeekUrl)
 	if err != nil {
 		return external.CFBD_BettingLines{}, err
 	}
@@ -151,7 +164,7 @@ func GetCfbdBet(betid int) (external.CFBD_BettingLines, error) {
 		weekNum = 1
 	}
 	linesUrl := fmt.Sprintf("%syear=%d&seasonType=%s&week=%d", cfbUrl, calendar.Season.Year, calendar.Week.WeekType, weekNum)
-	linesResp, err := CFBDWrapper(linesUrl)
+	linesResp, err := common.CFBDWrapper(linesUrl)
 	if err != nil {
 		return external.CFBD_BettingLines{}, err
 	}
