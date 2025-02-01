@@ -154,23 +154,24 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	userID := m.Author.ID
 
 	// getting guild info to create the guild record if it doesn't exist already
-	_, err := guildService.GetGuildInfo(s, db, guildID, m.ChannelID)
+	guild, err := guildService.GetGuildInfo(s, db, guildID, m.ChannelID)
 	if err != nil {
-		common.SendError(s, nil, err, db)
-		log.Printf("Error getting guild info: %v", err)
+		msg := fmt.Errorf("error getting guild info: %v", err)
+		common.SendError(s, nil, msg, db)
+		return
 	}
 
 	var user models.User
 	result := db.FirstOrCreate(&user, models.User{DiscordID: userID, GuildID: guildID})
 	if result.Error != nil {
-		log.Printf("Error fetching or creating user: %v", result.Error)
-		return
+		msg := fmt.Errorf("error fetching or creating user: %v", result.Error)
+		common.SendError(s, nil, msg, db)
 	}
 	if result.RowsAffected == 1 {
 		user.Points = 1000
 	}
 
-	user.Points += 0.5
+	user.Points += guild.PointsPerMessage
 	db.Save(&user)
 }
 

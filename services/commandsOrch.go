@@ -29,6 +29,8 @@ func HandleSlashCommand(s *discordgo.Session, i *discordgo.InteractionCreate, db
 		betService.CreateCFBBet(s, i, db)
 	case "set-betting-channel":
 		guildService.SetBettingChannel(s, i, db)
+	case "set-points-per-message":
+		guildService.SetPointsPerMessage(s, i, db)
 	}
 }
 
@@ -123,6 +125,18 @@ func RegisterCommands(s *discordgo.Session) error {
 		{
 			Name:        "set-betting-channel",
 			Description: "🛡 Sets the current channel to the main channel for payouts to be sent to - ADMIN ONLY",
+		},
+		{
+			Name:        "set-points-per-message",
+			Description: "🛡 Sets the amount of points a user gets for each message they send in the server - ADMIN ONLY",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Name:        "points",
+					Description: "Amount to reset points to (default 0.5)",
+					Type:        discordgo.ApplicationCommandOptionString,
+					Required:    true,
+				},
+			},
 		},
 		{
 			Name:        "my-points",
