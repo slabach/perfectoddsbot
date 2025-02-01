@@ -51,6 +51,7 @@ func IsAdmin(s *discordgo.Session, i *discordgo.InteractionCreate) bool {
 }
 
 func SendError(s *discordgo.Session, i *discordgo.InteractionCreate, err error, db *gorm.DB) {
+	fmt.Println(err)
 	localErr := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
