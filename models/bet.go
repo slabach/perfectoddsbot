@@ -17,6 +17,7 @@ type Bet struct {
 	MessageID     *string
 	ChannelID     string
 	CfbdID        *string
+	EspnID        *string
 	GameStartDate *time.Time
 	AdminCreated  bool
 	Spread        *float64

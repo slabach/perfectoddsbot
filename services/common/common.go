@@ -52,18 +52,23 @@ func IsAdmin(s *discordgo.Session, i *discordgo.InteractionCreate) bool {
 
 func SendError(s *discordgo.Session, i *discordgo.InteractionCreate, err error, db *gorm.DB) {
 	fmt.Println(err)
-	localErr := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Content: fmt.Sprintf("An error occured: %v", err),
-			Flags:   discordgo.MessageFlagsEphemeral,
-		},
-	})
-	if localErr != nil {
-		log.Printf("Error sending interaction: %v", localErr)
+
+	guildId := ""
+	if i != nil {
+		guildId = i.GuildID
+		localErr := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: fmt.Sprintf("An error occured: %v", err),
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		if localErr != nil {
+			log.Printf("Error sending interaction: %v", localErr)
+		}
 	}
 	errLog := models.ErrorLog{
-		GuildID: i.GuildID,
+		GuildID: guildId,
 		Message: fmt.Sprintf("%v", err),
 	}
 	db.Create(&errLog)
@@ -150,6 +155,25 @@ func CFBDWrapper(requestUrl string) (*http.Response, error) {
 	return resp, nil
 }
 
+func ESPNWrapper(requestUrl string) (*http.Response, error) {
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", requestUrl, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != 200 {
+		resp.Body.Close()
+		return nil, err
+	}
+	return resp, nil
+}
+
 func PFWrapper(requestUrl string) (*http.Response, error) {
 	var pfKey string
 	getEnv, ok := os.LookupEnv("ENV")
@@ -204,6 +228,20 @@ func PickLine(lines []external.CFBD_Line) (*external.CFBD_Line, error) {
 	for _, provider := range preferredProviders {
 		for _, line := range lines {
 			if line.Provider == provider {
+				return &line, nil
+			}
+		}
+	}
+
+	return nil, errors.New("no line selected")
+}
+
+func PickESPNLine(lines external.ESPN_Lines) (*external.ESPN_Line, error) {
+	preferredProviders := []string{"ESPN BET", "DraftKings", "Bovada"}
+
+	for _, provider := range preferredProviders {
+		for _, line := range lines.Items {
+			if line.Provider.Name == provider {
 				return &line, nil
 			}
 		}

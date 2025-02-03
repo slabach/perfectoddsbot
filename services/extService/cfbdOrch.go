@@ -1,4 +1,4 @@
-package cfbdService
+package extService
 
 import (
 	"encoding/json"
@@ -28,7 +28,7 @@ func ListCFBGames(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 
 	weekResp, err := common.PFWrapper(pfWeekUrl)
 	if err != nil {
-		fmt.Println(err)
+		common.SendError(s, i, err, db)
 		return
 	}
 	defer weekResp.Body.Close()
@@ -36,7 +36,7 @@ func ListCFBGames(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 	var calendar external.CalendarData
 	err = json.NewDecoder(weekResp.Body).Decode(&calendar)
 	if err != nil {
-		fmt.Printf("error parsing json err: %v", err)
+		common.SendError(s, i, err, db)
 		return
 	}
 
@@ -47,7 +47,7 @@ func ListCFBGames(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 	linesUrl := fmt.Sprintf("%syear=%d&seasonType=%s&week=%d", cfbUrl, calendar.Season.Year, calendar.Week.WeekType, weekNum)
 	linesResp, err := common.CFBDWrapper(linesUrl)
 	if err != nil {
-		fmt.Println(err)
+		common.SendError(s, i, err, db)
 		return
 	}
 	defer linesResp.Body.Close()
@@ -55,7 +55,7 @@ func ListCFBGames(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 	var bettingLines []external.CFBD_BettingLines
 	err = json.NewDecoder(linesResp.Body).Decode(&bettingLines)
 	if err != nil {
-		fmt.Printf("error parsing json err: %v", err)
+		common.SendError(s, i, err, db)
 		return
 	}
 
