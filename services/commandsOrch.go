@@ -31,6 +31,8 @@ func HandleSlashCommand(s *discordgo.Session, i *discordgo.InteractionCreate, db
 		guildService.SetBettingChannel(s, i, db)
 	case "set-points-per-message":
 		guildService.SetPointsPerMessage(s, i, db)
+	case "set-starting-points":
+		guildService.SetStartingPoints(s, i, db)
 	case "list-cbb-games":
 		extService.ListCBBGames(s, i, db)
 	case "create-cbb-bet":
@@ -153,6 +155,18 @@ func RegisterCommands(s *discordgo.Session) error {
 				{
 					Name:        "points",
 					Description: "Amount to reset points to (default 0.5)",
+					Type:        discordgo.ApplicationCommandOptionString,
+					Required:    true,
+				},
+			},
+		},
+		{
+			Name:        "set-points-per-message",
+			Description: "🛡 Sets the amount of points a new user will begin with by default - ADMIN ONLY",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Name:        "points",
+					Description: "Amount to reset points to (default 1000)",
 					Type:        discordgo.ApplicationCommandOptionString,
 					Required:    true,
 				},

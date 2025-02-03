@@ -6,21 +6,28 @@ import (
 	"gorm.io/gorm"
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/common"
+	"perfectOddsBot/services/guildService"
 )
 
 func ShowPoints(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
 	userID := i.Member.User.ID
 	guildID := i.GuildID
 
+	guild, err := guildService.GetGuildInfo(s, db, guildID, i.ChannelID)
+	if err != nil {
+		common.SendError(s, i, fmt.Errorf("error getting guild info: %v", err), db)
+		return
+	}
+
 	var user models.User
 	result := db.FirstOrCreate(&user, models.User{DiscordID: userID, GuildID: guildID})
 	if result.RowsAffected == 1 {
-		user.Points = 1000
+		user.Points = guild.StartingPoints
 		db.Save(&user)
 	}
 
 	response := fmt.Sprintf("You have **%.1f** points.", user.Points)
-	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Content: response,
@@ -47,6 +54,12 @@ func GivePoints(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.D
 		return
 	}
 
+	guild, err := guildService.GetGuildInfo(s, db, i.GuildID, i.ChannelID)
+	if err != nil {
+		common.SendError(s, i, fmt.Errorf("error getting guild info: %v", err), db)
+		return
+	}
+
 	options := i.ApplicationCommandData().Options
 	targetUser := options[0].UserValue(s)
 	amount := int(options[1].IntValue())
@@ -70,14 +83,14 @@ func GivePoints(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.D
 	var user models.User
 	result := db.FirstOrCreate(&user, models.User{DiscordID: targetUser.ID, GuildID: guildID})
 	if result.RowsAffected == 1 {
-		user.Points = 1000
+		user.Points = guild.StartingPoints
 	}
 
 	user.Points += float64(amount)
 	db.Save(&user)
 
 	response := fmt.Sprintf("Successfully gave **%d** points to **%s**.", amount, targetUser.Username)
-	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Content: response,
