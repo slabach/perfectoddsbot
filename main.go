@@ -168,7 +168,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		common.SendError(s, nil, msg, db)
 	}
 	if result.RowsAffected == 1 {
-		user.Points = 1000
+		user.Points = guild.StartingPoints
 	}
 
 	user.Points += guild.PointsPerMessage

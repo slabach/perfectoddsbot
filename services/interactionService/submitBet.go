@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"gorm.io/gorm"
-	"log"
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/common"
+	"perfectOddsBot/services/guildService"
 	"strconv"
 )
 
@@ -16,8 +16,12 @@ func SubmitBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 	var option string
 	var optionVal int
 
-	log.Printf(customID)
-	_, err := fmt.Sscanf(customID, "submit_bet_%d_%s", &betID, &option)
+	guild, err := guildService.GetGuildInfo(s, db, i.GuildID, i.ChannelID)
+	if err != nil {
+		return err
+	}
+
+	_, err = fmt.Sscanf(customID, "submit_bet_%d_%s", &betID, &option)
 	if err != nil {
 		return errors.New(fmt.Sprintf("Error parsing modal customID for placing a bet: %v", err))
 	} else {
@@ -48,7 +52,7 @@ func SubmitBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 	username := common.GetUsername(s, guildID, userID)
 	result := db.FirstOrCreate(&user, models.User{DiscordID: userID, GuildID: guildID})
 	if result.RowsAffected == 1 {
-		user.Points = 1000
+		user.Points = guild.StartingPoints
 		if user.Username == nil {
 			user.Username = &username
 		}

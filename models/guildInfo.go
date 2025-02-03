@@ -6,5 +6,6 @@ type Guild struct {
 	GuildName        string
 	BetChannelID     string
 	PointsPerMessage float64
+	StartingPoints   float64
 	PremiumEnabled   bool
 }
