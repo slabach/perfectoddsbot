@@ -33,10 +33,20 @@ func SetupCron(s *discordgo.Session, db *gorm.DB) {
 		if err != nil {
 			fmt.Println(err)
 		}
+
+		err = scheduler_jobs.CheckSubscribedCFBTeam(s, db)
+		if err != nil {
+			fmt.Println(err)
+		}
 	})
 	_, err = cronService.AddFunc("0 0 9 * 1-2 *", func() {
 		// // At 9am every day, January through February
 		err := scheduler_jobs.CheckCFBLines(s, db)
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		err = scheduler_jobs.CheckSubscribedCFBTeam(s, db)
 		if err != nil {
 			fmt.Println(err)
 		}
@@ -52,6 +62,21 @@ func SetupCron(s *discordgo.Session, db *gorm.DB) {
 	_, err = cronService.AddFunc("0 */5 * * 1-5 *", func() {
 		// // Every 5 minutes, January through May
 		err := scheduler_jobs.CheckGameStart(s, db)
+		if err != nil {
+			fmt.Println(err)
+		}
+	})
+
+	_, err = cronService.AddFunc("0 0 */1 * 10-12 *", func() {
+		// // Every 5 minutes, August through December
+		err := scheduler_jobs.CheckSubscribedCFBTeam(s, db)
+		if err != nil {
+			fmt.Println(err)
+		}
+	})
+	_, err = cronService.AddFunc("0 0 */1 * 1-5 *", func() {
+		// // Every 5 minutes, January through May
+		err := scheduler_jobs.CheckSubscribedCBBTeam(s, db)
 		if err != nil {
 			fmt.Println(err)
 		}

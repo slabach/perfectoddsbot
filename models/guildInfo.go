@@ -8,4 +8,5 @@ type Guild struct {
 	PointsPerMessage float64
 	StartingPoints   float64
 	PremiumEnabled   bool
+	SubscribedTeam   *string
 }
