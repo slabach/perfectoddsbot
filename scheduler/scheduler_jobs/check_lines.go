@@ -7,8 +7,8 @@ import (
 	"gorm.io/gorm"
 	"perfectOddsBot/models"
 	"perfectOddsBot/models/external"
-	"perfectOddsBot/services/cfbdService"
 	"perfectOddsBot/services/common"
+	"perfectOddsBot/services/extService"
 	"perfectOddsBot/services/messageService"
 	"strconv"
 	"time"
@@ -31,7 +31,7 @@ func CheckCFBLines(s *discordgo.Session, db *gorm.DB) error {
 	currentTimeEST := time.Now().In(est)
 	formattedTime := currentTimeEST.Format("Mon 03:04 pm MST")
 
-	cfbdList, err := cfbdService.GetCFBGames()
+	cfbdList, err := extService.GetCFBGames()
 	if err != nil {
 		return err
 	}

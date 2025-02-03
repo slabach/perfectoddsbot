@@ -6,8 +6,8 @@ import (
 	"gorm.io/gorm"
 	"perfectOddsBot/models"
 	"perfectOddsBot/models/external"
-	"perfectOddsBot/services/cfbdService"
 	"perfectOddsBot/services/common"
+	"perfectOddsBot/services/extService"
 	"perfectOddsBot/services/guildService"
 	"strconv"
 )
@@ -15,64 +15,152 @@ import (
 func CheckGameEnd(s *discordgo.Session, db *gorm.DB) error {
 	var dbBetList []models.Bet
 
-	result := db.Where("paid = 0 AND active = 0 AND cfbd_id IS NOT NULL").Find(&dbBetList)
+	result := db.Where("paid = 0 AND active = 0 AND (cfbd_id IS NOT NULL OR espn_id IS NOT NULL)").Find(&dbBetList)
 	if result.Error != nil {
 		return result.Error
 	}
-	fmt.Println(dbBetList)
 
-	cfbdList, err := cfbdService.GetCFBGames()
-	if err != nil {
-		return err
+	// check the count of each first. if there are no CFB bets, we dont need to get CFB games (and vice versa)
+	cbbCount := 0
+	cfbCount := 0
+	for _, cBet := range dbBetList {
+		if cBet.CfbdID != nil {
+			cfbCount++
+		}
+		if cBet.EspnID != nil {
+			cbbCount++
+		}
 	}
 
-	betMap := make(map[int]external.CFBD_BettingLines)
+	var cfbdList []external.CFBD_BettingLines
+	if cfbCount > 0 {
+		cfbGameList, err := extService.GetCFBGames()
+		if err != nil {
+			common.SendError(s, nil, err, db)
+		}
+		cfbdList = cfbGameList
+	}
+
+	var espnList []external.ESPN_Event
+	if cbbCount > 0 {
+		cbbGameList, err := extService.GetCbbGames()
+		if err != nil {
+			return err
+		}
+		espnList = cbbGameList
+	}
+
+	cbbBetMap := make(map[string]external.ESPN_Event)
+	for _, obj := range espnList {
+		cbbBetMap[obj.ID] = obj
+	}
+
+	cfbBetMap := make(map[int]external.CFBD_BettingLines)
 	for _, obj := range cfbdList {
-		betMap[obj.ID] = obj
+		cfbBetMap[obj.ID] = obj
 	}
 
 	for _, bet := range dbBetList {
-		betCfbdId, _ := strconv.Atoi(*bet.CfbdID)
-		if obj, found := betMap[betCfbdId]; found {
-			fmt.Println(obj.ID)
-			if obj.HomeScore != nil && obj.AwayScore != nil {
-				scoreDiff := *obj.HomeScore - *obj.AwayScore
+		if bet.CfbdID != nil {
+			betCfbdId, _ := strconv.Atoi(*bet.CfbdID)
+			if obj, found := cfbBetMap[betCfbdId]; found {
+				if obj.HomeScore != nil && obj.AwayScore != nil {
+					scoreDiff := *obj.HomeScore - *obj.AwayScore
 
-				var betEntries []models.BetEntry
-				entriesResult := db.Where("bet_id = ?", bet.ID).Find(&betEntries)
-				if entriesResult.RowsAffected == 0 {
-					bet.Paid = true
-					db.Save(&bet)
-					continue
-				}
+					var betEntries []models.BetEntry
+					entriesResult := db.Where("bet_id = ?", bet.ID).Find(&betEntries)
+					if entriesResult.RowsAffected == 0 {
+						bet.Paid = true
+						db.Save(&bet)
+						continue
+					}
 
-				for _, entry := range betEntries {
-					// 1 = home team beat spread
-					// 2 = away team beat spread
-					spreadWinner := 2
-					if *entry.Spread < float64(0) {
-						// eg. Spread -9 (home 9 point favored)
-						// scoreDiff > 9
-						if float64(scoreDiff) > -(*entry.Spread) {
-							spreadWinner = 1
+					for _, entry := range betEntries {
+						// 1 = home team beat spread
+						// 2 = away team beat spread
+						spreadWinner := 2
+						if *entry.Spread < float64(0) {
+							// eg. Spread -9 (home 9 point favored)
+							// scoreDiff > 9
+							if float64(scoreDiff) > -(*entry.Spread) {
+								spreadWinner = 1
+							}
+						} else {
+							// eg. Spread 9 (home 9 point underdog)
+							// scoreDiff >= -9
+							if float64(scoreDiff) >= -(*entry.Spread) {
+								spreadWinner = 1
+							}
 						}
-					} else {
-						// eg. Spread 9 (home 9 point underdog)
-						// scoreDiff >= -9
-						if float64(scoreDiff) >= -(*entry.Spread) {
-							spreadWinner = 1
+
+						if entry.Option == spreadWinner {
+							entry.AutoCloseWin = true
+							db.Save(&entry)
 						}
 					}
 
-					if entry.Option == spreadWinner {
-						entry.AutoCloseWin = true
-						db.Save(&entry)
+					err := ResolveCFBBBet(s, bet, db)
+					if err != nil {
+						return err
 					}
 				}
+			}
+		}
+		if bet.EspnID != nil {
+			betEspnId := *bet.EspnID
+			if obj, found := cbbBetMap[betEspnId]; found {
+				if obj.Status.Type.Name == "STATUS_FINAL" {
+					var betEntries []models.BetEntry
+					entriesResult := db.Where("bet_id = ?", bet.ID).Find(&betEntries)
+					if entriesResult.RowsAffected == 0 {
+						bet.Paid = true
+						db.Save(&bet)
+						continue
+					}
 
-				err = ResolveCFBBet(s, bet, db)
-				if err != nil {
-					return err
+					homeTeam := external.ESPN_Competitor{}
+					awayTeam := external.ESPN_Competitor{}
+
+					for _, comp := range obj.Competitions[0].Competitors {
+						if comp.HomeAway == "home" {
+							homeTeam = comp
+						}
+						if comp.HomeAway == "away" {
+							awayTeam = comp
+						}
+					}
+
+					homeScore, _ := strconv.Atoi(homeTeam.Score)
+					awayScore, _ := strconv.Atoi(awayTeam.Score)
+					scoreDiff := homeScore - awayScore
+					for _, entry := range betEntries {
+						// 1 = home team beat spread
+						// 2 = away team beat spread
+						spreadWinner := 2
+						if *entry.Spread < float64(0) {
+							// eg. Spread -9 (home 9 point favored)
+							// scoreDiff > 9
+							if float64(scoreDiff) > -(*entry.Spread) {
+								spreadWinner = 1
+							}
+						} else {
+							// eg. Spread 9 (home 9 point underdog)
+							// scoreDiff >= -9
+							if float64(scoreDiff) >= -(*entry.Spread) {
+								spreadWinner = 1
+							}
+						}
+
+						if entry.Option == spreadWinner {
+							entry.AutoCloseWin = true
+							db.Save(&entry)
+						}
+					}
+
+					err := ResolveCFBBBet(s, bet, db)
+					if err != nil {
+						return err
+					}
 				}
 			}
 		}
@@ -81,7 +169,7 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) error {
 	return nil
 }
 
-func ResolveCFBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB) error {
+func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB) error {
 	winnersList := ""
 	loserList := ""
 	guild, err := guildService.GetGuildInfo(s, db, bet.GuildID, bet.ChannelID)

@@ -5,7 +5,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"gorm.io/gorm"
 	"perfectOddsBot/services/betService"
-	"perfectOddsBot/services/cfbdService"
+	"perfectOddsBot/services/extService"
 	"perfectOddsBot/services/guildService"
 )
 
@@ -24,13 +24,17 @@ func HandleSlashCommand(s *discordgo.Session, i *discordgo.InteractionCreate, db
 	case "my-bets":
 		betService.MyOpenBets(s, i, db)
 	case "list-cfb-games":
-		cfbdService.ListCFBGames(s, i, db)
+		extService.ListCFBGames(s, i, db)
 	case "create-cfb-bet":
 		betService.CreateCFBBet(s, i, db)
 	case "set-betting-channel":
 		guildService.SetBettingChannel(s, i, db)
 	case "set-points-per-message":
 		guildService.SetPointsPerMessage(s, i, db)
+	case "list-cbb-games":
+		extService.ListCBBGames(s, i, db)
+	case "create-cbb-bet":
+		betService.CreateCBBBet(s, i, db)
 	}
 }
 
@@ -38,15 +42,15 @@ func RegisterCommands(s *discordgo.Session) error {
 	commands := []*discordgo.ApplicationCommand{
 		{
 			Name:        "list-cfb-games",
-			Description: "List this weeks CFB games and their current lines",
+			Description: "★ List this weeks CFB games and their current lines (PREMIUM)",
 		},
 		{
-			Name:        "leaderboard",
-			Description: "Show the top users by points",
+			Name:        "list-cbb-games",
+			Description: "★ List the currently open CBB games (PREMIUM)",
 		},
 		{
 			Name:        "create-cfb-bet",
-			Description: "Create a new College Football bet",
+			Description: "★ Create a new College Football bet (PREMIUM)",
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Name:        "game-id",
@@ -55,6 +59,22 @@ func RegisterCommands(s *discordgo.Session) error {
 					Required:    true,
 				},
 			},
+		},
+		{
+			Name:        "create-cbb-bet",
+			Description: "★ Create a new College Basketball bet (PREMIUM)",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Name:        "game-id",
+					Description: "Game ID",
+					Type:        discordgo.ApplicationCommandOptionString,
+					Required:    true,
+				},
+			},
+		},
+		{
+			Name:        "leaderboard",
+			Description: "Show the top users by points",
 		},
 		{
 			Name:        "create-bet",

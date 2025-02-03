@@ -19,8 +19,8 @@ func SetupCron(s *discordgo.Session, db *gorm.DB) {
 			fmt.Println(err)
 		}
 	})
-	_, err = cronService.AddFunc("0 0 */1 * 1-2 *", func() {
-		// // Every hour, January through February
+	_, err = cronService.AddFunc("0 0 */1 * 1-5 *", func() {
+		// // Every hour, January through May
 		err := scheduler_jobs.CheckGameEnd(s, db)
 		if err != nil {
 			fmt.Println(err)
@@ -49,8 +49,8 @@ func SetupCron(s *discordgo.Session, db *gorm.DB) {
 			fmt.Println(err)
 		}
 	})
-	_, err = cronService.AddFunc("0 */5 * * 1-2 *", func() {
-		// // Every 5 minutes, January through February
+	_, err = cronService.AddFunc("0 */5 * * 1-5 *", func() {
+		// // Every 5 minutes, January through May
 		err := scheduler_jobs.CheckGameStart(s, db)
 		if err != nil {
 			fmt.Println(err)
