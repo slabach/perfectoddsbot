@@ -12,6 +12,7 @@ import (
 	"perfectOddsBot/services/messageService"
 	"strconv"
 	"time"
+	_ "time/tzdata"
 )
 
 func CheckCFBLines(s *discordgo.Session, db *gorm.DB) error {

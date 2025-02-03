@@ -7,6 +7,7 @@ import (
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/common"
 	"time"
+	_ "time/tzdata"
 )
 
 func CheckGameStart(s *discordgo.Session, db *gorm.DB) error {
