@@ -47,7 +47,7 @@ func ListCBBGames(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 		response = fmt.Sprintf("Lines for %s - \n", scoreboard.Day)
 		for _, event := range scoreboard.Events {
 			for _, game := range event.Competitions {
-				if game.Status.Type.Name != "" { //STATUS_FINAL
+				if game.Status.Type.Name != "STATUS_FINAL" {
 					linesResp, err := common.ESPNWrapper(fmt.Sprintf(linesUrl, event.ID, event.ID))
 					if err != nil {
 						common.SendError(s, i, err, db)
@@ -69,6 +69,8 @@ func ListCBBGames(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 					}
 
 					response += fmt.Sprintf("* `%s` (%s): %s\n", event.Name, event.ID, lineText)
+				} else {
+					response += fmt.Sprintf("* `%s` (%s) - FINAL\n", event.Name, event.ID)
 				}
 			}
 		}
