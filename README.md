@@ -19,6 +19,7 @@ PerfectOddsBot is a Discord bot designed to create and manage bets with imaginar
 |------------------------|---------------------------------------------------------------------------------|------------|-----------|-----------|
 | `/create-bet`          | Create a new bet with specified options and odds.                               | Yes        | No        | No        |
 | `/create-cfb-bet`      | Create new CFB bet for provided game id                                         | No         | Yes       | No        |
+| `/create-cbb-bet`      | Create new CBB bet for provided game id                                         | No         | Yes       | No        |
 | `/resolve-bet`         | Resolve an existing bet by specifying the winning option.                       | Yes        | No        | No        |
 | `/give-points`         | Give points to a specific user.                                                 | Yes        | No        | No        |
 | `/reset-points`        | Reset all users' points to 1000.                                                | Yes        | No        | No        |
@@ -26,6 +27,7 @@ PerfectOddsBot is a Discord bot designed to create and manage bets with imaginar
 | `/my-points`           | Display your current point total                                                | No         | No        | Yes       |
 | `/my-bets`             | Display your active bets not yet resolved                                       | No         | No        | Yes       |
 | `/list-cfb-games`      | List all CFB games for current week and their spreads                           | No         | Yes       | Yes       |
+| `/list-cbb-games`      | List all CBB games available and their spreads                                  | No         | Yes       | Yes       |
 | `/set-betting-channel` | Set the current channel to your Server's 'bet channel' where auto msgs get sent | Yes        | No        | Yes       |
 
 ### Interactions (Buttons)
@@ -36,8 +38,8 @@ PerfectOddsBot is a Discord bot designed to create and manage bets with imaginar
 
 ### Schedule
 - **Every day at 9am EST**: CFB Lines checked and updated
-- **Every 5 minutes**: CFB Bets checked for game started to lock the bet
-- **Every hour**: CFB Bets checked for game ended to payout bet
+- **Every 5 minutes**: CFB & CBB Bets checked for game started to lock the bet
+- **Every hour**: CFB & CBB Bets checked for game ended to payout bet
 
 ## Privacy Information
 
