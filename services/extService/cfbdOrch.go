@@ -68,10 +68,14 @@ func ListCFBGames(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 			if common.Contains(conferenceList, bet.HomeConference) || common.Contains(conferenceList, bet.AwayConference) {
 				line, lineErr := common.PickLine(bet.Lines)
 				lineText := fmt.Sprintf("* `%s @ %s`", bet.AwayTeam, bet.HomeTeam)
-				if lineErr != nil {
-					lineText += "- No line available \n"
+				if bet.HomeScore != nil && bet.AwayScore != nil {
+					lineText += "- FINAL \n"
 				} else {
-					lineText += fmt.Sprintf(" (%d):  %s \n", bet.ID, line.FormattedSpread)
+					if lineErr != nil {
+						lineText += "- No line available \n"
+					} else {
+						lineText += fmt.Sprintf(" (%d):  %s \n", bet.ID, line.FormattedSpread)
+					}
 				}
 
 				response += lineText
