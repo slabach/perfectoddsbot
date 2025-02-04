@@ -11,7 +11,7 @@ func HandleComponentInteraction(s *discordgo.Session, i *discordgo.InteractionCr
 	customID := i.MessageComponentData().CustomID
 
 	if strings.HasPrefix(customID, "bet_") {
-		err := PlaceBet(s, i, customID)
+		err := PlaceBet(s, i, db, customID)
 		if err != nil {
 			common.SendError(s, i, err, db)
 		}
