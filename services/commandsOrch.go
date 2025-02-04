@@ -7,6 +7,7 @@ import (
 	"perfectOddsBot/services/betService"
 	"perfectOddsBot/services/extService"
 	"perfectOddsBot/services/guildService"
+	"perfectOddsBot/services/interactionService"
 )
 
 func HandleSlashCommand(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
@@ -37,6 +38,8 @@ func HandleSlashCommand(s *discordgo.Session, i *discordgo.InteractionCreate, db
 		extService.ListCBBGames(s, i, db)
 	case "create-cbb-bet":
 		betService.CreateCBBBet(s, i, db)
+	case "subscribe-to-team":
+		interactionService.TeamSubscriptionMessage(s, i, db)
 	}
 }
 
@@ -179,6 +182,10 @@ func RegisterCommands(s *discordgo.Session) error {
 		{
 			Name:        "my-bets",
 			Description: "Show your current open, active bets",
+		},
+		{
+			Name:        "subscribe-to-team",
+			Description: "★ Choose a College team to subscribe to all CFB & CBB events for (PREMIUM)",
 		},
 	}
 
