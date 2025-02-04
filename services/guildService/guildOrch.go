@@ -169,3 +169,19 @@ func SetBettingChannel(s *discordgo.Session, i *discordgo.InteractionCreate, db 
 		return
 	}
 }
+
+func SubscribeToTeam(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
+	if !common.IsAdmin(s, i) {
+		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "You are not authorized to use this command.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		if err != nil {
+			common.SendError(s, i, err, db)
+			return
+		}
+	}
+}

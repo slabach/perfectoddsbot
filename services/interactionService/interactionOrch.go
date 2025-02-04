@@ -33,6 +33,22 @@ func HandleComponentInteraction(s *discordgo.Session, i *discordgo.InteractionCr
 		}
 		return
 	}
+
+	if strings.HasPrefix(customID, "subscribe_to_team_next_") || strings.HasPrefix(customID, "subscribe_to_team_previous_") {
+		err := HandlePagination(s, i, db, customID)
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
+
+	if strings.HasPrefix(customID, "subscribe_to_team_submit") {
+		err := HandleTeamSubscribeSubmit(s, i, db, customID)
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
 }
 
 func HandleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
@@ -53,5 +69,4 @@ func HandleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, db 
 		}
 		return
 	}
-
 }
