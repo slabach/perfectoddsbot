@@ -36,7 +36,7 @@ func CreateCFBBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 
 	var dbBet models.Bet
 	result := db.
-		Where("cfbd_id = ? AND paid = 0 AND guild_id = ?", betID, i.GuildID).
+		Where("cfbd_id = ? AND guild_id = ?", betID, i.GuildID).
 		Find(&dbBet)
 	if result.Error != nil {
 		common.SendError(s, i, result.Error, db)
