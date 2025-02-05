@@ -182,7 +182,7 @@ func AutoCreateCBBBet(s *discordgo.Session, db *gorm.DB, guildId string, channel
 
 	var dbBet models.Bet
 	result := db.
-		Where("espn_id = ? AND paid = 0 AND guild_id = ?", gameId, guildId).
+		Where("espn_id = ? AND guild_id = ?", gameId, guildId).
 		Find(&dbBet)
 	if result.Error != nil {
 		return result.Error
