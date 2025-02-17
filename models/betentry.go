@@ -1,6 +1,9 @@
 package models
 
+import "gorm.io/gorm"
+
 type BetEntry struct {
+	gorm.Model
 	ID           uint `gorm:"primaryKey"`
 	User         User `gorm:"foreignKey:UserID"`
 	UserID       uint `gorm:"foreignKey:"`
