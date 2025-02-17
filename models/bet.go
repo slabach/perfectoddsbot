@@ -1,8 +1,12 @@
 package models
 
-import "time"
+import (
+	"gorm.io/gorm"
+	"time"
+)
 
 type Bet struct {
+	gorm.Model
 	ID            uint `gorm:"primaryKey"`
 	Description   string
 	Option1       string

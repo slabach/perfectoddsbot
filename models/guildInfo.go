@@ -1,6 +1,9 @@
 package models
 
+import "gorm.io/gorm"
+
 type Guild struct {
+	gorm.Model
 	ID               uint `gorm:"primaryKey"`
 	GuildID          string
 	GuildName        string
