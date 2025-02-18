@@ -98,7 +98,7 @@ func CreateCBBBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 		}
 
 		dbBet = models.Bet{
-			Description:   fmt.Sprintf("%s @ %s (%s)", awayTeam, homeTeam, formattedTime),
+			Description:   fmt.Sprintf("%s @ %s (%s)\n- Broadcast: %s", awayTeam, homeTeam, formattedTime, cbbEvent.Competitions[0].Broadcast),
 			Option1:       fmt.Sprintf("%s %s", homeTeam, common.FormatOdds(line.Spread)),
 			Option2:       fmt.Sprintf("%s %s", awayTeam, common.FormatOdds(line.Spread*-1)),
 			Odds1:         -110,
@@ -237,7 +237,7 @@ func AutoCreateCBBBet(s *discordgo.Session, db *gorm.DB, guildId string, channel
 		}
 
 		dbBet = models.Bet{
-			Description:   fmt.Sprintf("%s @ %s (%s)", awayTeam, homeTeam, formattedTime),
+			Description:   fmt.Sprintf("%s @ %s (%s)\n- Broadcast: %s", awayTeam, homeTeam, formattedTime, cbbEvent.Competitions[0].Broadcast),
 			Option1:       fmt.Sprintf("%s %s", homeTeam, common.FormatOdds(line.Spread)),
 			Option2:       fmt.Sprintf("%s %s", awayTeam, common.FormatOdds(line.Spread*-1)),
 			Odds1:         -110,
