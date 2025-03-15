@@ -164,18 +164,6 @@ func RegisterCommands(s *discordgo.Session) error {
 			},
 		},
 		{
-			Name:        "set-points-per-message",
-			Description: "🛡 Sets the amount of points a new user will begin with by default - ADMIN ONLY",
-			Options: []*discordgo.ApplicationCommandOption{
-				{
-					Name:        "points",
-					Description: "Amount to reset points to (default 1000)",
-					Type:        discordgo.ApplicationCommandOptionString,
-					Required:    true,
-				},
-			},
-		},
-		{
 			Name:        "my-points",
 			Description: "Show your current points",
 		},
