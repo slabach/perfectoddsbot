@@ -146,6 +146,16 @@ func main() {
 }
 
 func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Recovered in messageCreate: %v", r)
+		}
+	}()
+
+	if m == nil || m.Author == nil {
+		return
+	}
+
 	if m.Author.Bot {
 		return
 	}

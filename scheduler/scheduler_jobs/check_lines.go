@@ -51,7 +51,7 @@ func CheckCFBLines(s *discordgo.Session, db *gorm.DB) error {
 				continue
 			}
 
-			lineValue, err := strconv.ParseFloat(line.Spread, 64)
+			lineValue, err := line.Spread.Float64()
 			if err != nil {
 				return err
 			}
