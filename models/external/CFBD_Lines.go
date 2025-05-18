@@ -1,6 +1,9 @@
 package external
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 type CFBD_BettingLines struct {
 	ID             int         `json:"id"`
@@ -18,12 +21,12 @@ type CFBD_BettingLines struct {
 }
 
 type CFBD_Line struct {
-	Provider        string  `json:"provider"`
-	Spread          string  `json:"spread"`
-	FormattedSpread string  `json:"formattedSpread"`
-	SpreadOpen      string  `json:"spreadOpen"`
-	OverUnder       string  `json:"overUnder"`
-	OverUnderOpen   *string `json:"overUnderOpen"`
-	HomeMoneyline   int     `json:"homeMoneyline"`
-	AwayMoneyline   int     `json:"awayMoneyline"`
+	Provider        string      `json:"provider"`
+	Spread          json.Number `json:"spread"`
+	FormattedSpread string      `json:"formattedSpread"`
+	SpreadOpen      string      `json:"spreadOpen"`
+	OverUnder       string      `json:"overUnder"`
+	OverUnderOpen   *string     `json:"overUnderOpen"`
+	HomeMoneyline   int         `json:"homeMoneyline"`
+	AwayMoneyline   int         `json:"awayMoneyline"`
 }
