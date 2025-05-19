@@ -24,7 +24,7 @@ type CFBD_Line struct {
 	Provider        string      `json:"provider"`
 	Spread          json.Number `json:"spread"`
 	FormattedSpread string      `json:"formattedSpread"`
-	SpreadOpen      string      `json:"spreadOpen"`
+	SpreadOpen      json.Number `json:"spreadOpen"`
 	OverUnder       string      `json:"overUnder"`
 	OverUnderOpen   *string     `json:"overUnderOpen"`
 	HomeMoneyline   int         `json:"homeMoneyline"`
