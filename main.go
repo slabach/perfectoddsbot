@@ -44,7 +44,7 @@ func main() {
 			return
 		}
 
-		u, err := dburl.Parse(mysqlURL + "?charset=utf8&parseTime=True&loc=Local")
+		u, err := dburl.Parse(mysqlURL + "?charset=utf8mb4&collation=utf8mb4_0900_ai_ci&parseTime=True&loc=Local")
 		if err != nil {
 			fmt.Println(err)
 			return
@@ -58,7 +58,7 @@ func main() {
 	} else {
 		connString := os.Getenv("MYSQL_URL")
 
-		db, err = gorm.Open(mysql.Open(connString + "?charset=utf8&parseTime=True&loc=Local"))
+		db, err = gorm.Open(mysql.Open(connString + "?charset=utf8mb4&collation=utf8mb4_0900_ai_ci&parseTime=True&loc=Local"))
 		if err != nil {
 			log.Fatalln(err)
 			return
