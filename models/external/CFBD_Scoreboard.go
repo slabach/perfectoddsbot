@@ -2,7 +2,7 @@ package external
 
 import "time"
 
-type CFBD_Scoreboard struct {
+type CFBD_Scoreboard []struct {
 	ID             int       `json:"id"`
 	StartDate      time.Time `json:"startDate"`
 	StartTimeTBD   bool      `json:"startTimeTBD"`
