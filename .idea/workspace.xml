@@ -5,7 +5,8 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="bd392634-edfc-4939-9193-cbe764a8640f" name="Changes" comment="fix dtos">
-      <change beforePath="$PROJECT_DIR$/models/external/CFBD_Scoreboard.go" beforeDir="false" afterPath="$PROJECT_DIR$/models/external/CFBD_Scoreboard.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/services/extService/cfbdOrch.go" beforeDir="false" afterPath="$PROJECT_DIR$/services/extService/cfbdOrch.go" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
