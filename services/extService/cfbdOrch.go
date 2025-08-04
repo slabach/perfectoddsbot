@@ -72,7 +72,7 @@ func ListCFBGames(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 					lineText += "- FINAL \n"
 				} else {
 					if lineErr != nil {
-						lineText += "- No line available \n"
+						lineText += "- TBD \n"
 					} else {
 						lineText += fmt.Sprintf(" (%d):  %s \n", bet.ID, line.FormattedSpread)
 					}
