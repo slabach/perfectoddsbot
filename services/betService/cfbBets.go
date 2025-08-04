@@ -58,9 +58,11 @@ func CreateCFBBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 
 		cfbdBetID := strconv.Itoa(cfbdBet.ID)
 
-		lineValue, err := line.Spread.Float64()
-		if err != nil {
-			common.SendError(s, i, err, db)
+		var lineValue float64
+		if line.Spread != nil {
+			lineValue = *line.Spread
+		} else {
+			common.SendError(s, nil, err, db)
 			return
 		}
 
@@ -183,8 +185,11 @@ func AutoCreateCFBBet(s *discordgo.Session, db *gorm.DB, guildId string, channel
 
 		cfbdBetID := strconv.Itoa(cfbdBet.ID)
 
-		lineValue, err := line.Spread.Float64()
-		if err != nil {
+		var lineValue float64
+		if line.Spread != nil {
+			lineValue = *line.Spread
+		} else {
+			common.SendError(s, nil, err, db)
 			return err
 		}
 
