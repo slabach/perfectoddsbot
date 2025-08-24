@@ -11,6 +11,7 @@ import (
 	"perfectOddsBot/models"
 	"perfectOddsBot/models/external"
 	"strconv"
+	"strings"
 )
 
 func IsAdmin(s *discordgo.Session, i *discordgo.InteractionCreate) bool {
@@ -248,4 +249,16 @@ func PickESPNLine(lines external.ESPN_Lines) (*external.ESPN_Line, error) {
 	}
 
 	return nil, errors.New("no line selected")
+}
+
+func GetSchoolName(s string) string {
+	index := strings.IndexAny(s, "+-")
+
+	if index == -1 {
+		return strings.TrimSpace(s)
+	}
+
+	schoolName := s[:index]
+
+	return strings.TrimSpace(schoolName)
 }
