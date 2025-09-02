@@ -14,7 +14,7 @@ import (
 func ListCFBGames(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
 	cfbUrl := "https://api.collegefootballdata.com/lines?"
 	pfWeekUrl := "https://api.perfectfall.com/week-season"
-	conferenceList := []string{"Big Ten", "ACC", "SEC", "Big 12"}
+	conferenceList := []string{"Big Ten", "ACC", "SEC"}
 
 	guild, err := guildService.GetGuildInfo(s, db, i.GuildID, i.ChannelID)
 	if err != nil {
