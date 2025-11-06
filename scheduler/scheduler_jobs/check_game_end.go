@@ -4,15 +4,25 @@ import (
 	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"gorm.io/gorm"
+	"log"
 	"perfectOddsBot/models"
 	"perfectOddsBot/models/external"
 	"perfectOddsBot/services/common"
 	"perfectOddsBot/services/extService"
 	"perfectOddsBot/services/guildService"
+	"runtime/debug"
 	"strconv"
 )
 
-func CheckGameEnd(s *discordgo.Session, db *gorm.DB) error {
+func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println("Recovered in CheckGameEnd", r)
+			debug.PrintStack()
+			err = fmt.Errorf("panic recovered in CheckGameEnd: %v", r)
+		}
+	}()
+
 	var dbBetList []models.Bet
 
 	result := db.Where("paid = 0 AND active = 0 AND (cfbd_id IS NOT NULL OR espn_id IS NOT NULL)").Find(&dbBetList)
@@ -99,9 +109,9 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) error {
 						}
 					}
 
-					err := ResolveCFBBBet(s, bet, db)
-					if err != nil {
-						return err
+					resolveErr := ResolveCFBBBet(s, bet, db)
+					if resolveErr != nil {
+						return resolveErr
 					}
 				}
 			}
@@ -157,9 +167,9 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) error {
 						}
 					}
 
-					err := ResolveCFBBBet(s, bet, db)
-					if err != nil {
-						return err
+					resolveErr := ResolveCFBBBet(s, bet, db)
+					if resolveErr != nil {
+						return resolveErr
 					}
 				}
 			}

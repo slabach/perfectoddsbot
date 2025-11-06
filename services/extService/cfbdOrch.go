@@ -6,12 +6,22 @@ import (
 	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"gorm.io/gorm"
+	"log"
 	"perfectOddsBot/models/external"
 	"perfectOddsBot/services/common"
 	"perfectOddsBot/services/guildService"
+	"runtime/debug"
 )
 
 func ListCFBGames(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println("Recovered in ListCFBGames", r)
+			debug.PrintStack()
+			common.SendError(s, i, fmt.Errorf("panic in ListCFBGames: %v", r), db)
+		}
+	}()
+
 	cfbUrl := "https://api.collegefootballdata.com/lines?"
 	pfWeekUrl := "https://api.perfectfall.com/week-season"
 	conferenceList := []string{"Big Ten", "ACC", "SEC"}
@@ -96,7 +106,15 @@ func ListCFBGames(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 	}
 }
 
-func GetCFBGames() ([]external.CFBD_BettingLines, error) {
+func GetCFBGames() (_ []external.CFBD_BettingLines, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println("Recovered in GetCFBGames", r)
+			debug.PrintStack()
+			err = fmt.Errorf("panic recovered in GetCFBGames: %v", r)
+		}
+	}()
+
 	cfbUrl := "https://api.collegefootballdata.com/lines?"
 	pfWeekUrl := "https://api.perfectfall.com/week-season"
 
@@ -146,7 +164,15 @@ func GetCFBGames() ([]external.CFBD_BettingLines, error) {
 	return bettingLines, nil
 }
 
-func GetCfbdBet(betid int) (external.CFBD_BettingLines, error) {
+func GetCfbdBet(betid int) (_ external.CFBD_BettingLines, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println("Recovered in GetCfbdBet", r)
+			debug.PrintStack()
+			err = fmt.Errorf("panic recovered in GetCfbdBet: %v", r)
+		}
+	}()
+
 	cfbUrl := "https://api.collegefootballdata.com/lines?"
 	pfWeekUrl := "https://api.perfectfall.com/week-season"
 
