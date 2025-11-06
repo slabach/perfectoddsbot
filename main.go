@@ -42,7 +42,7 @@ func main() {
 	for {
 		runApp()
 		log.Println("Restarting application after a crash...")
-		time.Sleep(5 * time.Second) // Wait for a bit before restarting
+		time.Sleep(60 * time.Second) // Wait for a bit before restarting
 	}
 }
 
