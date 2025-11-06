@@ -136,20 +136,6 @@ func runApp() {
 		}
 	}(dg)
 
-	// Close the database connection when the main function finishes
-	defer func(db *gorm.DB) {
-		sqlDB, err := db.DB()
-		if err != nil {
-			log.Fatalln(err)
-		}
-		defer func(sqlDB *sql.DB) {
-			err := sqlDB.Close()
-			if err != nil {
-				log.Fatalln(err)
-			}
-		}(sqlDB)
-	}(db)
-
 	err = services.RegisterCommands(dg)
 	if err != nil {
 		log.Fatalf("Error registering commands: %v", err)

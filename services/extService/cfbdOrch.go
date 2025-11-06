@@ -18,6 +18,7 @@ func ListCFBGames(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 		if r := recover(); r != nil {
 			log.Println("Recovered in ListCFBGames", r)
 			debug.PrintStack()
+			common.SendError(s, i, fmt.Errorf("panic in ListCFBGames: %v", r), db)
 		}
 	}()
 

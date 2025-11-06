@@ -17,9 +17,9 @@ import (
 func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Println("Recovered in CheckGameStart", r)
+			log.Println("Recovered in CheckGameEnd", r)
 			debug.PrintStack()
-			err = fmt.Errorf("panic recovered in CheckGameStart: %v", r)
+			err = fmt.Errorf("panic recovered in CheckGameEnd: %v", r)
 		}
 	}()
 
@@ -109,9 +109,9 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 						}
 					}
 
-					err := ResolveCFBBBet(s, bet, db)
-					if err != nil {
-						return err
+					resolveErr := ResolveCFBBBet(s, bet, db)
+					if resolveErr != nil {
+						return resolveErr
 					}
 				}
 			}
@@ -167,9 +167,9 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 						}
 					}
 
-					err := ResolveCFBBBet(s, bet, db)
-					if err != nil {
-						return err
+					resolveErr := ResolveCFBBBet(s, bet, db)
+					if resolveErr != nil {
+						return resolveErr
 					}
 				}
 			}
