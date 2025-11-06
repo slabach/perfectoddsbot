@@ -4,13 +4,23 @@ import (
 	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"gorm.io/gorm"
+	"log"
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/common"
+	"runtime/debug"
 	"time"
 	_ "time/tzdata"
 )
 
-func CheckGameStart(s *discordgo.Session, db *gorm.DB) error {
+func CheckGameStart(s *discordgo.Session, db *gorm.DB) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println("Recovered in CheckGameStart", r)
+			debug.PrintStack()
+			err = fmt.Errorf("panic recovered in CheckGameStart: %v", r)
+		}
+	}()
+
 	var betList []models.Bet
 
 	result := db.Where("paid = 0 AND active = 1 AND (cfbd_id IS NOT NULL OR espn_id IS NOT NULL)").Find(&betList)

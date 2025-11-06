@@ -17,6 +17,8 @@ import (
 	"perfectOddsBot/services/common"
 	"perfectOddsBot/services/guildService"
 	"perfectOddsBot/services/interactionService"
+	"runtime/debug"
+	"time"
 )
 
 var db *gorm.DB
@@ -30,8 +32,23 @@ func init() {
 }
 
 func main() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println("Recovered from panic:", r)
+			debug.PrintStack()
+		}
+	}()
+
+	for {
+		runApp()
+		log.Println("Restarting application after a crash...")
+		time.Sleep(5 * time.Second) // Wait for a bit before restarting
+	}
+}
+
+func runApp() {
 	getEnv, ok := os.LookupEnv("ENV")
-	if ok == false {
+	if !ok {
 		fmt.Println("ENV not found")
 		return
 	}
@@ -39,7 +56,7 @@ func main() {
 	// Connect to the database
 	if getEnv == "production" {
 		mysqlURL, ok := os.LookupEnv("MYSQL_URL")
-		if ok == false {
+		if !ok {
 			fmt.Println("MYSQL_URL not found")
 			return
 		}

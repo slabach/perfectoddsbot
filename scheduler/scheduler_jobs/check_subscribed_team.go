@@ -1,16 +1,27 @@
 package scheduler_jobs
 
 import (
+	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"gorm.io/gorm"
+	"log"
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/betService"
 	"perfectOddsBot/services/common"
 	"perfectOddsBot/services/extService"
+	"runtime/debug"
 	"strconv"
 )
 
-func CheckSubscribedCFBTeam(s *discordgo.Session, db *gorm.DB) error {
+func CheckSubscribedCFBTeam(s *discordgo.Session, db *gorm.DB) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println("Recovered in CheckSubscribedCFBTeam", r)
+			debug.PrintStack()
+			err = fmt.Errorf("panic recovered in CheckSubscribedCFBTeam: %v", r)
+		}
+	}()
+
 	cfbdList, err := extService.GetCFBGames()
 	if err != nil {
 		common.SendError(s, nil, err, db)
@@ -36,7 +47,15 @@ func CheckSubscribedCFBTeam(s *discordgo.Session, db *gorm.DB) error {
 	return nil
 }
 
-func CheckSubscribedCBBTeam(s *discordgo.Session, db *gorm.DB) error {
+func CheckSubscribedCBBTeam(s *discordgo.Session, db *gorm.DB) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println("Recovered in CheckSubscribedCBBTeam", r)
+			debug.PrintStack()
+			err = fmt.Errorf("panic recovered in CheckSubscribedCBBTeam: %v", r)
+		}
+	}()
+
 	espnList, err := extService.GetCbbGames()
 	if err != nil {
 		return err
