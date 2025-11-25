@@ -105,6 +105,11 @@ func HandleCBBGamePagination(s *discordgo.Session, i *discordgo.InteractionCreat
 							Style:    discordgo.PrimaryButton,
 							Disabled: currentPage == len(paginatedOptions)-1,
 						},
+						discordgo.Button{
+							Label:    "Cancel",
+							CustomID: fmt.Sprintf("create_cbb_bet_cancel_%s", sessionID),
+							Style:    discordgo.DangerButton,
+						},
 					},
 				},
 			},
@@ -212,6 +217,11 @@ func HandleCFBGamePagination(s *discordgo.Session, i *discordgo.InteractionCreat
 							Style:    discordgo.PrimaryButton,
 							Disabled: currentPage == len(paginatedOptions)-1,
 						},
+						discordgo.Button{
+							Label:    "Cancel",
+							CustomID: fmt.Sprintf("create_cfb_bet_cancel_%s", sessionID),
+							Style:    discordgo.DangerButton,
+						},
 					},
 				},
 			},
@@ -271,6 +281,50 @@ func HandleCFBGameSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, d
 		return err
 	}
 
+	return nil
+}
+
+func HandleCBBGameCancel(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, customID string) error {
+	// Extract session ID from custom ID (format: create_cbb_bet_cancel_{sessionID})
+	sessionID := strings.TrimPrefix(customID, "create_cbb_bet_cancel_")
+	
+	// Clean up session data
+	betService.CleanupCBBPaginatedOptions(sessionID)
+	
+	// Update the message to show cancellation
+	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseUpdateMessage,
+		Data: &discordgo.InteractionResponseData{
+			Content: "❌ Bet creation cancelled.",
+			Components: []discordgo.MessageComponent{},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("error responding to cancel: %w", err)
+	}
+	
+	return nil
+}
+
+func HandleCFBGameCancel(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, customID string) error {
+	// Extract session ID from custom ID (format: create_cfb_bet_cancel_{sessionID})
+	sessionID := strings.TrimPrefix(customID, "create_cfb_bet_cancel_")
+	
+	// Clean up session data
+	betService.CleanupCFBPaginatedOptions(sessionID)
+	
+	// Update the message to show cancellation
+	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseUpdateMessage,
+		Data: &discordgo.InteractionResponseData{
+			Content: "❌ Bet creation cancelled.",
+			Components: []discordgo.MessageComponent{},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("error responding to cancel: %w", err)
+	}
+	
 	return nil
 }
 

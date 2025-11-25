@@ -82,6 +82,22 @@ func HandleComponentInteraction(s *discordgo.Session, i *discordgo.InteractionCr
 		}
 		return
 	}
+
+	if strings.HasPrefix(customID, "create_cbb_bet_cancel_") {
+		err := HandleCBBGameCancel(s, i, db, customID)
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
+
+	if strings.HasPrefix(customID, "create_cfb_bet_cancel_") {
+		err := HandleCFBGameCancel(s, i, db, customID)
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
 }
 
 func HandleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
