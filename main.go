@@ -3,12 +3,6 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"github.com/bwmarrin/discordgo"
-	"github.com/joho/godotenv"
-	_ "github.com/microsoft/go-mssqldb"
-	"github.com/xo/dburl"
-	"gorm.io/driver/mysql"
-	"gorm.io/gorm"
 	"log"
 	"os"
 	"perfectOddsBot/models"
@@ -19,6 +13,13 @@ import (
 	"perfectOddsBot/services/interactionService"
 	"runtime/debug"
 	"time"
+
+	"github.com/bwmarrin/discordgo"
+	"github.com/joho/godotenv"
+	_ "github.com/microsoft/go-mssqldb"
+	"github.com/xo/dburl"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
 )
 
 var db *gorm.DB
@@ -75,7 +76,7 @@ func runApp() {
 	} else {
 		connString := os.Getenv("MYSQL_URL")
 
-		db, err = gorm.Open(mysql.Open(connString + "?charset=utf8mb4&collation=utf8mb4_0900_ai_ci&parseTime=True&loc=Local"))
+		db, err = gorm.Open(mysql.Open(connString + "?charset=utf8mb4&collation=utf8mb4_unicode_ci&parseTime=True&loc=Local"))
 		if err != nil {
 			log.Fatalln(err)
 			return
