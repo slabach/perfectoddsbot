@@ -3,8 +3,6 @@ package betService
 import (
 	"errors"
 	"fmt"
-	"github.com/bwmarrin/discordgo"
-	"gorm.io/gorm"
 	"math"
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/common"
@@ -12,11 +10,33 @@ import (
 	"perfectOddsBot/services/guildService"
 	"perfectOddsBot/services/messageService"
 	"strconv"
+	"sync"
 	"time"
 	_ "time/tzdata"
+
+	"github.com/bwmarrin/discordgo"
+	"gorm.io/gorm"
 )
 
-var CBBPaginatedOptions [][]discordgo.SelectMenuOption
+var (
+	cbbPaginatedOptionsMap = make(map[string][][]discordgo.SelectMenuOption)
+	cbbPaginatedOptionsMu  sync.RWMutex
+)
+
+// GetCBBPaginatedOptions retrieves paginated options for a given session ID
+func GetCBBPaginatedOptions(sessionID string) ([][]discordgo.SelectMenuOption, bool) {
+	cbbPaginatedOptionsMu.RLock()
+	defer cbbPaginatedOptionsMu.RUnlock()
+	options, exists := cbbPaginatedOptionsMap[sessionID]
+	return options, exists
+}
+
+// CleanupCBBPaginatedOptions removes paginated options for a given session ID
+func CleanupCBBPaginatedOptions(sessionID string) {
+	cbbPaginatedOptionsMu.Lock()
+	defer cbbPaginatedOptionsMu.Unlock()
+	delete(cbbPaginatedOptionsMap, sessionID)
+}
 
 func CreateCBBBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
 	options := i.ApplicationCommandData().Options
@@ -205,18 +225,34 @@ func CreateCBBBetSelector(s *discordgo.Session, i *discordgo.InteractionCreate, 
 					awayTeam = competitor.Team.ShortDisplayName
 				}
 			}
-			
+
+			// Fetch lines for this game
+			eventID, err := strconv.Atoi(event.ID)
+			if err != nil {
+				continue
+			}
+
+			linesList, err := extService.GetCbbLines(eventID)
+			if err != nil {
+				continue // Skip games without lines
+			}
+
+			line, lineErr := common.PickESPNLine(linesList)
+			if lineErr != nil {
+				continue // Skip games without valid lines
+			}
+
 			label := fmt.Sprintf("%s @ %s", awayTeam, homeTeam)
 			// Discord select menu labels have a max length of 100 characters
 			if len(label) > 100 {
 				label = label[:97] + "..."
 			}
-			
-			description := event.Name
+
+			description := line.Details
 			if len(description) > 100 {
 				description = description[:97] + "..."
 			}
-			
+
 			selectOptions = append(selectOptions, discordgo.SelectMenuOption{
 				Label:       label,
 				Value:       event.ID,
@@ -241,32 +277,40 @@ func CreateCBBBetSelector(s *discordgo.Session, i *discordgo.InteractionCreate, 
 		return
 	}
 
-	// Reset paginated options
-	CBBPaginatedOptions = [][]discordgo.SelectMenuOption{}
+	// Generate unique session ID from interaction ID
+	sessionID := i.Interaction.ID
+
+	// Create paginated options
+	var paginatedOptions [][]discordgo.SelectMenuOption
 	minValues := 1
 	for i := 0; i < len(selectOptions); i += 25 {
 		end := i + 25
 		if end > len(selectOptions) {
 			end = len(selectOptions)
 		}
-		CBBPaginatedOptions = append(CBBPaginatedOptions, selectOptions[i:end])
+		paginatedOptions = append(paginatedOptions, selectOptions[i:end])
 	}
+
+	// Store paginated options in thread-safe map
+	cbbPaginatedOptionsMu.Lock()
+	cbbPaginatedOptionsMap[sessionID] = paginatedOptions
+	cbbPaginatedOptionsMu.Unlock()
 
 	currentPage := 0
 	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
-			Content: fmt.Sprintf("Select a game (Page %d/%d):", currentPage+1, len(CBBPaginatedOptions)),
+			Content: fmt.Sprintf("Select a game (Page %d/%d):", currentPage+1, len(paginatedOptions)),
 			Components: []discordgo.MessageComponent{
 				discordgo.ActionsRow{
 					Components: []discordgo.MessageComponent{
 						discordgo.SelectMenu{
 							MenuType:    discordgo.StringSelectMenu,
-							CustomID:    "create_cbb_bet_submit",
+							CustomID:    fmt.Sprintf("create_cbb_bet_submit_%s", sessionID),
 							Placeholder: "Select a game",
 							MinValues:   &minValues,
 							MaxValues:   1,
-							Options:     CBBPaginatedOptions[currentPage],
+							Options:     paginatedOptions[currentPage],
 						},
 					},
 				},
@@ -274,15 +318,15 @@ func CreateCBBBetSelector(s *discordgo.Session, i *discordgo.InteractionCreate, 
 					Components: []discordgo.MessageComponent{
 						discordgo.Button{
 							Label:    "Previous",
-							CustomID: "create_cbb_bet_previous_page_0",
+							CustomID: fmt.Sprintf("create_cbb_bet_previous_page_%d_%s", currentPage, sessionID),
 							Style:    discordgo.PrimaryButton,
 							Disabled: true,
 						},
 						discordgo.Button{
 							Label:    "Next",
-							CustomID: "create_cbb_bet_next_page_0",
+							CustomID: fmt.Sprintf("create_cbb_bet_next_page_%d_%s", currentPage, sessionID),
 							Style:    discordgo.PrimaryButton,
-							Disabled: currentPage == len(CBBPaginatedOptions)-1,
+							Disabled: currentPage == len(paginatedOptions)-1,
 						},
 					},
 				},

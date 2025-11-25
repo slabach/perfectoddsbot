@@ -9,6 +9,7 @@ import (
 	"perfectOddsBot/services/guildService"
 	"perfectOddsBot/services/messageService"
 	"strconv"
+	"sync"
 	"time"
 	_ "time/tzdata"
 
@@ -16,7 +17,25 @@ import (
 	"gorm.io/gorm"
 )
 
-var CFBPaginatedOptions [][]discordgo.SelectMenuOption
+var (
+	cfbPaginatedOptionsMap = make(map[string][][]discordgo.SelectMenuOption)
+	cfbPaginatedOptionsMu  sync.RWMutex
+)
+
+// GetCFBPaginatedOptions retrieves paginated options for a given session ID
+func GetCFBPaginatedOptions(sessionID string) ([][]discordgo.SelectMenuOption, bool) {
+	cfbPaginatedOptionsMu.RLock()
+	defer cfbPaginatedOptionsMu.RUnlock()
+	options, exists := cfbPaginatedOptionsMap[sessionID]
+	return options, exists
+}
+
+// CleanupCFBPaginatedOptions removes paginated options for a given session ID
+func CleanupCFBPaginatedOptions(sessionID string) {
+	cfbPaginatedOptionsMu.Lock()
+	defer cfbPaginatedOptionsMu.Unlock()
+	delete(cfbPaginatedOptionsMap, sessionID)
+}
 
 func CreateCFBBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
 	options := i.ApplicationCommandData().Options
@@ -220,32 +239,40 @@ func CreateCFBBetSelector(s *discordgo.Session, i *discordgo.InteractionCreate, 
 		return
 	}
 
-	// Reset paginated options
-	CFBPaginatedOptions = [][]discordgo.SelectMenuOption{}
+	// Generate unique session ID from interaction ID
+	sessionID := i.Interaction.ID
+
+	// Create paginated options
+	var paginatedOptions [][]discordgo.SelectMenuOption
 	minValues := 1
 	for i := 0; i < len(selectOptions); i += 25 {
 		end := i + 25
 		if end > len(selectOptions) {
 			end = len(selectOptions)
 		}
-		CFBPaginatedOptions = append(CFBPaginatedOptions, selectOptions[i:end])
+		paginatedOptions = append(paginatedOptions, selectOptions[i:end])
 	}
+
+	// Store paginated options in thread-safe map
+	cfbPaginatedOptionsMu.Lock()
+	cfbPaginatedOptionsMap[sessionID] = paginatedOptions
+	cfbPaginatedOptionsMu.Unlock()
 
 	currentPage := 0
 	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
-			Content: fmt.Sprintf("Select a game (Page %d/%d):", currentPage+1, len(CFBPaginatedOptions)),
+			Content: fmt.Sprintf("Select a game (Page %d/%d):", currentPage+1, len(paginatedOptions)),
 			Components: []discordgo.MessageComponent{
 				discordgo.ActionsRow{
 					Components: []discordgo.MessageComponent{
 						discordgo.SelectMenu{
 							MenuType:    discordgo.StringSelectMenu,
-							CustomID:    "create_cfb_bet_submit",
+							CustomID:    fmt.Sprintf("create_cfb_bet_submit_%s", sessionID),
 							Placeholder: "Select a game",
 							MinValues:   &minValues,
 							MaxValues:   1,
-							Options:     CFBPaginatedOptions[currentPage],
+							Options:     paginatedOptions[currentPage],
 						},
 					},
 				},
@@ -253,15 +280,15 @@ func CreateCFBBetSelector(s *discordgo.Session, i *discordgo.InteractionCreate, 
 					Components: []discordgo.MessageComponent{
 						discordgo.Button{
 							Label:    "Previous",
-							CustomID: "create_cfb_bet_previous_page_0",
+							CustomID: fmt.Sprintf("create_cfb_bet_previous_page_%d_%s", currentPage, sessionID),
 							Style:    discordgo.PrimaryButton,
 							Disabled: true,
 						},
 						discordgo.Button{
 							Label:    "Next",
-							CustomID: "create_cfb_bet_next_page_0",
+							CustomID: fmt.Sprintf("create_cfb_bet_next_page_%d_%s", currentPage, sessionID),
 							Style:    discordgo.PrimaryButton,
-							Disabled: currentPage == len(CFBPaginatedOptions)-1,
+							Disabled: currentPage == len(paginatedOptions)-1,
 						},
 					},
 				},
