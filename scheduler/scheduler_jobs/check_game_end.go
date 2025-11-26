@@ -2,8 +2,6 @@ package scheduler_jobs
 
 import (
 	"fmt"
-	"github.com/bwmarrin/discordgo"
-	"gorm.io/gorm"
 	"log"
 	"perfectOddsBot/models"
 	"perfectOddsBot/models/external"
@@ -12,6 +10,9 @@ import (
 	"perfectOddsBot/services/guildService"
 	"runtime/debug"
 	"strconv"
+
+	"github.com/bwmarrin/discordgo"
+	"gorm.io/gorm"
 )
 
 func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
@@ -86,24 +87,23 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 					}
 
 					for _, entry := range betEntries {
-						// 1 = home team beat spread
-						// 2 = away team beat spread
-						spreadWinner := 2
-						if *entry.Spread < float64(0) {
-							// eg. Spread -9 (home 9 point favored)
-							// scoreDiff > 9
-							if float64(scoreDiff) > -(*entry.Spread) {
-								spreadWinner = 1
-							}
+						// Option 1 = homeTeam + bet.Spread (formatted)
+						// Option 2 = awayTeam + (bet.Spread * -1) (formatted)
+						// scoreDiff = homeScore - awayScore
+						spread := *entry.Spread
+						won := false
+
+						if entry.Option == 1 {
+							// Option 1: homeTeam + spread wins if (homeScore + spread) > awayScore
+							// i.e., if scoreDiff > -spread
+							won = float64(scoreDiff) > -spread
 						} else {
-							// eg. Spread 9 (home 9 point underdog)
-							// scoreDiff >= -9
-							if float64(scoreDiff) >= -(*entry.Spread) {
-								spreadWinner = 1
-							}
+							// Option 2: awayTeam - spread wins if (awayScore - spread) > homeScore
+							// i.e., if -scoreDiff > spread, i.e., if scoreDiff < -spread
+							won = float64(scoreDiff) < -spread
 						}
 
-						if entry.Option == spreadWinner {
+						if won {
 							entry.AutoCloseWin = true
 							db.Save(&entry)
 						}
@@ -144,24 +144,23 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 					awayScore, _ := strconv.Atoi(awayTeam.Score)
 					scoreDiff := homeScore - awayScore
 					for _, entry := range betEntries {
-						// 1 = home team beat spread
-						// 2 = away team beat spread
-						spreadWinner := 2
-						if *entry.Spread < float64(0) {
-							// eg. Spread -9 (home 9 point favored)
-							// scoreDiff > 9
-							if float64(scoreDiff) > -(*entry.Spread) {
-								spreadWinner = 1
-							}
+						// Option 1 = homeTeam + bet.Spread (formatted)
+						// Option 2 = awayTeam + (bet.Spread * -1) (formatted)
+						// scoreDiff = homeScore - awayScore
+						spread := *entry.Spread
+						won := false
+
+						if entry.Option == 1 {
+							// Option 1: homeTeam + spread wins if (homeScore + spread) > awayScore
+							// i.e., if scoreDiff > -spread
+							won = float64(scoreDiff) > -spread
 						} else {
-							// eg. Spread 9 (home 9 point underdog)
-							// scoreDiff >= -9
-							if float64(scoreDiff) >= -(*entry.Spread) {
-								spreadWinner = 1
-							}
+							// Option 2: awayTeam - spread wins if (awayScore - spread) > homeScore
+							// i.e., if -scoreDiff > spread, i.e., if scoreDiff < -spread
+							won = float64(scoreDiff) < -spread
 						}
 
-						if entry.Option == spreadWinner {
+						if won {
 							entry.AutoCloseWin = true
 							db.Save(&entry)
 						}
