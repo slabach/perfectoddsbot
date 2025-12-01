@@ -2,8 +2,6 @@ package scheduler_jobs
 
 import (
 	"fmt"
-	"github.com/bwmarrin/discordgo"
-	"gorm.io/gorm"
 	"log"
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/betService"
@@ -11,6 +9,9 @@ import (
 	"perfectOddsBot/services/extService"
 	"runtime/debug"
 	"strconv"
+
+	"github.com/bwmarrin/discordgo"
+	"gorm.io/gorm"
 )
 
 func CheckSubscribedCFBTeam(s *discordgo.Session, db *gorm.DB) (err error) {
@@ -35,6 +36,10 @@ func CheckSubscribedCFBTeam(s *discordgo.Session, db *gorm.DB) (err error) {
 
 	for _, guild := range guildList {
 		for _, game := range cfbdList {
+			// Skip if game is already complete (has scores)
+			if game.HomeScore != nil && game.AwayScore != nil {
+				continue
+			}
 			if game.HomeTeam == *guild.SubscribedTeam || game.AwayTeam == *guild.SubscribedTeam {
 				err = betService.AutoCreateCFBBet(s, db, guild.GuildID, guild.BetChannelID, strconv.Itoa(game.ID))
 				if err != nil {
@@ -69,6 +74,10 @@ func CheckSubscribedCBBTeam(s *discordgo.Session, db *gorm.DB) (err error) {
 
 	for _, guild := range guildList {
 		for _, game := range espnList {
+			// Skip if game is already complete (status is final)
+			if game.Status.Type.Name == "STATUS_FINAL" {
+				continue
+			}
 			for _, team := range game.Competitions[0].Competitors {
 				if team.Team.ShortDisplayName == *guild.SubscribedTeam {
 					err = betService.AutoCreateCBBBet(s, db, guild.GuildID, guild.BetChannelID, game.ID)
