@@ -3,8 +3,6 @@ package common
 import (
 	"errors"
 	"fmt"
-	"github.com/bwmarrin/discordgo"
-	"gorm.io/gorm"
 	"log"
 	"net/http"
 	"os"
@@ -12,6 +10,9 @@ import (
 	"perfectOddsBot/models/external"
 	"strconv"
 	"strings"
+
+	"github.com/bwmarrin/discordgo"
+	"gorm.io/gorm"
 )
 
 func IsAdmin(s *discordgo.Session, i *discordgo.InteractionCreate) bool {
@@ -224,7 +225,7 @@ func Contains[T comparable](s []T, e T) bool {
 }
 
 func PickLine(lines []external.CFBD_Line) (*external.CFBD_Line, error) {
-	preferredProviders := []string{"ESPN Bet", "DraftKings", "Bovada"}
+	preferredProviders := []string{"ESPN Bet", "Draft Kings", "DraftKings", "Bovada"}
 
 	for _, provider := range preferredProviders {
 		for _, line := range lines {
@@ -238,7 +239,7 @@ func PickLine(lines []external.CFBD_Line) (*external.CFBD_Line, error) {
 }
 
 func PickESPNLine(lines external.ESPN_Lines) (*external.ESPN_Line, error) {
-	preferredProviders := []string{"ESPN BET", "DraftKings", "Bovada"}
+	preferredProviders := []string{"ESPN BET", "Draft Kings", "DraftKings", "Bovada"}
 
 	for _, provider := range preferredProviders {
 		for _, line := range lines.Items {
