@@ -225,7 +225,7 @@ func Contains[T comparable](s []T, e T) bool {
 }
 
 func PickLine(lines []external.CFBD_Line) (*external.CFBD_Line, error) {
-	preferredProviders := []string{"ESPN BET", "Draft Kings", "DraftKings", "Bovada"}
+	preferredProviders := []string{"ESPN Bet", "Draft Kings", "DraftKings", "Bovada"}
 
 	for _, provider := range preferredProviders {
 		for _, line := range lines {
