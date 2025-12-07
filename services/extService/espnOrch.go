@@ -4,12 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/bwmarrin/discordgo"
-	"gorm.io/gorm"
 	"perfectOddsBot/models/external"
 	"perfectOddsBot/services/common"
 	"perfectOddsBot/services/guildService"
 	"strconv"
+
+	"github.com/bwmarrin/discordgo"
+	"gorm.io/gorm"
 )
 
 func ListCBBGames(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
@@ -70,7 +71,7 @@ func ListCBBGames(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 
 					response += fmt.Sprintf("* `%s` (%s): %s\n", event.Name, event.ID, lineText)
 				} else {
-					response += fmt.Sprintf("* `%s` (%s) - FINAL\n", event.Name, event.ID)
+					response += fmt.Sprintf("* `%s` - FINAL\n", event.Name)
 				}
 			}
 		}
