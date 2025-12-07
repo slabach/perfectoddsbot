@@ -87,8 +87,11 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 					}
 
 					for _, entry := range betEntries {
-						// Option 1 = homeTeam + bet.Spread (formatted)
-						// Option 2 = awayTeam + (bet.Spread * -1) (formatted)
+						// Spread is stored from home team's perspective:
+						// - If away team is favored by 3.5, spread = +3.5
+						// - If home team is favored by 3.5, spread = -3.5
+						// Option 1 = homeTeam + spread (formatted)
+						// Option 2 = awayTeam - spread (formatted)
 						// scoreDiff = homeScore - awayScore
 						spread := *entry.Spread
 						won := false
@@ -99,8 +102,9 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 							won = float64(scoreDiff) > -spread
 						} else {
 							// Option 2: awayTeam - spread wins if (awayScore - spread) > homeScore
-							// i.e., if -scoreDiff > spread, i.e., if scoreDiff < -spread
-							won = float64(scoreDiff) < -spread
+							// i.e., if (awayScore - homeScore) > spread
+							// i.e., if -scoreDiff > spread
+							won = float64(-scoreDiff) > spread
 						}
 
 						if won {
@@ -144,8 +148,11 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 					awayScore, _ := strconv.Atoi(awayTeam.Score)
 					scoreDiff := homeScore - awayScore
 					for _, entry := range betEntries {
-						// Option 1 = homeTeam + bet.Spread (formatted)
-						// Option 2 = awayTeam + (bet.Spread * -1) (formatted)
+						// Spread is stored from home team's perspective:
+						// - If away team is favored by 3.5, spread = +3.5
+						// - If home team is favored by 3.5, spread = -3.5
+						// Option 1 = homeTeam + spread (formatted)
+						// Option 2 = awayTeam - spread (formatted)
 						// scoreDiff = homeScore - awayScore
 						spread := *entry.Spread
 						won := false
@@ -156,8 +163,9 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 							won = float64(scoreDiff) > -spread
 						} else {
 							// Option 2: awayTeam - spread wins if (awayScore - spread) > homeScore
-							// i.e., if -scoreDiff > spread, i.e., if scoreDiff < -spread
-							won = float64(scoreDiff) < -spread
+							// i.e., if (awayScore - homeScore) > spread
+							// i.e., if -scoreDiff > spread
+							won = float64(-scoreDiff) > spread
 						}
 
 						if won {
