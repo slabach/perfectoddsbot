@@ -10,6 +10,7 @@ import (
 	"perfectOddsBot/services/guildService"
 	"perfectOddsBot/services/messageService"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 	_ "time/tzdata"
@@ -88,10 +89,18 @@ func CreateCBBBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 		homeTeam := ""
 		awayTeam := ""
 		for _, competitor := range cbbEvent.Competitions[0].Competitors {
-			if competitor.HomeAway == "home" {
-				homeTeam = competitor.Team.ShortDisplayName
+			isHome := false
+			if line.HomeTeamOdds.Team.Ref != "" {
+				if strings.Contains(line.HomeTeamOdds.Team.Ref, fmt.Sprintf("/teams/%s?", competitor.ID)) {
+					isHome = true
+				}
+			} else if competitor.HomeAway == "home" {
+				isHome = true
 			}
-			if competitor.HomeAway == "away" {
+
+			if isHome {
+				homeTeam = competitor.Team.ShortDisplayName
+			} else {
 				awayTeam = competitor.Team.ShortDisplayName
 			}
 		}
@@ -525,10 +534,18 @@ func AutoCreateCBBBet(s *discordgo.Session, db *gorm.DB, guildId string, channel
 		homeTeam := ""
 		awayTeam := ""
 		for _, competitor := range cbbEvent.Competitions[0].Competitors {
-			if competitor.HomeAway == "home" {
-				homeTeam = competitor.Team.ShortDisplayName
+			isHome := false
+			if line.HomeTeamOdds.Team.Ref != "" {
+				if strings.Contains(line.HomeTeamOdds.Team.Ref, fmt.Sprintf("/teams/%s?", competitor.ID)) {
+					isHome = true
+				}
+			} else if competitor.HomeAway == "home" {
+				isHome = true
 			}
-			if competitor.HomeAway == "away" {
+
+			if isHome {
+				homeTeam = competitor.Team.ShortDisplayName
+			} else {
 				awayTeam = competitor.Team.ShortDisplayName
 			}
 		}

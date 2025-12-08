@@ -137,21 +137,42 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 						continue
 					}
 
-					homeTeam := external.ESPN_Competitor{}
-					awayTeam := external.ESPN_Competitor{}
+					// Robustly match Option 1 to the correct competitor by name
+					// instead of assuming Option 1 is always the "home" team from the API.
+					op1Name := common.GetSchoolName(bet.Option1)
+					var score1, score2 int
+					var matched bool
 
 					for _, comp := range obj.Competitions[0].Competitors {
-						if comp.HomeAway == "home" {
-							homeTeam = comp
-						}
-						if comp.HomeAway == "away" {
-							awayTeam = comp
+						// Check if this competitor matches Option 1's name
+						if comp.Team.ShortDisplayName == op1Name {
+							score1, _ = strconv.Atoi(comp.Score)
+							matched = true
+						} else {
+							// If it's not Option 1, it's Option 2
+							score2, _ = strconv.Atoi(comp.Score)
 						}
 					}
 
-					homeScore, _ := strconv.Atoi(homeTeam.Score)
-					awayScore, _ := strconv.Atoi(awayTeam.Score)
-					scoreDiff := homeScore - awayScore
+					// Fallback to legacy logic if name matching fails (e.g. name change)
+					if !matched {
+						homeTeam := external.ESPN_Competitor{}
+						awayTeam := external.ESPN_Competitor{}
+
+						for _, comp := range obj.Competitions[0].Competitors {
+							if comp.HomeAway == "home" {
+								homeTeam = comp
+							}
+							if comp.HomeAway == "away" {
+								awayTeam = comp
+							}
+						}
+						score1, _ = strconv.Atoi(homeTeam.Score) // Assume Option 1 is Home
+						score2, _ = strconv.Atoi(awayTeam.Score) // Assume Option 2 is Away
+					}
+
+					// scoreDiff is now relative to Option 1: (Option1Score - Option2Score)
+					scoreDiff := score1 - score2
 					for _, entry := range betEntries {
 						spread := *entry.Spread
 						won := calculateBetEntryWin(entry.Option, scoreDiff, spread)
