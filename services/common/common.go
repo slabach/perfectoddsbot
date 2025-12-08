@@ -3,8 +3,6 @@ package common
 import (
 	"errors"
 	"fmt"
-	"github.com/bwmarrin/discordgo"
-	"gorm.io/gorm"
 	"log"
 	"net/http"
 	"os"
@@ -12,6 +10,9 @@ import (
 	"perfectOddsBot/models/external"
 	"strconv"
 	"strings"
+
+	"github.com/bwmarrin/discordgo"
+	"gorm.io/gorm"
 )
 
 func IsAdmin(s *discordgo.Session, i *discordgo.InteractionCreate) bool {
@@ -252,13 +253,17 @@ func PickESPNLine(lines external.ESPN_Lines) (*external.ESPN_Line, error) {
 }
 
 func GetSchoolName(s string) string {
-	index := strings.IndexAny(s, "+-")
-
-	if index == -1 {
-		return strings.TrimSpace(s)
+	parts := strings.Fields(s)
+	if len(parts) > 1 {
+		last := parts[len(parts)-1]
+		// Check if last starts with + or - and is a number
+		if strings.HasPrefix(last, "+") || strings.HasPrefix(last, "-") {
+			// Try parsing
+			_, err := strconv.ParseFloat(last, 64)
+			if err == nil {
+				return strings.TrimSuffix(s, " "+last)
+			}
+		}
 	}
-
-	schoolName := s[:index]
-
-	return strings.TrimSpace(schoolName)
+	return s
 }
