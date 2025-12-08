@@ -24,7 +24,7 @@ func ListCFBGames(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 
 	cfbUrl := "https://api.collegefootballdata.com/lines?"
 	pfWeekUrl := "https://api.perfectfall.com/week-season"
-	conferenceList := []string{"Big Ten", "ACC", "SEC", "Big 12"}
+	conferenceList := []string{"Big Ten", "ACC", "SEC"}
 
 	guild, err := guildService.GetGuildInfo(s, db, i.GuildID, i.ChannelID)
 	if err != nil {
@@ -79,10 +79,10 @@ func ListCFBGames(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 				line, lineErr := common.PickLine(bet.Lines)
 				lineText := fmt.Sprintf("* `%s @ %s`", bet.AwayTeam, bet.HomeTeam)
 				if bet.HomeScore != nil && bet.AwayScore != nil {
-					lineText += "- FINAL \n"
+					continue
 				} else {
 					if lineErr != nil {
-						lineText += "- TBD \n"
+						continue
 					} else {
 						lineText += fmt.Sprintf(" (%d):  %s \n", bet.ID, line.FormattedSpread)
 					}

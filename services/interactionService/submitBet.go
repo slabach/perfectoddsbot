@@ -110,12 +110,33 @@ func SubmitBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 		optionName = bet.Option2
 	}
 
-	response := fmt.Sprintf("Successfully placed a bet of **%d** points on **%s**.", amount, optionName)
+	// Calculate potential payout
+	potentialPayout := common.CalculatePayout(amount, optionVal, bet)
+
+	// Create success embed
+	embed := &discordgo.MessageEmbed{
+		Title:       "✅ Bet Placed Successfully",
+		Description: fmt.Sprintf("You've placed **%d** points on **%s**", amount, optionName),
+		Fields: []*discordgo.MessageEmbedField{
+			{
+				Name:   "Remaining Points",
+				Value:  fmt.Sprintf("%.1f", user.Points),
+				Inline: true,
+			},
+			{
+				Name:   "Potential Payout",
+				Value:  fmt.Sprintf("%.1f", potentialPayout),
+				Inline: true,
+			},
+		},
+		Color: 0x00ff00,
+	}
+
 	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
-			Content: response,
-			Flags:   discordgo.MessageFlagsEphemeral,
+			Embeds: []*discordgo.MessageEmbed{embed},
+			Flags:  discordgo.MessageFlagsEphemeral,
 		},
 	})
 	if err != nil {

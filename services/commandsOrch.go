@@ -27,7 +27,7 @@ func HandleSlashCommand(s *discordgo.Session, i *discordgo.InteractionCreate, db
 	case "list-cfb-games":
 		extService.ListCFBGames(s, i, db)
 	case "create-cfb-bet":
-		betService.CreateCFBBet(s, i, db)
+		betService.CreateCFBBetSelector(s, i, db)
 	case "set-betting-channel":
 		guildService.SetBettingChannel(s, i, db)
 	case "set-points-per-message":
@@ -37,7 +37,7 @@ func HandleSlashCommand(s *discordgo.Session, i *discordgo.InteractionCreate, db
 	case "list-cbb-games":
 		extService.ListCBBGames(s, i, db)
 	case "create-cbb-bet":
-		betService.CreateCBBBet(s, i, db)
+		betService.CreateCBBBetSelector(s, i, db)
 	case "subscribe-to-team":
 		interactionService.TeamSubscriptionMessage(s, i, db)
 	}
@@ -56,26 +56,10 @@ func RegisterCommands(s *discordgo.Session) error {
 		{
 			Name:        "create-cfb-bet",
 			Description: "★ Create a new College Football bet (PREMIUM)",
-			Options: []*discordgo.ApplicationCommandOption{
-				{
-					Name:        "game-id",
-					Description: "Game ID",
-					Type:        discordgo.ApplicationCommandOptionString,
-					Required:    true,
-				},
-			},
 		},
 		{
 			Name:        "create-cbb-bet",
 			Description: "★ Create a new College Basketball bet (PREMIUM)",
-			Options: []*discordgo.ApplicationCommandOption{
-				{
-					Name:        "game-id",
-					Description: "Game ID",
-					Type:        discordgo.ApplicationCommandOptionString,
-					Required:    true,
-				},
-			},
 		},
 		{
 			Name:        "leaderboard",

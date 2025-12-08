@@ -1,10 +1,11 @@
 package interactionService
 
 import (
-	"github.com/bwmarrin/discordgo"
-	"gorm.io/gorm"
 	"perfectOddsBot/services/common"
 	"strings"
+
+	"github.com/bwmarrin/discordgo"
+	"gorm.io/gorm"
 )
 
 func HandleComponentInteraction(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
@@ -44,6 +45,54 @@ func HandleComponentInteraction(s *discordgo.Session, i *discordgo.InteractionCr
 
 	if strings.HasPrefix(customID, "subscribe_to_team_submit") {
 		err := HandleTeamSubscribeSubmit(s, i, db, customID)
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
+
+	if strings.HasPrefix(customID, "create_cbb_bet_next_") || strings.HasPrefix(customID, "create_cbb_bet_previous_") {
+		err := HandleCBBGamePagination(s, i, db, customID)
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
+
+	if strings.HasPrefix(customID, "create_cfb_bet_next_") || strings.HasPrefix(customID, "create_cfb_bet_previous_") {
+		err := HandleCFBGamePagination(s, i, db, customID)
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
+
+	if strings.HasPrefix(customID, "create_cbb_bet_submit") {
+		err := HandleCBBGameSubmit(s, i, db, customID)
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
+
+	if strings.HasPrefix(customID, "create_cfb_bet_submit") {
+		err := HandleCFBGameSubmit(s, i, db, customID)
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
+
+	if strings.HasPrefix(customID, "create_cbb_bet_cancel_") {
+		err := HandleCBBGameCancel(s, i, db, customID)
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
+
+	if strings.HasPrefix(customID, "create_cfb_bet_cancel_") {
+		err := HandleCFBGameCancel(s, i, db, customID)
 		if err != nil {
 			common.SendError(s, i, err, db)
 		}
