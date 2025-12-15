@@ -8,8 +8,10 @@ import (
 	"perfectOddsBot/services/common"
 	"perfectOddsBot/services/extService"
 	"perfectOddsBot/services/guildService"
+	"perfectOddsBot/services/messageService"
 	"runtime/debug"
 	"strconv"
+	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	"gorm.io/gorm"
@@ -240,9 +242,15 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB) error {
 	db.Save(&bet)
 	db.Model(&bet).UpdateColumn("paid", true).UpdateColumn("active", false)
 
-	response := fmt.Sprintf("Bet '%s' has been resolved!\nTotal payout: **%.1f** points.\n**Winners:**\n%s\n**Losers:**\n%s", bet.Description, totalPayout, winnersList, loserList)
+	embed := messageService.BuildBetResolutionEmbed(
+		bet.Description,
+		"",
+		totalPayout,
+		strings.TrimSpace(winnersList),
+		strings.TrimSpace(loserList),
+	)
 	_, err = s.ChannelMessageSendComplex(guild.BetChannelID, &discordgo.MessageSend{
-		Content: response,
+		Embeds: []*discordgo.MessageEmbed{embed},
 	})
 	if err != nil {
 		return err

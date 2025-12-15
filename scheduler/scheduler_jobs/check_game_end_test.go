@@ -15,7 +15,7 @@ func TestCalculateBetEntryWin(t *testing.T) {
 		{
 			name:      "Home favored Option1 wins - covers spread",
 			option:    1,
-			scoreDiff: 10, // home wins by 10 (homeScore - awayScore = 10)
+			scoreDiff: 10,   // home wins by 10 (homeScore - awayScore = 10)
 			spread:    -3.5, // home favored by 3.5
 			expected:  true,
 			scenario:  "Home team wins by 10, needs to cover -3.5, wins",
@@ -23,7 +23,7 @@ func TestCalculateBetEntryWin(t *testing.T) {
 		{
 			name:      "Home favored Option1 wins - exact spread",
 			option:    1,
-			scoreDiff: 4, // home wins by 4
+			scoreDiff: 4,    // home wins by 4
 			spread:    -3.5, // home favored by 3.5
 			expected:  true,
 			scenario:  "Home team wins by 4, needs to cover -3.5, wins",
@@ -31,7 +31,7 @@ func TestCalculateBetEntryWin(t *testing.T) {
 		{
 			name:      "Home favored Option1 loses - doesn't cover",
 			option:    1,
-			scoreDiff: 2, // home wins by 2
+			scoreDiff: 2,    // home wins by 2
 			spread:    -3.5, // home favored by 3.5
 			expected:  false,
 			scenario:  "Home team wins by 2, needs to cover -3.5, loses",
@@ -39,7 +39,7 @@ func TestCalculateBetEntryWin(t *testing.T) {
 		{
 			name:      "Home favored Option1 loses - home loses game",
 			option:    1,
-			scoreDiff: -5, // home loses by 5 (away wins by 5)
+			scoreDiff: -5,   // home loses by 5 (away wins by 5)
 			spread:    -3.5, // home favored by 3.5
 			expected:  false,
 			scenario:  "Home team loses by 5, needs to cover -3.5, loses",
@@ -47,7 +47,7 @@ func TestCalculateBetEntryWin(t *testing.T) {
 		{
 			name:      "Home favored Option2 wins - away covers",
 			option:    2,
-			scoreDiff: -2, // home loses by 2 (away wins by 2)
+			scoreDiff: -2,   // home loses by 2 (away wins by 2)
 			spread:    -3.5, // home favored by 3.5
 			expected:  true,
 			scenario:  "Away team wins by 2, home favored by 3.5, away covers, wins",
@@ -55,7 +55,7 @@ func TestCalculateBetEntryWin(t *testing.T) {
 		{
 			name:      "Home favored Option2 loses - away doesn't cover",
 			option:    2,
-			scoreDiff: 5, // home wins by 5
+			scoreDiff: 5,    // home wins by 5
 			spread:    -3.5, // home favored by 3.5
 			expected:  false,
 			scenario:  "Home team wins by 5, home favored by 3.5, away doesn't cover, loses",
@@ -63,7 +63,7 @@ func TestCalculateBetEntryWin(t *testing.T) {
 		{
 			name:      "Home favored Option2 loses - exact spread",
 			option:    2,
-			scoreDiff: 4, // home wins by 4
+			scoreDiff: 4,    // home wins by 4
 			spread:    -3.5, // home favored by 3.5
 			expected:  false,
 			scenario:  "Home team wins by 4, home favored by 3.5, away doesn't cover, loses",
@@ -73,7 +73,7 @@ func TestCalculateBetEntryWin(t *testing.T) {
 		{
 			name:      "Away favored Option1 wins - home covers",
 			option:    1,
-			scoreDiff: 5, // home wins by 5
+			scoreDiff: 5,   // home wins by 5
 			spread:    3.5, // away favored by 3.5
 			expected:  true,
 			scenario:  "Home team wins by 5, away favored by 3.5, home covers, wins",
@@ -81,7 +81,7 @@ func TestCalculateBetEntryWin(t *testing.T) {
 		{
 			name:      "Away favored Option1 wins - home covers despite losing",
 			option:    1,
-			scoreDiff: -2, // home loses by 2 (away wins by 2)
+			scoreDiff: -2,  // home loses by 2 (away wins by 2)
 			spread:    3.5, // away favored by 3.5
 			expected:  true,
 			scenario:  "Away team wins by 2, away favored by 3.5, home gets +3.5 so covers, wins",
@@ -89,7 +89,7 @@ func TestCalculateBetEntryWin(t *testing.T) {
 		{
 			name:      "Away favored Option1 loses - exact spread",
 			option:    1,
-			scoreDiff: -4, // home loses by 4 (away wins by 4)
+			scoreDiff: -4,  // home loses by 4 (away wins by 4)
 			spread:    3.5, // away favored by 3.5
 			expected:  false,
 			scenario:  "Away team wins by 4, away favored by 3.5, home doesn't cover, loses",
@@ -97,7 +97,7 @@ func TestCalculateBetEntryWin(t *testing.T) {
 		{
 			name:      "Away favored Option2 wins - covers spread (BUG CASE)",
 			option:    2,
-			scoreDiff: -9, // home loses by 9 (away wins by 9)
+			scoreDiff: -9,  // home loses by 9 (away wins by 9)
 			spread:    3.5, // away favored by 3.5
 			expected:  true,
 			scenario:  "Away team wins by 9, needs to cover 3.5, wins (original bug case)",
@@ -105,7 +105,7 @@ func TestCalculateBetEntryWin(t *testing.T) {
 		{
 			name:      "Away favored Option2 wins - exact spread",
 			option:    2,
-			scoreDiff: -4, // home loses by 4 (away wins by 4)
+			scoreDiff: -4,  // home loses by 4 (away wins by 4)
 			spread:    3.5, // away favored by 3.5
 			expected:  true,
 			scenario:  "Away team wins by 4, needs to cover 3.5, wins",
@@ -113,7 +113,7 @@ func TestCalculateBetEntryWin(t *testing.T) {
 		{
 			name:      "Away favored Option2 loses - doesn't cover",
 			option:    2,
-			scoreDiff: -2, // home loses by 2 (away wins by 2)
+			scoreDiff: -2,  // home loses by 2 (away wins by 2)
 			spread:    3.5, // away favored by 3.5
 			expected:  false,
 			scenario:  "Away team wins by 2, needs to cover 3.5, loses",
@@ -121,7 +121,7 @@ func TestCalculateBetEntryWin(t *testing.T) {
 		{
 			name:      "Away favored Option2 loses - home wins game",
 			option:    2,
-			scoreDiff: 5, // home wins by 5
+			scoreDiff: 5,   // home wins by 5
 			spread:    3.5, // away favored by 3.5
 			expected:  false,
 			scenario:  "Home team wins by 5, away favored by 3.5, away loses",
@@ -181,7 +181,7 @@ func TestCalculateBetEntryWin(t *testing.T) {
 		{
 			name:      "Large home spread Option1 wins",
 			option:    1,
-			scoreDiff: 25, // home wins by 25
+			scoreDiff: 25,    // home wins by 25
 			spread:    -20.5, // home favored by 20.5
 			expected:  true,
 			scenario:  "Home team wins by 25, needs to cover -20.5, wins",
@@ -189,7 +189,7 @@ func TestCalculateBetEntryWin(t *testing.T) {
 		{
 			name:      "Large home spread Option1 loses",
 			option:    1,
-			scoreDiff: 15, // home wins by 15
+			scoreDiff: 15,    // home wins by 15
 			spread:    -20.5, // home favored by 20.5
 			expected:  false,
 			scenario:  "Home team wins by 15, needs to cover -20.5, loses",
@@ -197,7 +197,7 @@ func TestCalculateBetEntryWin(t *testing.T) {
 		{
 			name:      "Large away spread Option2 wins",
 			option:    2,
-			scoreDiff: -25, // home loses by 25 (away wins by 25)
+			scoreDiff: -25,  // home loses by 25 (away wins by 25)
 			spread:    20.5, // away favored by 20.5
 			expected:  true,
 			scenario:  "Away team wins by 25, needs to cover 20.5, wins",
@@ -205,7 +205,7 @@ func TestCalculateBetEntryWin(t *testing.T) {
 		{
 			name:      "Large away spread Option2 loses",
 			option:    2,
-			scoreDiff: -15, // home loses by 15 (away wins by 15)
+			scoreDiff: -15,  // home loses by 15 (away wins by 15)
 			spread:    20.5, // away favored by 20.5
 			expected:  false,
 			scenario:  "Away team wins by 15, needs to cover 20.5, loses",
@@ -215,7 +215,7 @@ func TestCalculateBetEntryWin(t *testing.T) {
 		{
 			name:      "Close game Option1 wins by 0.5",
 			option:    1,
-			scoreDiff: 1, // home wins by 1
+			scoreDiff: 1,    // home wins by 1
 			spread:    -0.5, // home favored by 0.5
 			expected:  true,
 			scenario:  "Home team wins by 1, needs to cover -0.5, wins",
@@ -223,7 +223,7 @@ func TestCalculateBetEntryWin(t *testing.T) {
 		{
 			name:      "Close game Option2 wins by 0.5",
 			option:    2,
-			scoreDiff: -1, // home loses by 1 (away wins by 1)
+			scoreDiff: -1,  // home loses by 1 (away wins by 1)
 			spread:    0.5, // away favored by 0.5
 			expected:  true,
 			scenario:  "Away team wins by 1, needs to cover 0.5, wins",
@@ -231,7 +231,7 @@ func TestCalculateBetEntryWin(t *testing.T) {
 		{
 			name:      "Close game Option1 loses by 0.5",
 			option:    1,
-			scoreDiff: 0, // tie
+			scoreDiff: 0,    // tie
 			spread:    -0.5, // home favored by 0.5
 			expected:  false,
 			scenario:  "Tie game, home needs to cover -0.5, loses",
@@ -239,7 +239,7 @@ func TestCalculateBetEntryWin(t *testing.T) {
 		{
 			name:      "Close game Option2 loses by 0.5",
 			option:    2,
-			scoreDiff: 0, // tie
+			scoreDiff: 0,   // tie
 			spread:    0.5, // away favored by 0.5
 			expected:  false,
 			scenario:  "Tie game, away needs to cover 0.5, loses",
@@ -249,7 +249,7 @@ func TestCalculateBetEntryWin(t *testing.T) {
 		{
 			name:      "Very negative spread Option1",
 			option:    1,
-			scoreDiff: 30, // home wins by 30
+			scoreDiff: 30,    // home wins by 30
 			spread:    -25.5, // home favored by 25.5
 			expected:  true,
 			scenario:  "Home team wins by 30, needs to cover -25.5, wins",
@@ -257,7 +257,7 @@ func TestCalculateBetEntryWin(t *testing.T) {
 		{
 			name:      "Very positive spread Option2",
 			option:    2,
-			scoreDiff: -30, // home loses by 30 (away wins by 30)
+			scoreDiff: -30,  // home loses by 30 (away wins by 30)
 			spread:    25.5, // away favored by 25.5
 			expected:  true,
 			scenario:  "Away team wins by 30, needs to cover 25.5, wins",
@@ -274,4 +274,3 @@ func TestCalculateBetEntryWin(t *testing.T) {
 		})
 	}
 }
-

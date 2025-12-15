@@ -2,8 +2,9 @@ package messageService
 
 import (
 	"fmt"
-	"github.com/bwmarrin/discordgo"
 	"perfectOddsBot/services/common"
+
+	"github.com/bwmarrin/discordgo"
 )
 
 func GetAllButtonList(s *discordgo.Session, i *discordgo.InteractionCreate, opt1 string, opt2 string, betId uint) []discordgo.MessageComponent {
@@ -76,6 +77,37 @@ func GetResolveButton(betId uint) discordgo.Button {
 		CustomID: fmt.Sprintf("resolve_bet_%d", betId),
 		Emoji: &discordgo.ComponentEmoji{
 			Name: "✅",
+		},
+	}
+}
+
+// BuildBetResolutionEmbed creates a consistent embed for bet resolution messages.
+func BuildBetResolutionEmbed(betDescription string, subtitle string, totalPayout float64, winners string, losers string) *discordgo.MessageEmbed {
+	if winners == "" {
+		winners = "_No winners_"
+	}
+	if losers == "" {
+		losers = "_No losers_"
+	}
+
+	return &discordgo.MessageEmbed{
+		Title:       fmt.Sprintf("🏁 Bet Resolved: %s", betDescription),
+		Description: subtitle,
+		Color:       0x57F287, // green-ish
+		Fields: []*discordgo.MessageEmbedField{
+			{
+				Name:   "Total Payout",
+				Value:  fmt.Sprintf("**%.1f** points", totalPayout),
+				Inline: true,
+			},
+			{
+				Name:  "Winners",
+				Value: winners,
+			},
+			{
+				Name:  "Losers",
+				Value: losers,
+			},
 		},
 	}
 }

@@ -2,11 +2,14 @@ package betService
 
 import (
 	"fmt"
-	"github.com/bwmarrin/discordgo"
-	"gorm.io/gorm"
+	"strings"
+
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/common"
 	"perfectOddsBot/services/messageService"
+
+	"github.com/bwmarrin/discordgo"
+	"gorm.io/gorm"
 )
 
 func CreateCustomBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
@@ -148,11 +151,18 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 		winningOptionName = bet.Option2
 	}
 
-	response := fmt.Sprintf("Bet '%s' has been resolved!\n**%s** is the winning option.\nTotal payout: **%.1f** points.\n**Winners:**\n%s\n", bet.Description, winningOptionName, totalPayout, winnersList)
+	winnersText := strings.TrimSpace(winnersList)
+	embed := messageService.BuildBetResolutionEmbed(
+		bet.Description,
+		fmt.Sprintf("Winning option: **%s**", winningOptionName),
+		totalPayout,
+		winnersText,
+		"",
+	)
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
-			Content: response,
+			Embeds: []*discordgo.MessageEmbed{embed},
 		},
 	})
 	if err != nil {
