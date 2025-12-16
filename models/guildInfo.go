@@ -12,4 +12,5 @@ type Guild struct {
 	StartingPoints   float64
 	PremiumEnabled   bool
 	SubscribedTeam   *string
+	Pool             float64 `gorm:"default:0"`
 }
