@@ -217,6 +217,11 @@ func ShowStats(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 				Value:  fmt.Sprintf("%.1f", netPoints),
 				Inline: true,
 			},
+			{
+				Name:   "Current Points",
+				Value:  fmt.Sprintf("%.1f", user.Points),
+				Inline: true,
+			},
 		},
 	}
 
