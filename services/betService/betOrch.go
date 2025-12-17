@@ -146,6 +146,8 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 			// Winning entry - calculate payout
 			payout := common.CalculatePayout(entry.Amount, winningOption, bet)
 			user.Points += payout
+			user.TotalBetsWon++
+			user.TotalPointsWon += payout
 			db.Save(&user)
 			totalPayout += payout
 
@@ -155,14 +157,16 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 			}
 		} else {
 			// Losing entry - add to pool
+			user.TotalBetsLost++
+			user.TotalPointsLost += float64(entry.Amount)
+			db.Save(&user)
 			lostPoolAmount += float64(entry.Amount)
 		}
 	}
 
-	// Add lost bet amounts to guild pool
+	// Add lost bet amounts to guild pool (atomic update to prevent race conditions)
 	if lostPoolAmount > 0 {
-		guild.Pool += lostPoolAmount
-		db.Save(&guild)
+		db.Model(&models.Guild{}).Where("id = ?", guild.ID).UpdateColumn("pool", gorm.Expr("pool + ?", lostPoolAmount))
 	}
 
 	bet.Active = false

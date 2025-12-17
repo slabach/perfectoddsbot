@@ -1,11 +1,12 @@
 package guildService
 
 import (
-	"github.com/bwmarrin/discordgo"
-	"gorm.io/gorm"
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/common"
 	"strconv"
+
+	"github.com/bwmarrin/discordgo"
+	"gorm.io/gorm"
 )
 
 func GetGuildInfo(s *discordgo.Session, db *gorm.DB, guildID string, channelId string) (*models.Guild, error) {

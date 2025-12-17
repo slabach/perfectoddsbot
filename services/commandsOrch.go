@@ -14,6 +14,8 @@ func HandleSlashCommand(s *discordgo.Session, i *discordgo.InteractionCreate, db
 	switch i.ApplicationCommandData().Name {
 	case "my-points":
 		ShowPoints(s, i, db)
+	case "my-stats":
+		ShowStats(s, i, db)
 	case "leaderboard":
 		ShowLeaderboard(s, i, db)
 	case "create-bet":
@@ -150,6 +152,10 @@ func RegisterCommands(s *discordgo.Session) error {
 		{
 			Name:        "my-points",
 			Description: "Show your current points",
+		},
+		{
+			Name:        "my-stats",
+			Description: "Show your betting statistics",
 		},
 		{
 			Name:        "my-bets",

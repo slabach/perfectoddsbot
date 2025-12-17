@@ -2,11 +2,12 @@ package services
 
 import (
 	"fmt"
-	"github.com/bwmarrin/discordgo"
-	"gorm.io/gorm"
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/common"
 	"perfectOddsBot/services/guildService"
+
+	"github.com/bwmarrin/discordgo"
+	"gorm.io/gorm"
 )
 
 func ShowPoints(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
@@ -147,6 +148,91 @@ func ResetPoints(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.
 		},
 	})
 	if err != nil {
+		return
+	}
+}
+
+func ShowStats(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
+	userID := i.Member.User.ID
+	guildID := i.GuildID
+
+	guild, err := guildService.GetGuildInfo(s, db, guildID, i.ChannelID)
+	if err != nil {
+		common.SendError(s, i, fmt.Errorf("error getting guild info: %v", err), db)
+		return
+	}
+
+	var user models.User
+	result := db.FirstOrCreate(&user, models.User{DiscordID: userID, GuildID: guildID})
+	if result.RowsAffected == 1 {
+		user.Points = guild.StartingPoints
+		db.Save(&user)
+	}
+
+	totalBets := user.TotalBetsWon + user.TotalBetsLost
+	netPoints := user.TotalPointsWon - user.TotalPointsLost
+
+	var winRate float64
+	if totalBets > 0 {
+		winRate = float64(user.TotalBetsWon) / float64(totalBets) * 100
+	}
+
+	embed := &discordgo.MessageEmbed{
+		Title:       "📊 Your Betting Statistics",
+		Description: fmt.Sprintf("Statistics for <@%s>", userID),
+		Color:       0xe67e22,
+		Fields: []*discordgo.MessageEmbedField{
+			{
+				Name:   "Bets Won",
+				Value:  fmt.Sprintf("%d", user.TotalBetsWon),
+				Inline: true,
+			},
+			{
+				Name:   "Bets Lost",
+				Value:  fmt.Sprintf("%d", user.TotalBetsLost),
+				Inline: true,
+			},
+			{
+				Name:   "Total Bets",
+				Value:  fmt.Sprintf("%d", totalBets),
+				Inline: true,
+			},
+			{
+				Name:   "Win Rate",
+				Value:  fmt.Sprintf("%.1f%%", winRate),
+				Inline: true,
+			},
+			{
+				Name:   "Points Won",
+				Value:  fmt.Sprintf("%.1f", user.TotalPointsWon),
+				Inline: true,
+			},
+			{
+				Name:   "Points Lost",
+				Value:  fmt.Sprintf("%.1f", user.TotalPointsLost),
+				Inline: true,
+			},
+			{
+				Name:   "Net Points",
+				Value:  fmt.Sprintf("%.1f", netPoints),
+				Inline: true,
+			},
+		},
+	}
+
+	if totalBets == 0 {
+		embed.Description = fmt.Sprintf("Statistics for <@%s>\n\nYou haven't placed any bets yet!", userID)
+	}
+
+	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{embed},
+			Flags:  discordgo.MessageFlagsEphemeral,
+		},
+	})
+	if err != nil {
+		common.SendError(s, i, err, db)
 		return
 	}
 }
