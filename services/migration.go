@@ -112,3 +112,72 @@ func RunHistoricalStatsMigration(db *gorm.DB) error {
 	log.Printf("Historical betting stats migration completed. Updated %d users.", len(statsMap))
 	return nil
 }
+
+// RunHistoricalStatsMigration populates betting stats for all historical resolved bets
+func ReRunHistoricalStatsMigration(db *gorm.DB) error {
+	// Check if migration has already run
+	var existingMigration models.Migration
+	result := db.Where("name = ?", "rerun_historical_betting_stats").First(&existingMigration)
+	if result.Error == nil && existingMigration.ID != 0 {
+		log.Println("Historical betting stats migration has already been executed. Skipping.")
+		return nil
+	}
+
+	log.Println("Starting historical betting stats migration...")
+
+	var users []models.User
+	if err := db.Find(&users).Error; err != nil {
+		return fmt.Errorf("error fetching users: %v", err)
+	}
+
+	for _, user := range users {
+		user.TotalBetsWon = 0
+		user.TotalBetsLost = 0
+		user.TotalPointsWon = 0
+		user.TotalPointsLost = 0
+
+		var userBets []models.BetEntry
+		if err := db.Where("user_id = ?", user.ID).Find(&userBets).Error; err != nil {
+			log.Printf("Error fetching bets for user %d: %v", user.ID, err)
+			continue
+		}
+
+		for _, betEntry := range userBets {
+			var bet models.Bet
+			if err := db.First(&bet, "id = ?", betEntry.BetID).Error; err != nil {
+				log.Printf("Error fetching bet %d: %v", betEntry.BetID, err)
+				continue
+			}
+			if betEntry.AutoCloseWin {
+				payout := common.CalculatePayout(betEntry.Amount, betEntry.Option, bet)
+				user.TotalBetsWon++
+				user.TotalPointsWon += payout
+			} else {
+				user.TotalBetsLost++
+				user.TotalPointsLost += float64(betEntry.Amount)
+			}
+		}
+
+		if err := db.Save(&user).Error; err != nil {
+			log.Printf("Error updating stats for user %d: %v", user.ID, err)
+			continue
+		}
+	}
+
+	// Get all resolved bets (paid = true)
+	var resolvedBets []models.Bet
+	if err := db.Where("paid = ?", true).Find(&resolvedBets).Error; err != nil {
+		return fmt.Errorf("error fetching resolved bets: %v", err)
+	}
+
+	// Mark migration as complete
+	migration := models.Migration{
+		Name:       "rerun_historical_betting_stats",
+		ExecutedAt: time.Now(),
+	}
+	if err := db.Create(&migration).Error; err != nil {
+		return fmt.Errorf("error marking migration as complete: %v", err)
+	}
+
+	return nil
+}

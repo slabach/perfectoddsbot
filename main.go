@@ -106,7 +106,7 @@ func runApp() {
 	}
 
 	// Run historical stats migration
-	err = services.RunHistoricalStatsMigration(db)
+	err = services.ReRunHistoricalStatsMigration(db)
 	if err != nil {
 		log.Printf("Error running historical stats migration: %v", err)
 		// Don't fatal here - allow app to continue even if migration fails
