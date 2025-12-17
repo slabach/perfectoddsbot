@@ -30,10 +30,10 @@ func RunHistoricalStatsMigration(db *gorm.DB) error {
 
 	// Map to aggregate stats per user: userID -> stats
 	type userStats struct {
-		betsWon      int
-		betsLost     int
-		pointsWon    float64
-		pointsLost   float64
+		betsWon    int
+		betsLost   int
+		pointsWon  float64
+		pointsLost float64
 	}
 	statsMap := make(map[uint]*userStats)
 
@@ -112,4 +112,3 @@ func RunHistoricalStatsMigration(db *gorm.DB) error {
 	log.Printf("Historical betting stats migration completed. Updated %d users.", len(statsMap))
 	return nil
 }
-
