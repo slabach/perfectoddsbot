@@ -99,10 +99,17 @@ func runApp() {
 
 	err = db.AutoMigrate(
 		&models.Bet{}, &models.BetEntry{}, &models.BetMessage{}, &models.ErrorLog{},
-		&models.Guild{}, &models.User{},
+		&models.Guild{}, &models.User{}, &models.Migration{},
 	)
 	if err != nil {
 		log.Fatalf("Error migrating database: %v", err)
+	}
+
+	// Run historical stats migration
+	err = services.RunHistoricalStatsMigration(db)
+	if err != nil {
+		log.Printf("Error running historical stats migration: %v", err)
+		// Don't fatal here - allow app to continue even if migration fails
 	}
 
 	token := os.Getenv("DISCORD_BOT_TOKEN")

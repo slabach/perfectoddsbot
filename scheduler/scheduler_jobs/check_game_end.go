@@ -209,6 +209,7 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB) error {
 	db.Where("bet_id = ?", bet.ID).Find(&entries)
 
 	totalPayout := 0.0
+	lostPoolAmount := 0.0
 	for _, entry := range entries {
 		var user models.User
 		db.First(&user, "id = ?", entry.UserID)
@@ -227,6 +228,8 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB) error {
 		if entry.AutoCloseWin {
 			payout := common.CalculatePayout(entry.Amount, entry.Option, bet)
 			user.Points += payout
+			user.TotalBetsWon++
+			user.TotalPointsWon += payout
 			db.Save(&user)
 			totalPayout += payout
 
@@ -234,8 +237,17 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB) error {
 				winnersList += fmt.Sprintf("%s - Bet: %s %s - **Won $%.1f**\n", username, betOption, common.FormatOdds(spread), payout)
 			}
 		} else {
+			user.TotalBetsLost++
+			user.TotalPointsLost += float64(entry.Amount)
+			db.Save(&user)
+			lostPoolAmount += float64(entry.Amount)
 			loserList += fmt.Sprintf("%s - Bet: %s %s - **Lost $%d**\n", username, betOption, common.FormatOdds(spread), entry.Amount)
 		}
+	}
+
+	// Add lost bet amounts to guild pool (atomic update to prevent race conditions)
+	if lostPoolAmount > 0 {
+		db.Model(&models.Guild{}).Where("id = ?", guild.ID).UpdateColumn("pool", gorm.Expr("pool + ?", lostPoolAmount))
 	}
 
 	bet.Active = false

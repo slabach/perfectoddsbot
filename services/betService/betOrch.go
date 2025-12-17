@@ -6,6 +6,7 @@ import (
 
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/common"
+	"perfectOddsBot/services/guildService"
 	"perfectOddsBot/services/messageService"
 
 	"github.com/bwmarrin/discordgo"
@@ -121,10 +122,19 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 		return
 	}
 
+	// Get guild info for pool accumulation
+	guild, err := guildService.GetGuildInfo(s, db, bet.GuildID, bet.ChannelID)
+	if err != nil {
+		common.SendError(s, i, err, db)
+		return
+	}
+
+	// Get all entries for this bet
 	var entries []models.BetEntry
-	db.Where("bet_id = ? AND `option` = ?", bet.ID, winningOption).Find(&entries)
+	db.Where("bet_id = ?", bet.ID).Find(&entries)
 
 	totalPayout := 0.0
+	lostPoolAmount := 0.0
 	for _, entry := range entries {
 		var user models.User
 		db.First(&user, "id = ?", entry.UserID)
@@ -132,15 +142,31 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 			continue
 		}
 
-		payout := common.CalculatePayout(entry.Amount, winningOption, bet)
-		user.Points += payout
-		db.Save(&user)
-		totalPayout += payout
+		if entry.Option == winningOption {
+			// Winning entry - calculate payout
+			payout := common.CalculatePayout(entry.Amount, winningOption, bet)
+			user.Points += payout
+			user.TotalBetsWon++
+			user.TotalPointsWon += payout
+			db.Save(&user)
+			totalPayout += payout
 
-		if payout > 0 {
-			username := common.GetUsername(s, user.GuildID, user.DiscordID)
-			winnersList += fmt.Sprintf("%s - Won $%.1f\n", username, payout)
+			if payout > 0 {
+				username := common.GetUsername(s, user.GuildID, user.DiscordID)
+				winnersList += fmt.Sprintf("%s - Won $%.1f\n", username, payout)
+			}
+		} else {
+			// Losing entry - add to pool
+			user.TotalBetsLost++
+			user.TotalPointsLost += float64(entry.Amount)
+			db.Save(&user)
+			lostPoolAmount += float64(entry.Amount)
 		}
+	}
+
+	// Add lost bet amounts to guild pool (atomic update to prevent race conditions)
+	if lostPoolAmount > 0 {
+		db.Model(&models.Guild{}).Where("id = ?", guild.ID).UpdateColumn("pool", gorm.Expr("pool + ?", lostPoolAmount))
 	}
 
 	bet.Active = false
@@ -159,7 +185,7 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 		winnersText,
 		"",
 	)
-	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Embeds: []*discordgo.MessageEmbed{embed},
