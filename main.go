@@ -229,9 +229,9 @@ func messageReactionAdd(s *discordgo.Session, r *discordgo.MessageReactionAdd) {
 	}
 
 	// 2. Ignore bot messages and self-reactions
-	// if m.Author.Bot || m.Author.ID == r.UserID {
-	// 	return
-	// }
+	if m.Author.Bot || m.Author.ID == r.UserID {
+		return
+	}
 
 	// 3. Get Guild Info
 	guild, err := guildService.GetGuildInfo(s, db, r.GuildID, r.ChannelID)
