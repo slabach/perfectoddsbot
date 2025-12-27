@@ -5,6 +5,7 @@ import (
 	"log"
 	"perfectOddsBot/models"
 	"perfectOddsBot/models/external"
+	"perfectOddsBot/services/betService"
 	"perfectOddsBot/services/common"
 	"perfectOddsBot/services/extService"
 	"perfectOddsBot/services/guildService"
@@ -216,7 +217,7 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB) error {
 		if user.ID == 0 {
 			continue
 		}
-		username := common.GetUsername(s, user.GuildID, user.DiscordID)
+		username := common.GetUsernameWithDB(db, s, user.GuildID, user.DiscordID)
 
 		betOption := common.GetSchoolName(bet.Option1)
 		spread := *entry.Spread
@@ -253,6 +254,25 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB) error {
 	bet.Active = false
 	db.Save(&bet)
 	db.Model(&bet).UpdateColumn("paid", true).UpdateColumn("active", false)
+
+	// Determine winning option for parlay updates
+	// Check which option has winning entries
+	winningOption := 0
+	for _, entry := range entries {
+		if entry.AutoCloseWin {
+			winningOption = entry.Option
+			break // All winning entries should have the same option
+		}
+	}
+	
+	// Update parlays if we determined a winning option
+	if winningOption > 0 {
+		updateErr := betService.UpdateParlaysOnBetResolution(s, db, bet.ID, winningOption)
+		if updateErr != nil {
+			// Log error but don't fail the bet resolution
+			log.Printf("Error updating parlays for bet %d: %v\n", bet.ID, updateErr)
+		}
+	}
 
 	embed := messageService.BuildBetResolutionEmbed(
 		bet.Description,

@@ -1,6 +1,7 @@
 package interactionService
 
 import (
+	"perfectOddsBot/services/betService"
 	"perfectOddsBot/services/common"
 	"strings"
 
@@ -98,6 +99,38 @@ func HandleComponentInteraction(s *discordgo.Session, i *discordgo.InteractionCr
 		}
 		return
 	}
+
+	if strings.HasPrefix(customID, "parlay_select_bets_") {
+		err := betService.HandleParlayBetSelection(s, i, db, customID)
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
+
+	if strings.HasPrefix(customID, "parlay_option_") {
+		err := betService.HandleParlayOptionSelection(s, i, db, customID)
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
+
+	if strings.HasPrefix(customID, "parlay_submit_") {
+		err := betService.HandleParlaySubmit(s, i, db, customID)
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
+
+	if strings.HasPrefix(customID, "parlay_cancel_") {
+		err := betService.HandleParlayCancel(s, i, db, customID)
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
 }
 
 func HandleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
@@ -113,6 +146,14 @@ func HandleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, db 
 
 	if strings.HasPrefix(customID, "submit_bet_") {
 		err := SubmitBet(s, i, db, customID)
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
+
+	if strings.HasPrefix(customID, "parlay_amount_") {
+		err := betService.HandleParlayAmount(s, i, db, customID)
 		if err != nil {
 			common.SendError(s, i, err, db)
 		}

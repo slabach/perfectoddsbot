@@ -2,12 +2,13 @@ package services
 
 import (
 	"fmt"
-	"github.com/bwmarrin/discordgo"
-	"gorm.io/gorm"
 	"perfectOddsBot/services/betService"
 	"perfectOddsBot/services/extService"
 	"perfectOddsBot/services/guildService"
 	"perfectOddsBot/services/interactionService"
+
+	"github.com/bwmarrin/discordgo"
+	"gorm.io/gorm"
 )
 
 func HandleSlashCommand(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
@@ -42,6 +43,10 @@ func HandleSlashCommand(s *discordgo.Session, i *discordgo.InteractionCreate, db
 		betService.CreateCBBBetSelector(s, i, db)
 	case "subscribe-to-team":
 		interactionService.TeamSubscriptionMessage(s, i, db)
+	case "create-parlay":
+		betService.CreateParlaySelector(s, i, db)
+	case "my-parlays":
+		betService.MyParlays(s, i, db)
 	}
 }
 
@@ -164,6 +169,14 @@ func RegisterCommands(s *discordgo.Session) error {
 		{
 			Name:        "subscribe-to-team",
 			Description: "★ Choose a College team to subscribe to all CFB & CBB events for (PREMIUM)",
+		},
+		{
+			Name:        "create-parlay",
+			Description: "Create a parlay by combining multiple open bets",
+		},
+		{
+			Name:        "my-parlays",
+			Description: "Show your active parlays",
 		},
 	}
 

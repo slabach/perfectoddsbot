@@ -16,13 +16,12 @@ import (
 )
 
 func IsAdmin(s *discordgo.Session, i *discordgo.InteractionCreate) bool {
-	member, err := s.GuildMember(i.GuildID, i.Member.User.ID)
-	if err != nil {
-		log.Printf("Error fetching guild member: %v", err)
+	// Use member data from the interaction - no privileged intent needed
+	if i.Member == nil {
 		return false
 	}
 
-	for _, roleID := range member.Roles {
+	for _, roleID := range i.Member.Roles {
 		role, err := s.State.Role(i.GuildID, roleID)
 		if err != nil || role == nil {
 			roles, err := s.GuildRoles(i.GuildID)
@@ -106,17 +105,96 @@ func CalculatePayout(amount int, option int, bet models.Bet) float64 {
 	return float64(amount + (amount*100)/-odds)
 }
 
-func GetUsername(s *discordgo.Session, guildId string, userId string) string {
-	member, err := s.GuildMember(guildId, userId)
-	username := "Unknown User"
-	if err == nil {
-		username = member.User.GlobalName
-	}
-	if username == "" {
-		username = member.User.Username
+// CalculateParlayOddsMultiplier calculates the combined odds multiplier for a parlay
+// Takes a slice of odds (as integers in American format) and returns the multiplier
+func CalculateParlayOddsMultiplier(oddsList []int) float64 {
+	if len(oddsList) == 0 {
+		return 1.0
 	}
 
+	multiplier := 1.0
+	for _, odds := range oddsList {
+		if odds > 0 {
+			// Positive odds: multiplier = (odds/100) + 1
+			multiplier *= (float64(odds) / 100.0) + 1.0
+		} else {
+			// Negative odds: multiplier = (100/abs(odds)) + 1
+			multiplier *= (100.0 / float64(-odds)) + 1.0
+		}
+	}
+
+	return multiplier
+}
+
+// CalculateParlayPayout calculates the payout for a parlay given the amount and odds multiplier
+func CalculateParlayPayout(amount int, oddsMultiplier float64) float64 {
+	return float64(amount) * oddsMultiplier
+}
+
+// GetOddsFromBet returns the odds for a specific option in a bet
+func GetOddsFromBet(bet models.Bet, option int) int {
+	if option == 1 {
+		return bet.Odds1
+	}
+	return bet.Odds2
+}
+
+// GetUsernameFromUser extracts username from a discordgo.User object
+func GetUsernameFromUser(user *discordgo.User) string {
+	if user == nil {
+		return "Unknown User"
+	}
+	username := user.GlobalName
+	if username == "" {
+		username = user.Username
+	}
+	if username == "" {
+		return "Unknown User"
+	}
 	return username
+}
+
+// UpdateUserUsername updates the username field in the database if it's different
+func UpdateUserUsername(db *gorm.DB, user *models.User, username string) {
+	if user.Username == nil || *user.Username != username {
+		user.Username = &username
+		db.Save(user)
+	}
+}
+
+func GetUsername(s *discordgo.Session, guildId string, userId string) string {
+	// This function is deprecated - use GetUsernameWithDB instead
+	// Try to get from guild member if available in state (without members intent, this may be empty)
+	if guild, err := s.State.Guild(guildId); err == nil && guild != nil {
+		for _, member := range guild.Members {
+			if member.User != nil && member.User.ID == userId {
+				return GetUsernameFromUser(member.User)
+			}
+		}
+	}
+	return "Unknown User"
+}
+
+// GetUsernameWithDB gets username from database first, then falls back to state cache
+func GetUsernameWithDB(db *gorm.DB, s *discordgo.Session, guildId string, userId string) string {
+	// First try to get from database (most reliable)
+	var user models.User
+	if err := db.Where("discord_id = ? AND guild_id = ?", userId, guildId).First(&user).Error; err == nil {
+		if user.Username != nil && *user.Username != "" {
+			return *user.Username
+		}
+	}
+
+	// Fallback to state cache (limited without members intent)
+	if guild, err := s.State.Guild(guildId); err == nil && guild != nil {
+		for _, member := range guild.Members {
+			if member.User != nil && member.User.ID == userId {
+				return GetUsernameFromUser(member.User)
+			}
+		}
+	}
+
+	return "Unknown User"
 }
 
 func CFBDWrapper(requestUrl string) (*http.Response, error) {

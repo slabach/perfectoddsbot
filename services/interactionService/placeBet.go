@@ -6,6 +6,7 @@ import (
 	"gorm.io/gorm"
 	"math"
 	"perfectOddsBot/models"
+	"perfectOddsBot/services/common"
 )
 
 func PlaceBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, customID string) error {
@@ -22,6 +23,10 @@ func PlaceBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB,
 	if result.Error != nil {
 		return result.Error
 	}
+	
+	// Update username from interaction member
+	username := common.GetUsernameFromUser(i.Member.User)
+	common.UpdateUserUsername(db, &user, username)
 
 	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseModal,

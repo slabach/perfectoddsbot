@@ -49,13 +49,16 @@ func SubmitBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 	guildID := i.GuildID
 
 	var user models.User
-	username := common.GetUsername(s, guildID, userID)
 	result := db.FirstOrCreate(&user, models.User{DiscordID: userID, GuildID: guildID})
 	if result.RowsAffected == 1 {
 		user.Points = guild.StartingPoints
-		if user.Username == nil {
-			user.Username = &username
-		}
+	}
+	
+	// Update username from interaction member (always update to keep it current)
+	username := common.GetUsernameFromUser(i.Member.User)
+	common.UpdateUserUsername(db, &user, username)
+	
+	if result.RowsAffected == 1 {
 		db.Save(&user)
 	}
 
