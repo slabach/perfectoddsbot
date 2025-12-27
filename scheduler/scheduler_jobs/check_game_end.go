@@ -108,12 +108,25 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 					if entriesResult.RowsAffected == 0 {
 						bet.Paid = true
 						db.Save(&bet)
-						continue
 					}
 
 					for _, entry := range betEntries {
-						spread := *entry.Spread
-						won := calculateBetEntryWin(entry.Option, scoreDiff, spread)
+						var won bool
+						if bet.Spread == nil {
+							// Moneyline bet: winner is determined by actual game result
+							// Option 1 is home team, Option 2 is away team
+							if entry.Option == 1 {
+								// Home team wins if home score > away score
+								won = scoreDiff > 0
+							} else {
+								// Away team wins if away score > home score
+								won = scoreDiff < 0
+							}
+						} else {
+							// ATS bet: use spread-based calculation
+							spread := *entry.Spread
+							won = calculateBetEntryWin(entry.Option, scoreDiff, spread)
+						}
 
 						if won {
 							entry.AutoCloseWin = true
@@ -177,8 +190,20 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 					// scoreDiff is now relative to Option 1: (Option1Score - Option2Score)
 					scoreDiff := score1 - score2
 					for _, entry := range betEntries {
-						spread := *entry.Spread
-						won := calculateBetEntryWin(entry.Option, scoreDiff, spread)
+						var won bool
+						if bet.Spread == nil {
+							// Moneyline bet: winner is determined by actual game result
+							// Option 1 wins if score1 > score2, Option 2 wins if score2 > score1
+							if entry.Option == 1 {
+								won = scoreDiff > 0
+							} else {
+								won = scoreDiff < 0
+							}
+						} else {
+							// ATS bet: use spread-based calculation
+							spread := *entry.Spread
+							won = calculateBetEntryWin(entry.Option, scoreDiff, spread)
+						}
 
 						if won {
 							entry.AutoCloseWin = true
@@ -220,9 +245,18 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB) error {
 		username := common.GetUsernameWithDB(db, s, user.GuildID, user.DiscordID)
 
 		betOption := common.GetSchoolName(bet.Option1)
-		spread := *entry.Spread
+		var spreadDisplay string
+		if bet.Spread == nil {
+			// Moneyline bet: no spread to display
+			spreadDisplay = ""
+		} else {
+			spread := *entry.Spread
+			if entry.Option == 2 {
+				spread = *entry.Spread * -1
+			}
+			spreadDisplay = common.FormatOdds(spread)
+		}
 		if entry.Option == 2 {
-			spread = *entry.Spread * -1
 			betOption = common.GetSchoolName(bet.Option2)
 		}
 
@@ -235,14 +269,22 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB) error {
 			totalPayout += payout
 
 			if payout > 0 {
-				winnersList += fmt.Sprintf("%s - Bet: %s %s - **Won $%.1f**\n", username, betOption, common.FormatOdds(spread), payout)
+				if spreadDisplay != "" {
+					winnersList += fmt.Sprintf("%s - Bet: %s %s - **Won $%.1f**\n", username, betOption, spreadDisplay, payout)
+				} else {
+					winnersList += fmt.Sprintf("%s - Bet: %s - **Won $%.1f**\n", username, betOption, payout)
+				}
 			}
 		} else {
 			user.TotalBetsLost++
 			user.TotalPointsLost += float64(entry.Amount)
 			db.Save(&user)
 			lostPoolAmount += float64(entry.Amount)
-			loserList += fmt.Sprintf("%s - Bet: %s %s - **Lost $%d**\n", username, betOption, common.FormatOdds(spread), entry.Amount)
+			if spreadDisplay != "" {
+				loserList += fmt.Sprintf("%s - Bet: %s %s - **Lost $%d**\n", username, betOption, spreadDisplay, entry.Amount)
+			} else {
+				loserList += fmt.Sprintf("%s - Bet: %s - **Lost $%d**\n", username, betOption, entry.Amount)
+			}
 		}
 	}
 
@@ -264,7 +306,7 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB) error {
 			break // All winning entries should have the same option
 		}
 	}
-	
+
 	// Update parlays if we determined a winning option
 	if winningOption > 0 {
 		updateErr := betService.UpdateParlaysOnBetResolution(s, db, bet.ID, winningOption)

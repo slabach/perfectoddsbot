@@ -250,7 +250,8 @@ func HandleCBBGameSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, d
 		return err
 	}
 
-	err = betService.CreateCBBBetFromGameID(s, i, db, gameIDInt)
+	// Show bet type selection screen instead of directly creating bet
+	err = betService.ShowCBBBetTypeSelection(s, i, db, gameIDInt)
 	if err != nil {
 		common.SendError(s, i, err, db)
 		return err
@@ -275,7 +276,8 @@ func HandleCFBGameSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, d
 		return err
 	}
 
-	err = betService.CreateCFBBetFromGameID(s, i, db, gameIDInt)
+	// Show bet type selection screen instead of directly creating bet
+	err = betService.ShowCFBBetTypeSelection(s, i, db, gameIDInt)
 	if err != nil {
 		common.SendError(s, i, err, db)
 		return err
@@ -325,6 +327,90 @@ func HandleCFBGameCancel(s *discordgo.Session, i *discordgo.InteractionCreate, d
 		return fmt.Errorf("error responding to cancel: %w", err)
 	}
 	
+	return nil
+}
+
+func HandleCBBBetTypeSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, customID string) error {
+	// Parse custom ID: cbb_bet_type_{ats|ml|cancel}_{betID}
+	// Format: "cbb_bet_type_ats_401817475" or "cbb_bet_type_ml_401817475" or "cbb_bet_type_cancel_401817475"
+	parts := strings.Split(customID, "_")
+	if len(parts) < 5 {
+		return fmt.Errorf("invalid bet type selection custom ID format: %s", customID)
+	}
+
+	betTypeStr := parts[3]
+	betIDStr := parts[4]
+
+	if betTypeStr == "cancel" {
+		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseUpdateMessage,
+			Data: &discordgo.InteractionResponseData{
+				Content: "❌ Bet creation cancelled.",
+				Components: []discordgo.MessageComponent{},
+			},
+		})
+		return err
+	}
+
+	betID, err := strconv.Atoi(betIDStr)
+	if err != nil {
+		common.SendError(s, i, err, db)
+		return err
+	}
+
+	betType := "ats"
+	if betTypeStr == "ml" {
+		betType = "moneyline"
+	}
+
+	err = betService.CreateCBBBetFromGameID(s, i, db, betID, betType)
+	if err != nil {
+		common.SendError(s, i, err, db)
+		return err
+	}
+
+	return nil
+}
+
+func HandleCFBBetTypeSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, customID string) error {
+	// Parse custom ID: cfb_bet_type_{ats|ml|cancel}_{betID}
+	// Format: "cfb_bet_type_ats_401778304" or "cfb_bet_type_ml_401778304" or "cfb_bet_type_cancel_401778304"
+	parts := strings.Split(customID, "_")
+	if len(parts) < 5 {
+		return fmt.Errorf("invalid bet type selection custom ID format: %s", customID)
+	}
+
+	betTypeStr := parts[3]
+	betIDStr := parts[4]
+
+	if betTypeStr == "cancel" {
+		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseUpdateMessage,
+			Data: &discordgo.InteractionResponseData{
+				Content: "❌ Bet creation cancelled.",
+				Components: []discordgo.MessageComponent{},
+			},
+		})
+		return err
+	}
+
+	betID, err := strconv.Atoi(betIDStr)
+	if err != nil {
+		common.SendError(s, i, err, db)
+		return err
+	}
+
+	betType := "ats"
+	if betTypeStr == "ml" {
+		betType = "moneyline"
+	}
+
+	err = betService.CreateCFBBetFromGameID(s, i, db, betID, betType)
+	if err != nil {
+		common.SendError(s, i, err, db)
+		return err
+	}
+
 	return nil
 }
 
