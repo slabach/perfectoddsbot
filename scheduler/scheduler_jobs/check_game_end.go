@@ -105,38 +105,69 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 
 					var betEntries []models.BetEntry
 					entriesResult := db.Where("bet_id = ?", bet.ID).Find(&betEntries)
-					if entriesResult.RowsAffected == 0 {
-						bet.Paid = true
-						db.Save(&bet)
-					}
 
-					for _, entry := range betEntries {
-						var won bool
-						if bet.Spread == nil {
-							// Moneyline bet: winner is determined by actual game result
-							// Option 1 is home team, Option 2 is away team
-							if entry.Option == 1 {
-								// Home team wins if home score > away score
-								won = scoreDiff > 0
-							} else {
-								// Away team wins if away score > home score
-								won = scoreDiff < 0
-							}
+					// Determine winning option even if there are no bet entries (for parlay updates)
+					winningOption := 0
+					if bet.Spread == nil {
+						// Moneyline bet: winner is determined by actual game result
+						// Option 1 is home team, Option 2 is away team
+						if scoreDiff > 0 {
+							winningOption = 1 // Home team wins
+						} else if scoreDiff < 0 {
+							winningOption = 2 // Away team wins
+						}
+					} else {
+						// ATS bet: determine winner based on spread
+						// For ATS, we need to check which option would win
+						// Option 1 is home team + spread, Option 2 is away team - spread
+						if calculateBetEntryWin(1, scoreDiff, *bet.Spread) {
+							winningOption = 1
 						} else {
-							// ATS bet: use spread-based calculation
-							spread := *entry.Spread
-							won = calculateBetEntryWin(entry.Option, scoreDiff, spread)
-						}
-
-						if won {
-							entry.AutoCloseWin = true
-							db.Save(&entry)
+							winningOption = 2
 						}
 					}
 
-					resolveErr := ResolveCFBBBet(s, bet, db)
-					if resolveErr != nil {
-						return resolveErr
+					if entriesResult.RowsAffected == 0 {
+						// No bet entries, but still need to update parlays
+						if winningOption > 0 {
+							updateErr := betService.UpdateParlaysOnBetResolution(s, db, bet.ID, winningOption)
+							if updateErr != nil {
+								log.Printf("Error updating parlays for bet %d: %v\n", bet.ID, updateErr)
+							}
+						}
+						bet.Paid = true
+						bet.Active = false
+						db.Save(&bet)
+					} else {
+						// Process bet entries
+						for _, entry := range betEntries {
+							var won bool
+							if bet.Spread == nil {
+								// Moneyline bet: winner is determined by actual game result
+								// Option 1 is home team, Option 2 is away team
+								if entry.Option == 1 {
+									// Home team wins if home score > away score
+									won = scoreDiff > 0
+								} else {
+									// Away team wins if away score > home score
+									won = scoreDiff < 0
+								}
+							} else {
+								// ATS bet: use spread-based calculation
+								spread := *entry.Spread
+								won = calculateBetEntryWin(entry.Option, scoreDiff, spread)
+							}
+
+							if won {
+								entry.AutoCloseWin = true
+								db.Save(&entry)
+							}
+						}
+
+						resolveErr := ResolveCFBBBet(s, bet, db)
+						if resolveErr != nil {
+							return resolveErr
+						}
 					}
 				}
 			}
@@ -147,11 +178,6 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 				if obj.Status.Type.Name == "STATUS_FINAL" {
 					var betEntries []models.BetEntry
 					entriesResult := db.Where("bet_id = ?", bet.ID).Find(&betEntries)
-					if entriesResult.RowsAffected == 0 {
-						bet.Paid = true
-						db.Save(&bet)
-						continue
-					}
 
 					// Robustly match Option 1 to the correct competitor by name
 					// instead of assuming Option 1 is always the "home" team from the API.
@@ -189,6 +215,40 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 
 					// scoreDiff is now relative to Option 1: (Option1Score - Option2Score)
 					scoreDiff := score1 - score2
+
+					// Determine winning option even if there are no bet entries (for parlay updates)
+					winningOption := 0
+					if bet.Spread == nil {
+						// Moneyline bet: winner is determined by actual game result
+						if scoreDiff > 0 {
+							winningOption = 1 // Option 1 wins
+						} else if scoreDiff < 0 {
+							winningOption = 2 // Option 2 wins
+						}
+					} else {
+						// ATS bet: determine winner based on spread
+						if calculateBetEntryWin(1, scoreDiff, *bet.Spread) {
+							winningOption = 1
+						} else {
+							winningOption = 2
+						}
+					}
+
+					if entriesResult.RowsAffected == 0 {
+						// No bet entries, but still need to update parlays
+						if winningOption > 0 {
+							updateErr := betService.UpdateParlaysOnBetResolution(s, db, bet.ID, winningOption)
+							if updateErr != nil {
+								log.Printf("Error updating parlays for bet %d: %v\n", bet.ID, updateErr)
+							}
+						}
+						bet.Paid = true
+						bet.Active = false
+						db.Save(&bet)
+						continue
+					}
+
+					// Process bet entries
 					for _, entry := range betEntries {
 						var won bool
 						if bet.Spread == nil {

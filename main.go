@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"perfectOddsBot/models"
 	"perfectOddsBot/scheduler"
@@ -125,6 +126,7 @@ func runApp() {
 
 	dg.AddHandler(interactionCreate)
 	dg.AddHandler(messageCreate)
+	dg.AddHandler(messageReactionAdd)
 	dg.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
 		err := s.UpdateGameStatus(0, "Managing Bets!")
 		if err != nil {
@@ -216,4 +218,59 @@ func interactionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	case discordgo.InteractionModalSubmit:
 		interactionService.HandleModalSubmit(s, i, db)
 	}
+}
+
+func messageReactionAdd(s *discordgo.Session, r *discordgo.MessageReactionAdd) {
+	// 1. Fetch the message to identify the author and count reactions
+	m, err := s.ChannelMessage(r.ChannelID, r.MessageID)
+	if err != nil {
+		log.Printf("Error fetching message for reaction: %v", err)
+		return
+	}
+
+	// 2. Ignore bot messages and self-reactions
+	// if m.Author.Bot || m.Author.ID == r.UserID {
+	// 	return
+	// }
+
+	// 3. Get Guild Info
+	guild, err := guildService.GetGuildInfo(s, db, r.GuildID, r.ChannelID)
+	if err != nil {
+		log.Printf("Error getting guild info: %v", err)
+		return
+	}
+
+	// 4. Find or Create the User (Author of the message)
+	var user models.User
+	result := db.FirstOrCreate(&user, models.User{DiscordID: m.Author.ID, GuildID: r.GuildID})
+	if result.Error != nil {
+		log.Printf("Error fetching user: %v", result.Error)
+		return
+	}
+
+	if result.RowsAffected == 1 {
+		user.Points = guild.StartingPoints
+	}
+
+	// 5. Calculate Total Reactions
+	totalReactions := 0
+	for _, reaction := range m.Reactions {
+		totalReactions += reaction.Count
+	}
+
+	// 6. Calculate Exponential Bonus
+	// Award = P * 2^(totalReactions - 1)
+	if totalReactions > 0 {
+		multiplier := math.Pow(2, float64(totalReactions-1))
+		bonusPoints := guild.PointsPerMessage * multiplier
+		user.Points += bonusPoints
+	}
+
+	// Update username if needed
+	if user.Username == nil || *user.Username != m.Author.Username {
+		username := common.GetUsernameFromUser(m.Author)
+		user.Username = &username
+	}
+
+	db.Save(&user)
 }
