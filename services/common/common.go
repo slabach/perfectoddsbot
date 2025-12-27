@@ -105,6 +105,40 @@ func CalculatePayout(amount int, option int, bet models.Bet) float64 {
 	return float64(amount + (amount*100)/-odds)
 }
 
+// CalculateParlayOddsMultiplier calculates the combined odds multiplier for a parlay
+// Takes a slice of odds (as integers in American format) and returns the multiplier
+func CalculateParlayOddsMultiplier(oddsList []int) float64 {
+	if len(oddsList) == 0 {
+		return 1.0
+	}
+
+	multiplier := 1.0
+	for _, odds := range oddsList {
+		if odds > 0 {
+			// Positive odds: multiplier = (odds/100) + 1
+			multiplier *= (float64(odds) / 100.0) + 1.0
+		} else {
+			// Negative odds: multiplier = (100/abs(odds)) + 1
+			multiplier *= (100.0 / float64(-odds)) + 1.0
+		}
+	}
+
+	return multiplier
+}
+
+// CalculateParlayPayout calculates the payout for a parlay given the amount and odds multiplier
+func CalculateParlayPayout(amount int, oddsMultiplier float64) float64 {
+	return float64(amount) * oddsMultiplier
+}
+
+// GetOddsFromBet returns the odds for a specific option in a bet
+func GetOddsFromBet(bet models.Bet, option int) int {
+	if option == 1 {
+		return bet.Odds1
+	}
+	return bet.Odds2
+}
+
 // GetUsernameFromUser extracts username from a discordgo.User object
 func GetUsernameFromUser(user *discordgo.User) string {
 	if user == nil {

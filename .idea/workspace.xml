@@ -4,7 +4,7 @@
     <option name="autoReloadType" value="ALL" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="bd392634-edfc-4939-9193-cbe764a8640f" name="Changes" comment="only list incomplete games that have a line" />
+    <list default="true" id="bd392634-edfc-4939-9193-cbe764a8640f" name="Changes" comment="a" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -136,7 +136,8 @@
     <MESSAGE value="fix dtos" />
     <MESSAGE value="remove B12 for now" />
     <MESSAGE value="only list incomplete games that have a line" />
-    <option name="LAST_COMMIT_MESSAGE" value="only list incomplete games that have a line" />
+    <MESSAGE value="a" />
+    <option name="LAST_COMMIT_MESSAGE" value="a" />
   </component>
   <component name="VgoProject">
     <settings-migrated>true</settings-migrated>

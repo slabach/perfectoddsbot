@@ -172,6 +172,13 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 	bet.Active = false
 	db.Model(&bet).UpdateColumn("paid", true).UpdateColumn("active", false)
 
+	// Update any parlays that include this bet
+	err = UpdateParlaysOnBetResolution(s, db, bet.ID, winningOption)
+	if err != nil {
+		// Log error but don't fail the bet resolution
+		fmt.Printf("Error updating parlays for bet %d: %v\n", bet.ID, err)
+	}
+
 	winningOptionName := bet.Option1
 	if winningOption == 2 {
 		winningOptionName = bet.Option2
