@@ -131,7 +131,7 @@ func runApp() {
 		}
 	})
 
-	dg.Identify.Intents = discordgo.IntentsGuildPresences | discordgo.IntentsGuildMembers | discordgo.IntentsGuildMessages | discordgo.IntentsGuildMessageReactions
+	dg.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsGuildMessageReactions
 
 	err = dg.Open()
 	if err != nil {
@@ -191,6 +191,10 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if result.RowsAffected == 1 {
 		user.Points = guild.StartingPoints
 	}
+
+	// Update username from message author
+	username := common.GetUsernameFromUser(m.Author)
+	common.UpdateUserUsername(db, &user, username)
 
 	user.Points += guild.PointsPerMessage
 	db.Save(&user)

@@ -24,6 +24,13 @@ func ShowPoints(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.D
 	result := db.FirstOrCreate(&user, models.User{DiscordID: userID, GuildID: guildID})
 	if result.RowsAffected == 1 {
 		user.Points = guild.StartingPoints
+	}
+	
+	// Update username from interaction member
+	username := common.GetUsernameFromUser(i.Member.User)
+	common.UpdateUserUsername(db, &user, username)
+	
+	if result.RowsAffected == 1 {
 		db.Save(&user)
 	}
 
@@ -86,6 +93,10 @@ func GivePoints(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.D
 	if result.RowsAffected == 1 {
 		user.Points = guild.StartingPoints
 	}
+
+	// Update username from target user
+	username := common.GetUsernameFromUser(targetUser)
+	common.UpdateUserUsername(db, &user, username)
 
 	user.Points += float64(amount)
 	db.Save(&user)

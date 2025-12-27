@@ -216,7 +216,7 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB) error {
 		if user.ID == 0 {
 			continue
 		}
-		username := common.GetUsername(s, user.GuildID, user.DiscordID)
+		username := common.GetUsernameWithDB(db, s, user.GuildID, user.DiscordID)
 
 		betOption := common.GetSchoolName(bet.Option1)
 		spread := *entry.Spread

@@ -152,7 +152,7 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 			totalPayout += payout
 
 			if payout > 0 {
-				username := common.GetUsername(s, user.GuildID, user.DiscordID)
+				username := common.GetUsernameWithDB(db, s, user.GuildID, user.DiscordID)
 				winnersList += fmt.Sprintf("%s - Won $%.1f\n", username, payout)
 			}
 		} else {
