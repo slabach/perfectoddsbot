@@ -100,6 +100,22 @@ func HandleComponentInteraction(s *discordgo.Session, i *discordgo.InteractionCr
 		return
 	}
 
+	if strings.HasPrefix(customID, "cbb_bet_type_") {
+		err := HandleCBBBetTypeSelection(s, i, db, customID)
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
+
+	if strings.HasPrefix(customID, "cfb_bet_type_") {
+		err := HandleCFBBetTypeSelection(s, i, db, customID)
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
+
 	if strings.HasPrefix(customID, "parlay_select_bets_") {
 		err := betService.HandleParlayBetSelection(s, i, db, customID)
 		if err != nil {

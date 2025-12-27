@@ -861,8 +861,13 @@ func UpdateParlaysOnBetResolution(s *discordgo.Session, db *gorm.DB, betID uint,
 			user.TotalPointsLost += float64(parlay.Amount)
 			db.Save(&user)
 
-			// Send notification if parlay just became fully resolved
+			// Add lost parlay amount to guild pool if parlay just became fully resolved
 			if previousStatus != "lost" && previousStatus != "won" {
+				guild, guildErr := guildService.GetGuildInfo(s, db, parlay.GuildID, "")
+				if guildErr == nil {
+					// Add lost parlay amount to guild pool (atomic update to prevent race conditions)
+					db.Model(&models.Guild{}).Where("id = ?", guild.ID).UpdateColumn("pool", gorm.Expr("pool + ?", float64(parlay.Amount)))
+				}
 				sendParlayResolutionNotification(s, db, parlay, false)
 			}
 		} else if allResolved {
@@ -877,8 +882,13 @@ func UpdateParlaysOnBetResolution(s *discordgo.Session, db *gorm.DB, betID uint,
 				user.TotalPointsLost += float64(parlay.Amount)
 				db.Save(&user)
 
-				// Send notification if parlay just became fully resolved
+				// Add lost parlay amount to guild pool if parlay just became fully resolved
 				if previousStatus != "lost" && previousStatus != "won" {
+					guild, guildErr := guildService.GetGuildInfo(s, db, parlay.GuildID, "")
+					if guildErr == nil {
+						// Add lost parlay amount to guild pool (atomic update to prevent race conditions)
+						db.Model(&models.Guild{}).Where("id = ?", guild.ID).UpdateColumn("pool", gorm.Expr("pool + ?", float64(parlay.Amount)))
+					}
 					sendParlayResolutionNotification(s, db, parlay, false)
 				}
 			} else {

@@ -305,9 +305,19 @@ func Contains[T comparable](s []T, e T) bool {
 func PickLine(lines []external.CFBD_Line) (*external.CFBD_Line, error) {
 	preferredProviders := []string{"ESPN Bet", "Draft Kings", "DraftKings", "Bovada"}
 
+	// First pass: prefer lines with both spread and moneyline data
 	for _, provider := range preferredProviders {
 		for _, line := range lines {
-			if line.Provider == provider {
+			if line.Provider == provider && line.Spread != nil && line.HomeMoneyline != nil && line.AwayMoneyline != nil {
+				return &line, nil
+			}
+		}
+	}
+
+	// Second pass: any line from preferred provider with spread
+	for _, provider := range preferredProviders {
+		for _, line := range lines {
+			if line.Provider == provider && line.Spread != nil {
 				return &line, nil
 			}
 		}
@@ -319,6 +329,16 @@ func PickLine(lines []external.CFBD_Line) (*external.CFBD_Line, error) {
 func PickESPNLine(lines external.ESPN_Lines) (*external.ESPN_Line, error) {
 	preferredProviders := []string{"ESPN BET", "Draft Kings", "DraftKings", "Bovada"}
 
+	// First pass: prefer lines with both spread and moneyline data
+	for _, provider := range preferredProviders {
+		for _, line := range lines.Items {
+			if line.Provider.Name == provider && line.HomeTeamOdds.MoneyLine != 0 && line.AwayTeamOdds.MoneyLine != 0 {
+				return &line, nil
+			}
+		}
+	}
+
+	// Second pass: any line from preferred provider
 	for _, provider := range preferredProviders {
 		for _, line := range lines.Items {
 			if line.Provider.Name == provider {

@@ -147,7 +147,7 @@ func CreateCBBBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 
 	buttons := messageService.GetBetOnlyButtonsList(dbBet.Option1, dbBet.Option2, dbBet.ID)
 	embed := &discordgo.MessageEmbed{
-		Title:       fmt.Sprint("📢 New CBB Bet Created (Will Auto Close & Resolve)"),
+		Title:       "📢 New CBB Bet Created (Will Auto Close & Resolve)",
 		Description: dbBet.Description,
 		Fields: []*discordgo.MessageEmbedField{
 			{
@@ -355,7 +355,116 @@ func CreateCBBBetSelector(s *discordgo.Session, i *discordgo.InteractionCreate, 
 	return
 }
 
-func CreateCBBBetFromGameID(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, betID int) error {
+func ShowCBBBetTypeSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, betID int) error {
+	// Fetch game and line data
+	linesList, err := extService.GetCbbLines(betID)
+	if err != nil {
+		return err
+	}
+
+	line, err := common.PickESPNLine(linesList)
+	if err != nil {
+		return err
+	}
+
+	espnID := strconv.Itoa(betID)
+	cbbEvent, err := extService.GetCbbGame(espnID)
+	if err != nil {
+		return err
+	}
+
+	homeTeam := ""
+	awayTeam := ""
+	for _, competitor := range cbbEvent.Competitions[0].Competitors {
+		if competitor.HomeAway == "home" {
+			homeTeam = competitor.Team.ShortDisplayName
+		}
+		if competitor.HomeAway == "away" {
+			awayTeam = competitor.Team.ShortDisplayName
+		}
+	}
+
+	// Get spread and odds for ATS
+	spreadValue := line.Spread
+	homeSpreadOdds := -110
+	awaySpreadOdds := -110
+	if line.HomeTeamOdds.SpreadOdds != 0 {
+		homeSpreadOdds = int(line.HomeTeamOdds.SpreadOdds)
+	}
+	if line.AwayTeamOdds.SpreadOdds != 0 {
+		awaySpreadOdds = int(line.AwayTeamOdds.SpreadOdds)
+	}
+
+	// Get moneyline odds
+	homeMoneyline := line.HomeTeamOdds.MoneyLine
+	awayMoneyline := line.AwayTeamOdds.MoneyLine
+
+	// Format spread for display
+	spreadDisplay := common.FormatOdds(spreadValue)
+	if spreadValue > 0 {
+		spreadDisplay = "+" + spreadDisplay
+	}
+
+	// Build embed with both bet type options
+	description := fmt.Sprintf("**%s @ %s**\n\nSelect the type of bet you want to create:", awayTeam, homeTeam)
+
+	atsField := fmt.Sprintf("**ATS (Against The Spread)**\n1️⃣ %s %s (Odds: %s)\n2️⃣ %s %s (Odds: %s)",
+		homeTeam, common.FormatOdds(spreadValue), common.FormatOdds(float64(homeSpreadOdds)),
+		awayTeam, common.FormatOdds(spreadValue*-1), common.FormatOdds(float64(awaySpreadOdds)))
+
+	moneylineField := fmt.Sprintf("**Moneyline**\n1️⃣ %s (Odds: %s)\n2️⃣ %s (Odds: %s)",
+		homeTeam, common.FormatOdds(float64(homeMoneyline)),
+		awayTeam, common.FormatOdds(float64(awayMoneyline)))
+
+	embed := &discordgo.MessageEmbed{
+		Title:       "Select Bet Type",
+		Description: description,
+		Fields: []*discordgo.MessageEmbedField{
+			{
+				Name:  "📊 ATS Bet",
+				Value: atsField,
+			},
+			{
+				Name:  "💰 Moneyline Bet",
+				Value: moneylineField,
+			},
+		},
+		Color: 0x3498db,
+	}
+
+	// Create buttons for bet type selection
+	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseUpdateMessage,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{embed},
+			Components: []discordgo.MessageComponent{
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{
+						discordgo.Button{
+							Label:    "Create ATS Bet",
+							CustomID: fmt.Sprintf("cbb_bet_type_ats_%d", betID),
+							Style:    discordgo.PrimaryButton,
+						},
+						discordgo.Button{
+							Label:    "Create Moneyline Bet",
+							CustomID: fmt.Sprintf("cbb_bet_type_ml_%d", betID),
+							Style:    discordgo.SuccessButton,
+						},
+						discordgo.Button{
+							Label:    "Cancel",
+							CustomID: fmt.Sprintf("cbb_bet_type_cancel_%d", betID),
+							Style:    discordgo.DangerButton,
+						},
+					},
+				},
+			},
+		},
+	})
+
+	return err
+}
+
+func CreateCBBBetFromGameID(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, betID int, betType string) error {
 	guildID := i.GuildID
 
 	guild, err := guildService.GetGuildInfo(s, db, guildID, i.ChannelID)
@@ -367,9 +476,15 @@ func CreateCBBBetFromGameID(s *discordgo.Session, i *discordgo.InteractionCreate
 	}
 
 	var dbBet models.Bet
-	result := db.
-		Where("espn_id = ? AND paid = 0 AND guild_id = ?", betID, i.GuildID).
-		Find(&dbBet)
+	// Check for existing bet of the same type (ATS has spread, Moneyline doesn't)
+	var result *gorm.DB
+	if betType == "moneyline" || betType == "ml" {
+		// Looking for Moneyline bet (spread IS NULL)
+		result = db.Where("espn_id = ? AND paid = 0 AND guild_id = ? AND spread IS NULL", betID, i.GuildID).Find(&dbBet)
+	} else {
+		// Looking for ATS bet (spread IS NOT NULL)
+		result = db.Where("espn_id = ? AND paid = 0 AND guild_id = ? AND spread IS NOT NULL", betID, i.GuildID).Find(&dbBet)
+	}
 	if result.Error != nil {
 		return result.Error
 	}
@@ -405,52 +520,96 @@ func CreateCBBBetFromGameID(s *discordgo.Session, i *discordgo.InteractionCreate
 		espnDateLayout := "2006-01-02T15:04Z"
 		utcTime, err := time.Parse(espnDateLayout, cbbEvent.Date)
 		if err != nil {
-			return errors.New(fmt.Sprintf("err parsing time: %v", err))
+			return fmt.Errorf("err parsing time: %v", err)
 		}
 
 		// Convert to Eastern Time
 		loc, err := time.LoadLocation("America/New_York")
 		if err != nil {
-			return errors.New(fmt.Sprintf("err converting time: %v", err))
+			return fmt.Errorf("err converting time: %v", err)
 		}
 		t := utcTime.In(loc)
 		formattedTime := t.Format("Mon 03:04 pm MST")
 
-		// line must be on a 0.5 value to avoid pushes
-		lineValue := line.Spread
-		if lineValue == math.Trunc(lineValue) {
-			lineValue += 0.5
+		var option1, option2 string
+		var odds1, odds2 int
+		var spreadValue *float64
+
+		if betType == "moneyline" || betType == "ml" {
+			// Moneyline bet
+			option1 = homeTeam
+			option2 = awayTeam
+			// Use moneyline odds from API, fallback to -110 if 0 (invalid)
+			if line.HomeTeamOdds.MoneyLine != 0 {
+				odds1 = line.HomeTeamOdds.MoneyLine
+			} else {
+				odds1 = -110
+			}
+			if line.AwayTeamOdds.MoneyLine != 0 {
+				odds2 = line.AwayTeamOdds.MoneyLine
+			} else {
+				odds2 = -110
+			}
+			spreadValue = nil
+		} else {
+			// ATS bet (default)
+			lineValue := line.Spread
+			// line must be on a 0.5 value to avoid pushes
+			if lineValue == math.Trunc(lineValue) {
+				lineValue += 0.5
+			}
+			option1 = fmt.Sprintf("%s %s", homeTeam, common.FormatOdds(lineValue))
+			option2 = fmt.Sprintf("%s %s", awayTeam, common.FormatOdds(lineValue*-1))
+
+			// Use actual spread odds if available, otherwise default to -110
+			if line.HomeTeamOdds.SpreadOdds != 0 {
+				odds1 = int(line.HomeTeamOdds.SpreadOdds)
+			} else {
+				odds1 = -110
+			}
+			if line.AwayTeamOdds.SpreadOdds != 0 {
+				odds2 = int(line.AwayTeamOdds.SpreadOdds)
+			} else {
+				odds2 = -110
+			}
+			spreadValue = &lineValue
 		}
 
 		dbBet = models.Bet{
 			Description:   fmt.Sprintf("%s @ %s (%s)\n- Broadcast: %s", awayTeam, homeTeam, formattedTime, cbbEvent.Competitions[0].Broadcast),
-			Option1:       fmt.Sprintf("%s %s", homeTeam, common.FormatOdds(line.Spread)),
-			Option2:       fmt.Sprintf("%s %s", awayTeam, common.FormatOdds(line.Spread*-1)),
-			Odds1:         -110,
-			Odds2:         -110,
+			Option1:       option1,
+			Option2:       option2,
+			Odds1:         odds1,
+			Odds2:         odds2,
 			Active:        true,
 			GuildID:       guildID,
 			ChannelID:     i.ChannelID,
 			GameStartDate: &utcTime,
 			EspnID:        &espnID,
 			AdminCreated:  common.IsAdmin(s, i),
-			Spread:        &line.Spread,
+			Spread:        spreadValue,
 		}
 		db.Create(&dbBet)
 	}
 
 	buttons := messageService.GetBetOnlyButtonsList(dbBet.Option1, dbBet.Option2, dbBet.ID)
+
+	betTypeLabel := "ATS"
+	if dbBet.Spread == nil {
+		betTypeLabel = "Moneyline"
+	}
+
 	embed := &discordgo.MessageEmbed{
-		Title:       fmt.Sprint("📢 New CBB Bet Created (Will Auto Close & Resolve)"),
+		Title:       fmt.Sprintf("📢 New CBB %s Bet Created (Will Auto Close & Resolve)", betTypeLabel),
 		Description: dbBet.Description,
 		Fields: []*discordgo.MessageEmbedField{
 			{
 				Name:  fmt.Sprintf("1️⃣ %s", dbBet.Option1),
-				Value: fmt.Sprintf("Odds: %s", common.FormatOdds(-110)),
+				Value: fmt.Sprintf("Odds: %s", common.FormatOdds(float64(dbBet.Odds1))),
 			},
 			{
 				Name:  fmt.Sprintf("2️⃣ %s", dbBet.Option2),
-				Value: fmt.Sprintf("Odds: %s", common.FormatOdds(-110)),
+				Value: fmt.Sprintf("Odds: %s", common.FormatOdds(float64(dbBet.Odds2))),
 			},
 		},
 		Color: 0x3498db,
@@ -498,6 +657,9 @@ func CreateCBBBetFromGameID(s *discordgo.Session, i *discordgo.InteractionCreate
 	return nil
 }
 
+// AutoCreateCBBBet automatically creates an ATS bet for a subscribed team game.
+// This function ONLY creates ATS bets - Moneyline bets must be created manually via slash command.
+// It checks for existing ATS bets only (spread IS NOT NULL) to avoid conflicts with manually created Moneyline bets.
 func AutoCreateCBBBet(s *discordgo.Session, db *gorm.DB, guildId string, channelId, gameId string) error {
 	guild, err := guildService.GetGuildInfo(s, db, guildId, channelId)
 	if err != nil {
@@ -508,8 +670,10 @@ func AutoCreateCBBBet(s *discordgo.Session, db *gorm.DB, guildId string, channel
 	}
 
 	var dbBet models.Bet
+	// AutoCreate only creates ATS bets, so check for existing ATS bet (spread IS NOT NULL)
+	// This allows Moneyline bets to be created manually without conflict
 	result := db.
-		Where("espn_id = ? AND guild_id = ?", gameId, guildId).
+		Where("espn_id = ? AND paid = 0 AND guild_id = ? AND spread IS NOT NULL", gameId, guildId).
 		Find(&dbBet)
 	if result.Error != nil {
 		return result.Error
@@ -554,13 +718,13 @@ func AutoCreateCBBBet(s *discordgo.Session, db *gorm.DB, guildId string, channel
 		espnDateLayout := "2006-01-02T15:04Z"
 		utcTime, err := time.Parse(espnDateLayout, cbbEvent.Date)
 		if err != nil {
-			return errors.New(fmt.Sprintf("err parsing time: %v", err))
+			return fmt.Errorf("err parsing time: %v", err)
 		}
 
 		// Convert to Eastern Time
 		loc, err := time.LoadLocation("America/New_York")
 		if err != nil {
-			return errors.New(fmt.Sprintf("err converting time: %v", err))
+			return fmt.Errorf("err converting time: %v", err)
 		}
 		t := utcTime.In(loc)
 		formattedTime := t.Format("Mon 03:04 pm MST")
@@ -571,34 +735,44 @@ func AutoCreateCBBBet(s *discordgo.Session, db *gorm.DB, guildId string, channel
 			lineValue += 0.5
 		}
 
+		// Use actual spread odds from API if available, otherwise default to -110
+		odds1 := -110
+		odds2 := -110
+		if line.HomeTeamOdds.SpreadOdds != 0 {
+			odds1 = int(line.HomeTeamOdds.SpreadOdds)
+		}
+		if line.AwayTeamOdds.SpreadOdds != 0 {
+			odds2 = int(line.AwayTeamOdds.SpreadOdds)
+		}
+
 		dbBet = models.Bet{
 			Description:   fmt.Sprintf("%s @ %s (%s)\n- Broadcast: %s", awayTeam, homeTeam, formattedTime, cbbEvent.Competitions[0].Broadcast),
-			Option1:       fmt.Sprintf("%s %s", homeTeam, common.FormatOdds(line.Spread)),
-			Option2:       fmt.Sprintf("%s %s", awayTeam, common.FormatOdds(line.Spread*-1)),
-			Odds1:         -110,
-			Odds2:         -110,
+			Option1:       fmt.Sprintf("%s %s", homeTeam, common.FormatOdds(lineValue)),
+			Option2:       fmt.Sprintf("%s %s", awayTeam, common.FormatOdds(lineValue*-1)),
+			Odds1:         odds1,
+			Odds2:         odds2,
 			Active:        true,
 			GuildID:       guildId,
 			ChannelID:     channelId,
 			GameStartDate: &utcTime,
 			EspnID:        &gameId,
 			AdminCreated:  true,
-			Spread:        &line.Spread,
+			Spread:        &lineValue,
 		}
 		db.Create(&dbBet)
 
 		buttons := messageService.GetBetOnlyButtonsList(dbBet.Option1, dbBet.Option2, dbBet.ID)
 		embed := &discordgo.MessageEmbed{
-			Title:       fmt.Sprint("📢 New CBB Bet Created (Will Auto Close & Resolve)"),
+			Title:       "📢 New CBB Bet Created (Will Auto Close & Resolve)",
 			Description: dbBet.Description,
 			Fields: []*discordgo.MessageEmbedField{
 				{
 					Name:  fmt.Sprintf("1️⃣ %s", dbBet.Option1),
-					Value: fmt.Sprintf("Odds: %s", common.FormatOdds(-110)),
+					Value: fmt.Sprintf("Odds: %s", common.FormatOdds(float64(dbBet.Odds1))),
 				},
 				{
 					Name:  fmt.Sprintf("2️⃣ %s", dbBet.Option2),
-					Value: fmt.Sprintf("Odds: %s", common.FormatOdds(-110)),
+					Value: fmt.Sprintf("Odds: %s", common.FormatOdds(float64(dbBet.Odds2))),
 				},
 			},
 			Color: 0x3498db,
