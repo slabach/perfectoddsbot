@@ -331,13 +331,13 @@ func ShowCFBBetTypeSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 		spreadValue = *line.Spread
 	}
 
-	// Get moneyline odds
-	homeMoneyline := -110
-	awayMoneyline := -110
-	if line.HomeMoneyline != nil {
+	// Check if moneyline odds are available
+	moneylineAvailable := line.HomeMoneyline != nil && line.AwayMoneyline != nil
+
+	// Get moneyline odds (only if available)
+	var homeMoneyline, awayMoneyline int
+	if moneylineAvailable {
 		homeMoneyline = *line.HomeMoneyline
-	}
-	if line.AwayMoneyline != nil {
 		awayMoneyline = *line.AwayMoneyline
 	}
 
@@ -354,24 +354,65 @@ func ShowCFBBetTypeSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 		homeTeam, common.FormatOdds(spreadValue), common.FormatOdds(float64(homeSpreadOdds)),
 		awayTeam, common.FormatOdds(spreadValue*-1), common.FormatOdds(float64(awaySpreadOdds)))
 
-	moneylineField := fmt.Sprintf("**Moneyline**\n1️⃣ %s (Odds: %s)\n2️⃣ %s (Odds: %s)",
-		homeTeam, common.FormatOdds(float64(homeMoneyline)),
-		awayTeam, common.FormatOdds(float64(awayMoneyline)))
+	// Build embed fields
+	embedFields := []*discordgo.MessageEmbedField{
+		{
+			Name:  "📊 ATS Bet",
+			Value: atsField,
+		},
+	}
+
+	// Only add moneyline field and button if odds are available
+	var buttons []discordgo.MessageComponent
+	if moneylineAvailable {
+		moneylineField := fmt.Sprintf("**Moneyline**\n1️⃣ %s (Odds: %s)\n2️⃣ %s (Odds: %s)",
+			homeTeam, common.FormatOdds(float64(homeMoneyline)),
+			awayTeam, common.FormatOdds(float64(awayMoneyline)))
+		embedFields = append(embedFields, &discordgo.MessageEmbedField{
+			Name:  "💰 Moneyline Bet",
+			Value: moneylineField,
+		})
+		buttons = []discordgo.MessageComponent{
+			discordgo.Button{
+				Label:    "Create ATS Bet",
+				CustomID: fmt.Sprintf("cfb_bet_type_ats_%d", betID),
+				Style:    discordgo.PrimaryButton,
+			},
+			discordgo.Button{
+				Label:    "Create Moneyline Bet",
+				CustomID: fmt.Sprintf("cfb_bet_type_ml_%d", betID),
+				Style:    discordgo.SuccessButton,
+			},
+			discordgo.Button{
+				Label:    "Cancel",
+				CustomID: fmt.Sprintf("cfb_bet_type_cancel_%d", betID),
+				Style:    discordgo.DangerButton,
+			},
+		}
+	} else {
+		embedFields = append(embedFields, &discordgo.MessageEmbedField{
+			Name:  "💰 Moneyline Bet",
+			Value: "No moneyline bet available",
+		})
+		buttons = []discordgo.MessageComponent{
+			discordgo.Button{
+				Label:    "Create ATS Bet",
+				CustomID: fmt.Sprintf("cfb_bet_type_ats_%d", betID),
+				Style:    discordgo.PrimaryButton,
+			},
+			discordgo.Button{
+				Label:    "Cancel",
+				CustomID: fmt.Sprintf("cfb_bet_type_cancel_%d", betID),
+				Style:    discordgo.DangerButton,
+			},
+		}
+	}
 
 	embed := &discordgo.MessageEmbed{
 		Title:       "Select Bet Type",
 		Description: description,
-		Fields: []*discordgo.MessageEmbedField{
-			{
-				Name:  "📊 ATS Bet",
-				Value: atsField,
-			},
-			{
-				Name:  "💰 Moneyline Bet",
-				Value: moneylineField,
-			},
-		},
-		Color: 0x3498db,
+		Fields:      embedFields,
+		Color:       0x3498db,
 	}
 
 	// Create buttons for bet type selection
@@ -381,23 +422,7 @@ func ShowCFBBetTypeSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 			Embeds: []*discordgo.MessageEmbed{embed},
 			Components: []discordgo.MessageComponent{
 				discordgo.ActionsRow{
-					Components: []discordgo.MessageComponent{
-						discordgo.Button{
-							Label:    "Create ATS Bet",
-							CustomID: fmt.Sprintf("cfb_bet_type_ats_%d", betID),
-							Style:    discordgo.PrimaryButton,
-						},
-						discordgo.Button{
-							Label:    "Create Moneyline Bet",
-							CustomID: fmt.Sprintf("cfb_bet_type_ml_%d", betID),
-							Style:    discordgo.SuccessButton,
-						},
-						discordgo.Button{
-							Label:    "Cancel",
-							CustomID: fmt.Sprintf("cfb_bet_type_cancel_%d", betID),
-							Style:    discordgo.DangerButton,
-						},
-					},
+					Components: buttons,
 				},
 			},
 		},
@@ -449,19 +474,14 @@ func CreateCFBBetFromGameID(s *discordgo.Session, i *discordgo.InteractionCreate
 		var spreadValue *float64
 
 		if betType == "moneyline" || betType == "ml" {
-			// Moneyline bet
+			// Moneyline bet - validate odds are available
+			if line.HomeMoneyline == nil || line.AwayMoneyline == nil {
+				return fmt.Errorf("moneyline odds are not available for this game")
+			}
 			option1 = cfbdBet.HomeTeam
 			option2 = cfbdBet.AwayTeam
-			if line.HomeMoneyline != nil {
-				odds1 = *line.HomeMoneyline
-			} else {
-				odds1 = -110
-			}
-			if line.AwayMoneyline != nil {
-				odds2 = *line.AwayMoneyline
-			} else {
-				odds2 = -110
-			}
+			odds1 = *line.HomeMoneyline
+			odds2 = *line.AwayMoneyline
 			spreadValue = nil
 		} else {
 			// ATS bet (default)
