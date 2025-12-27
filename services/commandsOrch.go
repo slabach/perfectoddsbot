@@ -2,12 +2,13 @@ package services
 
 import (
 	"fmt"
-	"github.com/bwmarrin/discordgo"
-	"gorm.io/gorm"
 	"perfectOddsBot/services/betService"
 	"perfectOddsBot/services/extService"
 	"perfectOddsBot/services/guildService"
 	"perfectOddsBot/services/interactionService"
+
+	"github.com/bwmarrin/discordgo"
+	"gorm.io/gorm"
 )
 
 func HandleSlashCommand(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
