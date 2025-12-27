@@ -108,7 +108,6 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 					if entriesResult.RowsAffected == 0 {
 						bet.Paid = true
 						db.Save(&bet)
-						continue
 					}
 
 					for _, entry := range betEntries {
