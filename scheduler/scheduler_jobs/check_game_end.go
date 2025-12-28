@@ -132,7 +132,16 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 								}
 							} else {
 								// ATS bet: use spread-based calculation
-								spread := *entry.Spread
+								// Check if entry.Spread is nil (legacy entries) and fall back to bet.Spread
+								var spread float64
+								if entry.Spread != nil {
+									spread = *entry.Spread
+								} else if bet.Spread != nil {
+									spread = *bet.Spread
+								} else {
+									// Safe default (shouldn't happen in this branch, but defensive)
+									spread = 0.0
+								}
 								won = common.CalculateBetEntryWin(entry.Option, scoreDiff, spread)
 							}
 
@@ -239,7 +248,16 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 							}
 						} else {
 							// ATS bet: use spread-based calculation
-							spread := *entry.Spread
+							// Check if entry.Spread is nil (legacy entries) and fall back to bet.Spread
+							var spread float64
+							if entry.Spread != nil {
+								spread = *entry.Spread
+							} else if bet.Spread != nil {
+								spread = *bet.Spread
+							} else {
+								// Safe default (shouldn't happen in this branch, but defensive)
+								spread = 0.0
+							}
 							won = common.CalculateBetEntryWin(entry.Option, scoreDiff, spread)
 						}
 
