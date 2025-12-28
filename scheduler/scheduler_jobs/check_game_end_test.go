@@ -1,6 +1,9 @@
 package scheduler_jobs
 
-import "testing"
+import (
+	"perfectOddsBot/services/common"
+	"testing"
+)
 
 func TestCalculateBetEntryWin(t *testing.T) {
 	tests := []struct {
@@ -266,9 +269,9 @@ func TestCalculateBetEntryWin(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := calculateBetEntryWin(tt.option, tt.scoreDiff, tt.spread)
+			result := common.CalculateBetEntryWin(tt.option, tt.scoreDiff, tt.spread)
 			if result != tt.expected {
-				t.Errorf("calculateBetEntryWin(option=%d, scoreDiff=%d, spread=%.1f) = %v, want %v\nScenario: %s",
+				t.Errorf("CalculateBetEntryWin(option=%d, scoreDiff=%d, spread=%.1f) = %v, want %v\nScenario: %s",
 					tt.option, tt.scoreDiff, tt.spread, result, tt.expected, tt.scenario)
 			}
 		})

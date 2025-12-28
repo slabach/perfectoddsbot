@@ -18,28 +18,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// calculateBetEntryWin determines if a bet entry wins based on the option, score difference, and spread.
-// Parameters:
-//   - option: 1 for home team + spread, 2 for away team - spread
-//   - scoreDiff: homeScore - awayScore
-//   - spread: spread value stored from home team's perspective
-//   - If away team is favored by 3.5, spread = +3.5
-//   - If home team is favored by 3.5, spread = -3.5
-//
-// Returns true if the bet entry wins, false otherwise.
-func calculateBetEntryWin(option int, scoreDiff int, spread float64) bool {
-	if option == 1 {
-		// Option 1: homeTeam + spread wins if (homeScore + spread) > awayScore
-		// i.e., if scoreDiff > -spread
-		return float64(scoreDiff) > -spread
-	} else {
-		// Option 2: awayTeam - spread wins if (awayScore - spread) > homeScore
-		// i.e., if (awayScore - homeScore) > spread
-		// i.e., if -scoreDiff > spread
-		return float64(-scoreDiff) > spread
-	}
-}
-
 func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -120,7 +98,7 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 						// ATS bet: determine winner based on spread
 						// For ATS, we need to check which option would win
 						// Option 1 is home team + spread, Option 2 is away team - spread
-						if calculateBetEntryWin(1, scoreDiff, *bet.Spread) {
+						if common.CalculateBetEntryWin(1, scoreDiff, *bet.Spread) {
 							winningOption = 1
 						} else {
 							winningOption = 2
@@ -130,7 +108,7 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 					if entriesResult.RowsAffected == 0 {
 						// No bet entries, but still need to update parlays
 						if winningOption > 0 {
-							updateErr := betService.UpdateParlaysOnBetResolution(s, db, bet.ID, winningOption)
+							updateErr := betService.UpdateParlaysOnBetResolution(s, db, bet.ID, winningOption, scoreDiff)
 							if updateErr != nil {
 								log.Printf("Error updating parlays for bet %d: %v\n", bet.ID, updateErr)
 							}
@@ -155,7 +133,7 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 							} else {
 								// ATS bet: use spread-based calculation
 								spread := *entry.Spread
-								won = calculateBetEntryWin(entry.Option, scoreDiff, spread)
+								won = common.CalculateBetEntryWin(entry.Option, scoreDiff, spread)
 							}
 
 							if won {
@@ -164,7 +142,7 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 							}
 						}
 
-						resolveErr := ResolveCFBBBet(s, bet, db)
+						resolveErr := ResolveCFBBBet(s, bet, db, winningOption, scoreDiff)
 						if resolveErr != nil {
 							return resolveErr
 						}
@@ -227,7 +205,7 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 						}
 					} else {
 						// ATS bet: determine winner based on spread
-						if calculateBetEntryWin(1, scoreDiff, *bet.Spread) {
+						if common.CalculateBetEntryWin(1, scoreDiff, *bet.Spread) {
 							winningOption = 1
 						} else {
 							winningOption = 2
@@ -237,7 +215,7 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 					if entriesResult.RowsAffected == 0 {
 						// No bet entries, but still need to update parlays
 						if winningOption > 0 {
-							updateErr := betService.UpdateParlaysOnBetResolution(s, db, bet.ID, winningOption)
+							updateErr := betService.UpdateParlaysOnBetResolution(s, db, bet.ID, winningOption, scoreDiff)
 							if updateErr != nil {
 								log.Printf("Error updating parlays for bet %d: %v\n", bet.ID, updateErr)
 							}
@@ -262,7 +240,7 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 						} else {
 							// ATS bet: use spread-based calculation
 							spread := *entry.Spread
-							won = calculateBetEntryWin(entry.Option, scoreDiff, spread)
+							won = common.CalculateBetEntryWin(entry.Option, scoreDiff, spread)
 						}
 
 						if won {
@@ -271,7 +249,7 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 						}
 					}
 
-					resolveErr := ResolveCFBBBet(s, bet, db)
+					resolveErr := ResolveCFBBBet(s, bet, db, winningOption, scoreDiff)
 					if resolveErr != nil {
 						return resolveErr
 					}
@@ -283,7 +261,7 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 	return nil
 }
 
-func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB) error {
+func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOption int, scoreDiff int) error {
 	winnersList := ""
 	loserList := ""
 	guild, err := guildService.GetGuildInfo(s, db, bet.GuildID, bet.ChannelID)
@@ -357,19 +335,9 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB) error {
 	db.Save(&bet)
 	db.Model(&bet).UpdateColumn("paid", true).UpdateColumn("active", false)
 
-	// Determine winning option for parlay updates
-	// Check which option has winning entries
-	winningOption := 0
-	for _, entry := range entries {
-		if entry.AutoCloseWin {
-			winningOption = entry.Option
-			break // All winning entries should have the same option
-		}
-	}
-
-	// Update parlays if we determined a winning option
+	// Update parlays using the provided winning option and score difference
 	if winningOption > 0 {
-		updateErr := betService.UpdateParlaysOnBetResolution(s, db, bet.ID, winningOption)
+		updateErr := betService.UpdateParlaysOnBetResolution(s, db, bet.ID, winningOption, scoreDiff)
 		if updateErr != nil {
 			// Log error but don't fail the bet resolution
 			log.Printf("Error updating parlays for bet %d: %v\n", bet.ID, updateErr)
