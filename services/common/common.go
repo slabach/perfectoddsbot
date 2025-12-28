@@ -365,3 +365,25 @@ func GetSchoolName(s string) string {
 	}
 	return s
 }
+
+// CalculateBetEntryWin determines if a bet entry wins based on the option, score difference, and spread.
+// Parameters:
+//   - option: 1 for home team + spread, 2 for away team - spread
+//   - scoreDiff: homeScore - awayScore
+//   - spread: spread value stored from home team's perspective
+//   - If away team is favored by 3.5, spread = +3.5
+//   - If home team is favored by 3.5, spread = -3.5
+//
+// Returns true if the bet entry wins, false otherwise.
+func CalculateBetEntryWin(option int, scoreDiff int, spread float64) bool {
+	if option == 1 {
+		// Option 1: homeTeam + spread wins if (homeScore + spread) > awayScore
+		// i.e., if scoreDiff > -spread
+		return float64(scoreDiff) > -spread
+	} else {
+		// Option 2: awayTeam - spread wins if (awayScore - spread) > homeScore
+		// i.e., if (awayScore - homeScore) > spread
+		// i.e., if -scoreDiff > spread
+		return float64(-scoreDiff) > spread
+	}
+}

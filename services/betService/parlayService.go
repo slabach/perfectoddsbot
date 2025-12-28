@@ -746,6 +746,7 @@ func HandleParlayAmount(s *discordgo.Session, i *discordgo.InteractionCreate, db
 			ParlayID:       parlay.ID,
 			BetID:          bet.ID,
 			SelectedOption: option,
+			Spread:         bet.Spread, // Store the spread at the time the parlay entry is created
 			Resolved:       false,
 			Won:            nil,
 		}
@@ -816,7 +817,7 @@ func HandleParlayCancel(s *discordgo.Session, i *discordgo.InteractionCreate, db
 }
 
 // UpdateParlaysOnBetResolution updates all parlays that include this bet when it resolves
-func UpdateParlaysOnBetResolution(s *discordgo.Session, db *gorm.DB, betID uint, winningOption int) error {
+func UpdateParlaysOnBetResolution(s *discordgo.Session, db *gorm.DB, betID uint, winningOption int, scoreDiff int) error {
 	// Find all parlay entries for this bet that are not yet resolved
 	var parlayEntries []models.ParlayEntry
 	result := db.Where("bet_id = ? AND resolved = ?", betID, false).Find(&parlayEntries)
@@ -824,10 +825,47 @@ func UpdateParlaysOnBetResolution(s *discordgo.Session, db *gorm.DB, betID uint,
 		return result.Error
 	}
 
+	// Get the bet to check if it has a spread
+	var bet models.Bet
+	if err := db.First(&bet, betID).Error; err != nil {
+		return err
+	}
+
 	for _, entry := range parlayEntries {
 		// Mark entry as resolved
 		entry.Resolved = true
-		won := entry.SelectedOption == winningOption
+
+		// Determine if this parlay entry won
+		var won bool
+		if bet.Spread == nil {
+			// Moneyline bet
+			if scoreDiff == 0 {
+				// Tie game: both options lose
+				won = false
+			} else {
+				// Simple option comparison
+				won = entry.SelectedOption == winningOption
+			}
+		} else {
+			// ATS bet
+			if scoreDiff == 0 {
+				// Manually resolved bet (no scoreDiff available): use simple option comparison
+				// Note: This may not be accurate if parlay entries have different spreads,
+				// but we can't calculate properly without the actual score difference
+				won = entry.SelectedOption == winningOption
+			} else {
+				// Auto-resolved bet: use the parlay entry's spread (or fallback to bet spread for legacy entries)
+				var entrySpread float64
+				if entry.Spread != nil {
+					entrySpread = *entry.Spread
+				} else {
+					// Fallback for legacy parlay entries that don't have spread stored
+					entrySpread = *bet.Spread
+				}
+				won = common.CalculateBetEntryWin(entry.SelectedOption, scoreDiff, entrySpread)
+			}
+		}
+
 		entry.Won = &won
 		db.Save(&entry)
 
@@ -854,44 +892,29 @@ func UpdateParlaysOnBetResolution(s *discordgo.Session, db *gorm.DB, betID uint,
 			parlay.Status = "lost"
 			db.Save(&parlay)
 
-			// Update user stats - they already lost the bet amount when placing the parlay
-			var user models.User
-			db.First(&user, parlay.UserID)
-			user.TotalBetsLost++
-			user.TotalPointsLost += float64(parlay.Amount)
-			db.Save(&user)
-
-			// Add lost parlay amount to guild pool if parlay just became fully resolved
+			// Update user stats, guild pool, and send notification if parlay just became lost
 			if previousStatus != "lost" && previousStatus != "won" {
-				guild, guildErr := guildService.GetGuildInfo(s, db, parlay.GuildID, "")
-				if guildErr == nil {
-					// Add lost parlay amount to guild pool (atomic update to prevent race conditions)
-					db.Model(&models.Guild{}).Where("id = ?", guild.ID).UpdateColumn("pool", gorm.Expr("pool + ?", float64(parlay.Amount)))
-				}
-				sendParlayResolutionNotification(s, db, parlay, false)
-			}
-		} else if allResolved {
-			// All bets resolved - check if parlay won
-			if hasLoss {
-				parlay.Status = "lost"
-				db.Save(&parlay)
-
+				// Update user stats - they already lost the bet amount when placing the parlay
 				var user models.User
 				db.First(&user, parlay.UserID)
 				user.TotalBetsLost++
 				user.TotalPointsLost += float64(parlay.Amount)
 				db.Save(&user)
 
-				// Add lost parlay amount to guild pool if parlay just became fully resolved
-				if previousStatus != "lost" && previousStatus != "won" {
-					guild, guildErr := guildService.GetGuildInfo(s, db, parlay.GuildID, "")
-					if guildErr == nil {
-						// Add lost parlay amount to guild pool (atomic update to prevent race conditions)
-						db.Model(&models.Guild{}).Where("id = ?", guild.ID).UpdateColumn("pool", gorm.Expr("pool + ?", float64(parlay.Amount)))
-					}
-					sendParlayResolutionNotification(s, db, parlay, false)
+				// Add lost parlay amount to guild pool (atomic update to prevent race conditions)
+				guild, guildErr := guildService.GetGuildInfo(s, db, parlay.GuildID, "")
+				if guildErr == nil {
+					db.Model(&models.Guild{}).Where("id = ?", guild.ID).UpdateColumn("pool", gorm.Expr("pool + ?", float64(parlay.Amount)))
 				}
-			} else {
+				SendParlayResolutionNotification(s, db, parlay, false)
+			}
+		} else if allResolved {
+			// All bets resolved - this entry won, and all other entries have also resolved
+			// Since we didn't enter the !won branch above, this entry won
+			// If hasLoss is true, it means a previous entry lost, but the parlay was already marked as lost
+			// when that entry lost, so we don't need to do anything here
+			// Only handle the case where all entries won
+			if !hasLoss {
 				// All bets won! Calculate and pay out parlay
 				parlay.Status = "won"
 				db.Save(&parlay)
@@ -906,9 +929,10 @@ func UpdateParlaysOnBetResolution(s *discordgo.Session, db *gorm.DB, betID uint,
 
 				// Send notification if parlay just became fully resolved
 				if previousStatus != "lost" && previousStatus != "won" {
-					sendParlayResolutionNotification(s, db, parlay, true)
+					SendParlayResolutionNotification(s, db, parlay, true)
 				}
 			}
+			// If hasLoss is true, the parlay was already marked as lost and notification sent when that entry lost
 		} else {
 			// Some bets still pending
 			parlay.Status = "partial"
@@ -919,8 +943,8 @@ func UpdateParlaysOnBetResolution(s *discordgo.Session, db *gorm.DB, betID uint,
 	return nil
 }
 
-// sendParlayResolutionNotification sends a message to the guild betting channel when a parlay is fully resolved
-func sendParlayResolutionNotification(s *discordgo.Session, db *gorm.DB, parlay models.Parlay, won bool) {
+// SendParlayResolutionNotification sends a message to the guild betting channel when a parlay is fully resolved
+func SendParlayResolutionNotification(s *discordgo.Session, db *gorm.DB, parlay models.Parlay, won bool) {
 	// Get guild info to find betting channel
 	guild, err := guildService.GetGuildInfo(s, db, parlay.GuildID, "")
 	if err != nil || guild.BetChannelID == "" {

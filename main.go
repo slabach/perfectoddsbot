@@ -140,6 +140,13 @@ func runApp() {
 	if err != nil {
 		log.Fatalf("Error opening Discord session: %v", err)
 	}
+
+	// Run parlay resolution fix migration (after Discord session is ready so notifications can be sent)
+	err = services.FixParlayResolutionMigration(dg, db)
+	if err != nil {
+		log.Printf("Error running parlay resolution migration: %v", err)
+		// Don't fatal here - allow app to continue even if migration fails
+	}
 	defer func(dg *discordgo.Session) {
 		err := dg.Close()
 		if err != nil {
