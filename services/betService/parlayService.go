@@ -838,8 +838,14 @@ func UpdateParlaysOnBetResolution(s *discordgo.Session, db *gorm.DB, betID uint,
 		// Determine if this parlay entry won
 		var won bool
 		if bet.Spread == nil {
-			// Moneyline bet: simple option comparison
-			won = entry.SelectedOption == winningOption
+			// Moneyline bet
+			if scoreDiff == 0 {
+				// Tie game: both options lose
+				won = false
+			} else {
+				// Simple option comparison
+				won = entry.SelectedOption == winningOption
+			}
 		} else {
 			// ATS bet
 			if scoreDiff == 0 {
@@ -886,18 +892,18 @@ func UpdateParlaysOnBetResolution(s *discordgo.Session, db *gorm.DB, betID uint,
 			parlay.Status = "lost"
 			db.Save(&parlay)
 
-			// Update user stats - they already lost the bet amount when placing the parlay
-			var user models.User
-			db.First(&user, parlay.UserID)
-			user.TotalBetsLost++
-			user.TotalPointsLost += float64(parlay.Amount)
-			db.Save(&user)
-
-			// Add lost parlay amount to guild pool and send notification if parlay just became lost
+			// Update user stats, guild pool, and send notification if parlay just became lost
 			if previousStatus != "lost" && previousStatus != "won" {
+				// Update user stats - they already lost the bet amount when placing the parlay
+				var user models.User
+				db.First(&user, parlay.UserID)
+				user.TotalBetsLost++
+				user.TotalPointsLost += float64(parlay.Amount)
+				db.Save(&user)
+
+				// Add lost parlay amount to guild pool (atomic update to prevent race conditions)
 				guild, guildErr := guildService.GetGuildInfo(s, db, parlay.GuildID, "")
 				if guildErr == nil {
-					// Add lost parlay amount to guild pool (atomic update to prevent race conditions)
 					db.Model(&models.Guild{}).Where("id = ?", guild.ID).UpdateColumn("pool", gorm.Expr("pool + ?", float64(parlay.Amount)))
 				}
 				SendParlayResolutionNotification(s, db, parlay, false)

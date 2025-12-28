@@ -6,6 +6,7 @@ import (
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/betService"
 	"perfectOddsBot/services/common"
+	"perfectOddsBot/services/guildService"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -313,8 +314,19 @@ func FixParlayResolutionMigration(s *discordgo.Session, db *gorm.DB) error {
 						db.Save(&user)
 
 						// Add to guild pool
-						var guild models.Guild
-						if err := db.Where("guild_id = ?", parlay.GuildID).First(&guild).Error; err == nil {
+						// Use GetGuildInfo if Discord session is available, otherwise query directly
+						var guild *models.Guild
+						var guildErr error
+						if s != nil {
+							guild, guildErr = guildService.GetGuildInfo(s, db, parlay.GuildID, "")
+						} else {
+							var g models.Guild
+							guildErr = db.Where("guild_id = ?", parlay.GuildID).First(&g).Error
+							if guildErr == nil {
+								guild = &g
+							}
+						}
+						if guildErr == nil && guild != nil {
 							db.Model(&models.Guild{}).Where("id = ?", guild.ID).UpdateColumn("pool", gorm.Expr("pool + ?", float64(parlay.Amount)))
 						}
 					}
@@ -341,8 +353,19 @@ func FixParlayResolutionMigration(s *discordgo.Session, db *gorm.DB) error {
 							db.Save(&user)
 
 							// Add to guild pool
-							var guild models.Guild
-							if err := db.Where("guild_id = ?", parlay.GuildID).First(&guild).Error; err == nil {
+							// Use GetGuildInfo if Discord session is available, otherwise query directly
+							var guild *models.Guild
+							var guildErr error
+							if s != nil {
+								guild, guildErr = guildService.GetGuildInfo(s, db, parlay.GuildID, "")
+							} else {
+								var g models.Guild
+								guildErr = db.Where("guild_id = ?", parlay.GuildID).First(&g).Error
+								if guildErr == nil {
+									guild = &g
+								}
+							}
+							if guildErr == nil && guild != nil {
 								db.Model(&models.Guild{}).Where("id = ?", guild.ID).UpdateColumn("pool", gorm.Expr("pool + ?", float64(parlay.Amount)))
 							}
 						}

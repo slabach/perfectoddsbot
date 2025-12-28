@@ -139,19 +139,19 @@ func TestUpdateParlaysOnBetResolution_ComprehensiveScenarios(t *testing.T) {
 				{
 					ParlayID:               1,
 					ExpectedStatus:         "lost",
-					ExpectedEntryWon:       false, // -7.5 doesn't cover
+					ExpectedEntryWon:       false, // -7.5 doesn't cover (needs to win by >7.5)
 					ShouldSendNotification: true,
 					NotificationWon:        false,
 				},
 				{
 					ParlayID:         2,
 					ExpectedStatus:   "partial", // Other legs still pending
-					ExpectedEntryWon: true,      // -5.5 covers
+					ExpectedEntryWon: true,      // -5.5 covers (wins by 6 > 5.5)
 				},
 				{
 					ParlayID:         3,
 					ExpectedStatus:   "partial", // Other legs still pending
-					ExpectedEntryWon: false,     // Option 2 loses (scoreDiff 6 means Option 1 won)
+					ExpectedEntryWon: true,      // Option 2 wins (away +7.5, loses by 6 < 7.5, so covers)
 				},
 			},
 			description: "Three parlays on same bet with different spreads get different outcomes",
@@ -460,10 +460,10 @@ func TestParlayResolutionFlow(t *testing.T) {
 			currentEntryWon:    true,
 			allEntriesResolved: true,
 			hasLoss:            true,
-			expectedStatus:     "won", // This shouldn't happen - if hasLoss, should have been marked lost earlier
-			shouldNotify:       false,
+			expectedStatus:     "lost", // If hasLoss, parlay should be lost (defensive check)
+			shouldNotify:       true,   // Should notify since status is changing from pending to lost
 			notificationWon:    false,
-			description:        "All resolved with loss - should have been handled earlier",
+			description:        "All resolved with loss - should have been handled earlier, but defensively mark as lost",
 		},
 		{
 			name:               "Some entries pending - mark partial",
@@ -621,15 +621,11 @@ func TestParlayResolutionEdgeCases(t *testing.T) {
 			if tt.betSpread == nil {
 				// Moneyline
 				if tt.scoreDiff == 0 {
-					// Manually resolved
-					won = tt.selectedOption == tt.winningOption
+					// Tie game: both options lose
+					won = false
 				} else {
-					// Auto-resolved
-					if tt.selectedOption == 1 {
-						won = tt.scoreDiff > 0
-					} else {
-						won = tt.scoreDiff < 0
-					}
+					// Auto-resolved or manually resolved with non-zero scoreDiff
+					won = tt.selectedOption == tt.winningOption
 				}
 			} else {
 				// ATS
