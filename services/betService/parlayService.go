@@ -893,8 +893,33 @@ func UpdateParlaysOnBetResolution(s *discordgo.Session, db *gorm.DB, betID uint,
 	}
 
 	for _, entry := range parlayEntries {
-		// Mark entry as resolved
-		entry.Resolved = true
+		// Get the parlay with previous status to detect when it becomes fully resolved
+		var parlay models.Parlay
+		db.Preload("ParlayEntries").Preload("ParlayEntries.Bet").First(&parlay, entry.ParlayID)
+		previousStatus := parlay.Status
+
+		// Check if any other entries are unresolved
+		allResolved := true
+		hasLoss := false
+		for _, pe := range parlay.ParlayEntries {
+			// Skip the current entry as we are processing it now
+			if pe.ID == entry.ID {
+				continue
+			}
+
+			if !pe.Resolved {
+				allResolved = false
+			}
+			if pe.Won != nil && !*pe.Won {
+				hasLoss = true
+			}
+		}
+		if hasLoss {
+			// Mark entry as resolved regardless of the winning option since we already know the parlay is lost
+			entry.Resolved = true
+			db.Save(&entry)
+			continue
+		}
 
 		// Determine if this parlay entry won
 		var won bool
@@ -926,27 +951,11 @@ func UpdateParlaysOnBetResolution(s *discordgo.Session, db *gorm.DB, betID uint,
 				won = common.CalculateBetEntryWin(entry.SelectedOption, scoreDiff, entrySpread)
 			}
 		}
+		// Mark entry as resolved
+		entry.Resolved = true
 
 		entry.Won = &won
 		db.Save(&entry)
-
-		// Get the parlay with previous status to detect when it becomes fully resolved
-		var parlay models.Parlay
-		db.Preload("ParlayEntries").Preload("ParlayEntries.Bet").First(&parlay, entry.ParlayID)
-		previousStatus := parlay.Status
-
-		// Check if any other entries are unresolved
-		allResolved := true
-		hasLoss := false
-		for _, pe := range parlay.ParlayEntries {
-			if !pe.Resolved {
-				allResolved = false
-				break
-			}
-			if pe.Won != nil && !*pe.Won {
-				hasLoss = true
-			}
-		}
 
 		// If this entry lost, mark parlay as lost immediately
 		if !won {
