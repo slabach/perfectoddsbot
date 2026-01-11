@@ -20,18 +20,20 @@ PerfectOddsBot is a Discord bot designed to create and manage bets with imaginar
 | `/create-bet`             | Create a new bet with specified options and odds.                                                     | Yes        | No      | No        |
 | `/create-cfb-bet`         | Create new CFB bet for provided game id                                                               | No         | Yes     | No        |
 | `/create-cbb-bet`         | Create new CBB bet for provided game id                                                               | No         | Yes     | No        |
-| `/resolve-bet`            | Resolve an existing bet by specifying the winning option.                                             | Yes        | No      | No        |
+| `/create-parlay`          | Create a parlay by combining multiple open bets                                                        | No         | No      | No        |
 | `/give-points`            | Give points to a specific user.                                                                       | Yes        | No      | No        |
-| `/reset-points`           | Reset all users' points to 1000.                                                                      | Yes        | No      | No        |
+| `/reset-points`           | Reset all users' points to a default value                                                            | Yes        | No      | No        |
 | `/leaderboard`            | Display the leaderboard with the top users based on points.                                           | No         | No      | No        |
 | `/my-points`              | Display your current point total                                                                      | No         | No      | Yes       |
+| `/my-stats`               | Show your betting statistics                                                                          | No         | No      | Yes       |
 | `/my-bets`                | Display your active bets not yet resolved                                                             | No         | No      | Yes       |
-| `/list-cfb-games`         | List all CFB games for current week and their spreads                                                 | No         | Yes     | Yes       |
-| `/list-cbb-games`         | List all CBB games available and their spreads                                                        | No         | Yes     | Yes       |
+| `/my-parlays`             | Show your active parlays                                                                              | No         | No      | Yes       |
+| `/list-cfb-games`         | List this weeks CFB games and their current lines                                                     | No         | Yes     | Yes       |
+| `/list-cbb-games`         | List the currently open CBB games                                                                     | No         | Yes     | Yes       |
 | `/set-betting-channel`    | Set the current channel to your Server's 'bet channel' where auto msgs get sent                       | Yes        | No      | Yes       |
 | `/set-points-per-message` | Set the amount of points a user will receive for each message they send                               | Yes        | No      | Yes       |
 | `/set-starting-points`    | Set the amount of points a new user will start with                                                   | Yes        | No      | Yes       |
-| `/subscribe-to-team`      | Select a team to subscribe to all events for. Bets will be auto-created for all their CBB & CFB games | Yes        | Yes     | Yes       |
+| `/subscribe-to-team`      | Choose a College team to subscribe to all CFB & CBB events for                                        | Yes        | Yes     | Yes       |
 
 ### Interactions (Buttons)
 
