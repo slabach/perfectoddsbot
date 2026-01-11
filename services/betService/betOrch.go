@@ -231,36 +231,70 @@ func MyOpenBets(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.D
 		return
 	}
 
-	var response string
 	if len(bets) == 0 {
-		response = "You have no active bets."
-	} else {
-		response = fmt.Sprintf("You have %d active bets:\n", len(bets))
-		for _, bet := range bets {
-			if bet.Spread != nil {
-				if bet.Option == 1 {
-					response += fmt.Sprintf("* `%s` - $%d on Home %s.\n", bet.Bet.Description, bet.Amount, common.FormatOdds(*bet.Spread))
-				} else {
-					spreadVal := *bet.Spread
-					spreadVal = *bet.Spread * -1
+		embed := &discordgo.MessageEmbed{
+			Title:       "📊 Your Active Bets",
+			Description: "You have no active bets.",
+			Color:       0x5865F2, // Discord blurple
+		}
+		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Embeds: []*discordgo.MessageEmbed{embed},
+				Flags:  discordgo.MessageFlagsEphemeral,
+			},
+		})
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
 
-					response += fmt.Sprintf("* `%s` - $%d on Away %s.\n", bet.Bet.Description, bet.Amount, common.FormatOdds(spreadVal))
-				}
+	// Create embed with fields for each bet
+	var fields []*discordgo.MessageEmbedField
+	for idx, bet := range bets {
+		var fieldValue string
+		var optionName string
+
+		if bet.Spread != nil {
+			if bet.Option == 1 {
+				optionName = fmt.Sprintf("Home %s", common.FormatOdds(*bet.Spread))
 			} else {
-				if bet.Option == 1 {
-					response += fmt.Sprintf("* `%s` - $%d on %s.\n", bet.Bet.Description, bet.Amount, bet.Bet.Option1)
-				} else {
-					response += fmt.Sprintf("* `%s` - $%d on %s.\n", bet.Bet.Description, bet.Amount, bet.Bet.Option2)
-				}
+				spreadVal := *bet.Spread * -1
+				optionName = fmt.Sprintf("Away %s", common.FormatOdds(spreadVal))
+			}
+		} else {
+			if bet.Option == 1 {
+				optionName = bet.Bet.Option1
+			} else {
+				optionName = bet.Bet.Option2
 			}
 		}
+
+		fieldValue = fmt.Sprintf("**%s**\n💰 Amount: %d points", optionName, bet.Amount)
+
+		// Number each bet to make them more distinct
+		fieldName := fmt.Sprintf("%d. %s", idx+1, bet.Bet.Description)
+
+		fields = append(fields, &discordgo.MessageEmbedField{
+			Name:   fieldName,
+			Value:  fieldValue,
+			Inline: false,
+		})
+	}
+
+	embed := &discordgo.MessageEmbed{
+		Title:       fmt.Sprintf("📊 Your Active Bets (%d)", len(bets)),
+		Description: "Here are your currently active bets:",
+		Fields:      fields,
+		Color:       0x5865F2, // Discord blurple
 	}
 
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
-			Content: response,
-			Flags:   discordgo.MessageFlagsEphemeral,
+			Embeds: []*discordgo.MessageEmbed{embed},
+			Flags:  discordgo.MessageFlagsEphemeral,
 		},
 	})
 	if err != nil {
