@@ -18,6 +18,8 @@ import (
 type ParlaySelection struct {
 	BetIDs          []uint
 	SelectedOptions map[uint]int // betID -> option (1 or 2)
+	MessageID       string       // ID of the create parlay message
+	ChannelID       string       // Channel ID of the create parlay message
 }
 
 var (
@@ -370,6 +372,12 @@ func HandleParlayOptionSelection(s *discordgo.Session, i *discordgo.InteractionC
 		return nil
 	}
 
+	// Store message ID and channel ID if not already stored (from button click)
+	if selection.MessageID == "" && i.Message != nil {
+		selection.MessageID = i.Message.ID
+		selection.ChannelID = i.ChannelID
+	}
+
 	// Update the selection
 	selection.SelectedOptions[uint(betID)] = option
 	StoreParlaySelection(sessionID, selection)
@@ -574,6 +582,13 @@ func HandleParlaySubmit(s *discordgo.Session, i *discordgo.InteractionCreate, db
 		return nil
 	}
 
+	// Store message ID and channel ID from the button click
+	if i.Message != nil {
+		selection.MessageID = i.Message.ID
+		selection.ChannelID = i.ChannelID
+		StoreParlaySelection(sessionID, selection)
+	}
+
 	// Verify all options are selected
 	if len(selection.SelectedOptions) != len(selection.BetIDs) {
 		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -757,9 +772,6 @@ func HandleParlayAmount(s *discordgo.Session, i *discordgo.InteractionCreate, db
 	user.Points -= float64(amount)
 	db.Save(&user)
 
-	// Clean up session
-	CleanupParlaySelection(sessionID)
-
 	// Calculate potential payout
 	potentialPayout := common.CalculateParlayPayout(amount, oddsMultiplier)
 
@@ -779,19 +791,68 @@ func HandleParlayAmount(s *discordgo.Session, i *discordgo.InteractionCreate, db
 	summary.WriteString(fmt.Sprintf("**Potential Payout:** %.1f points\n", potentialPayout))
 	summary.WriteString(fmt.Sprintf("**Remaining Points:** %.1f", user.Points))
 
-	embed := &discordgo.MessageEmbed{
+	successEmbed := &discordgo.MessageEmbed{
 		Title:       "✅ Parlay Placed Successfully",
 		Description: summary.String(),
 		Color:       0x00ff00,
 	}
 
-	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Embeds: []*discordgo.MessageEmbed{embed},
-			Flags:  discordgo.MessageFlagsEphemeral,
-		},
-	})
+	// Try to update the original create parlay message if we have the message ID
+	// Use deferred response so we can try to edit the original message
+	if selection.MessageID != "" && selection.ChannelID != "" {
+		// Defer the response to allow time for editing
+		err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Flags: discordgo.MessageFlagsEphemeral,
+			},
+		})
+		if err == nil {
+			// Try to edit the original message to replace it with success message
+			// Note: This will fail silently for ephemeral messages, but we try anyway
+			_, editErr := s.ChannelMessageEditComplex(&discordgo.MessageEdit{
+				ID:         selection.MessageID,
+				Channel:    selection.ChannelID,
+				Embeds:     &[]*discordgo.MessageEmbed{successEmbed},
+				Components: &[]discordgo.MessageComponent{},
+			})
+			// If editing worked (unlikely for ephemeral), we don't need a follow-up
+			// If editing failed (expected for ephemeral), send follow-up with success
+			if editErr != nil {
+				// Editing failed (likely ephemeral message), send success as follow-up
+				_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+					Embeds: []*discordgo.MessageEmbed{successEmbed},
+				})
+			} else {
+				// Editing succeeded, send minimal confirmation
+				_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+					Content: "✅ Parlay created successfully!",
+				})
+			}
+		} else {
+			// Defer failed, just send normal response
+			err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Embeds: []*discordgo.MessageEmbed{successEmbed},
+					Flags:  discordgo.MessageFlagsEphemeral,
+				},
+			})
+		}
+	} else {
+		// No message ID stored, send success as new message
+		err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Embeds: []*discordgo.MessageEmbed{successEmbed},
+				Flags:  discordgo.MessageFlagsEphemeral,
+			},
+		})
+	}
+
+	// Clean up session after responding
+	CleanupParlaySelection(sessionID)
+
 	if err != nil {
 		return err
 	}
@@ -1032,11 +1093,16 @@ func MyParlays(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 	}
 
 	if len(parlays) == 0 {
+		embed := &discordgo.MessageEmbed{
+			Title:       "🎯 Your Active Parlays",
+			Description: "You have no active parlays.",
+			Color:       0x5865F2, // Discord blurple
+		}
 		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
-				Content: "You have no active parlays.",
-				Flags:   discordgo.MessageFlagsEphemeral,
+				Embeds: []*discordgo.MessageEmbed{embed},
+				Flags:  discordgo.MessageFlagsEphemeral,
 			},
 		})
 		if err != nil {
@@ -1045,12 +1111,17 @@ func MyParlays(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 		return
 	}
 
-	var response strings.Builder
-	response.WriteString(fmt.Sprintf("You have %d active parlay(s):\n\n", len(parlays)))
+	// Create embeds for each parlay
+	var embeds []*discordgo.MessageEmbed
 
 	for parlayIdx, parlay := range parlays {
-		response.WriteString(fmt.Sprintf("**Parlay #%d** (Amount: %d, Odds: %.2fx)\n", parlayIdx+1, parlay.Amount, parlay.TotalOdds))
+		potentialPayout := common.CalculateParlayPayout(parlay.Amount, parlay.TotalOdds)
 
+		// Build description with parlay summary
+		description := fmt.Sprintf("**Amount:** %d points\n**Odds:** %.2fx\n**Potential Payout:** %.1f points", parlay.Amount, parlay.TotalOdds, potentialPayout)
+
+		// Create fields for each leg
+		var fields []*discordgo.MessageEmbedField
 		for entryIdx, entry := range parlay.ParlayEntries {
 			optionName := entry.Bet.Option1
 			if entry.SelectedOption == 2 {
@@ -1066,17 +1137,29 @@ func MyParlays(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 				}
 			}
 
-			response.WriteString(fmt.Sprintf("  %d. %s: **%s** - %s\n", entryIdx+1, entry.Bet.Description, optionName, status))
+			fieldValue := fmt.Sprintf("**%s**\n%s", optionName, status)
+			fields = append(fields, &discordgo.MessageEmbedField{
+				Name:   fmt.Sprintf("Leg %d: %s", entryIdx+1, entry.Bet.Description),
+				Value:  fieldValue,
+				Inline: false,
+			})
 		}
 
-		potentialPayout := common.CalculateParlayPayout(parlay.Amount, parlay.TotalOdds)
-		response.WriteString(fmt.Sprintf("  Potential Payout: %.1f points\n\n", potentialPayout))
+		embed := &discordgo.MessageEmbed{
+			Title:       fmt.Sprintf("🎯 Parlay #%d", parlayIdx+1),
+			Description: description,
+			Fields:      fields,
+			Color:       0x5865F2, // Discord blurple
+		}
+
+		embeds = append(embeds, embed)
 	}
 
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
-			Content: response.String(),
+			Content: fmt.Sprintf("You have %d active parlay(s):", len(parlays)),
+			Embeds:  embeds,
 			Flags:   discordgo.MessageFlagsEphemeral,
 		},
 	})
