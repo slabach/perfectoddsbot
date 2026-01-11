@@ -306,9 +306,15 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 			// Moneyline bet: no spread to display
 			spreadDisplay = ""
 		} else {
-			spread := *entry.Spread
+			// Check if entry.Spread is nil (legacy entries) and fall back to bet.Spread
+			var spread float64
+			if entry.Spread != nil {
+				spread = *entry.Spread
+			} else {
+				spread = *bet.Spread
+			}
 			if entry.Option == 2 {
-				spread = *entry.Spread * -1
+				spread = spread * -1
 			}
 			spreadDisplay = common.FormatOdds(spread)
 		}
