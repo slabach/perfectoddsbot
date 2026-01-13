@@ -3,6 +3,7 @@ package services
 import (
 	"fmt"
 	"perfectOddsBot/services/betService"
+	cardService "perfectOddsBot/services/cardService"
 	"perfectOddsBot/services/extService"
 	"perfectOddsBot/services/guildService"
 	"perfectOddsBot/services/interactionService"
@@ -47,6 +48,8 @@ func HandleSlashCommand(s *discordgo.Session, i *discordgo.InteractionCreate, db
 		betService.CreateParlaySelector(s, i, db)
 	case "my-parlays":
 		betService.MyParlays(s, i, db)
+	case "draw-card":
+		cardService.DrawCard(s, i, db)
 	}
 }
 
@@ -177,6 +180,10 @@ func RegisterCommands(s *discordgo.Session) error {
 		{
 			Name:        "my-parlays",
 			Description: "Show your active parlays",
+		},
+		{
+			Name:        "draw-card",
+			Description: "Draw a random card from the deck (Costs 50 points, adds to pool)",
 		},
 	}
 

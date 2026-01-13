@@ -18,7 +18,7 @@ func GetGuildInfo(s *discordgo.Session, db *gorm.DB, guildID string, channelId s
 		if err != nil {
 			return nil, err
 		}
-		newGuild := &models.Guild{GuildID: guildID, BetChannelID: channelId, GuildName: guildInfo.Name, PointsPerMessage: 0.5, StartingPoints: 1000, Pool: 0}
+		newGuild := &models.Guild{GuildID: guildID, BetChannelID: channelId, GuildName: guildInfo.Name, PointsPerMessage: 0.5, StartingPoints: 1000, Pool: 0, CardDrawCost: 50, CardDrawCooldownMinutes: 60}
 		newGuildResult := db.Create(newGuild)
 		if newGuildResult.Error != nil {
 			return nil, newGuildResult.Error
