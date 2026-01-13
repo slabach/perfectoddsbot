@@ -22,11 +22,11 @@ type Card struct {
 
 // CardResult contains the outcome of executing a card
 type CardResult struct {
-	Message           string   // Message to display to user
-	PointsDelta       float64  // Points gained/lost by the user who drew the card
-	PoolDelta         float64  // Points added/subtracted from the pool
-	TargetUserID      *string  // Optional target user (for steals, transfers, etc.)
-	TargetPointsDelta float64  // Points gained/lost by target user
-	RequiresSelection bool     // If true, card needs user interaction (e.g., Pickpocket)
-	SelectionType     string   // Type of selection needed (e.g., "user" for user select menu)
+	Message           string  // Message to display to user
+	PointsDelta       float64 // Points gained/lost by the user who drew the card
+	PoolDelta         float64 // Points added/subtracted from the pool
+	TargetUserID      *string // Optional target user (for steals, transfers, etc.)
+	TargetPointsDelta float64 // Points gained/lost by target user
+	RequiresSelection bool    // If true, card needs user interaction (e.g., Pickpocket)
+	SelectionType     string  // Type of selection needed (e.g., "user" for user select menu)
 }
