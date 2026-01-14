@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"perfectOddsBot/models"
+	"perfectOddsBot/services/cardService"
 	"perfectOddsBot/services/common"
 	"perfectOddsBot/services/guildService"
 	"perfectOddsBot/services/messageService"
@@ -145,15 +146,27 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 		if entry.Option == winningOption {
 			// Winning entry - calculate payout
 			payout := common.CalculatePayout(entry.Amount, winningOption, bet)
-			user.Points += payout
-			user.TotalBetsWon++
-			user.TotalPointsWon += payout
-			db.Save(&user)
-			totalPayout += payout
 
-			if payout > 0 {
+			// Check for Double Down card and apply 2x multiplier if available
+			modifiedPayout, hasDoubleDown, err := cardService.ApplyDoubleDownIfAvailable(db, s, user, payout)
+			if err != nil {
+				common.SendError(s, i, fmt.Errorf("error checking Double Down: %v", err), db)
+				return
+			}
+
+			user.Points += modifiedPayout
+			user.TotalBetsWon++
+			user.TotalPointsWon += modifiedPayout
+			db.Save(&user)
+			totalPayout += modifiedPayout
+
+			if modifiedPayout > 0 {
 				username := common.GetUsernameWithDB(db, s, user.GuildID, user.DiscordID)
-				winnersList += fmt.Sprintf("%s - Won $%.1f\n", username, payout)
+				doubleDownMsg := ""
+				if hasDoubleDown {
+					doubleDownMsg = " (Double Down: 2x payout!)"
+				}
+				winnersList += fmt.Sprintf("%s - Won $%.1f%s\n", username, modifiedPayout, doubleDownMsg)
 			}
 		} else {
 			// Losing entry - add to pool

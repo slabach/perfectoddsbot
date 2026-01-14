@@ -607,3 +607,145 @@ func handleMinorGlitch(s *discordgo.Session, db *gorm.DB, userID string, guildID
 		PoolDelta:   0,
 	}, nil
 }
+
+// handleHighFive gives both the user and a random active user 10 points
+func handleHighFive(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	// Get all users in guild except the current user
+	var allUsers []models.User
+	if err := db.Where("guild_id = ? AND discord_id != ?", guildID, userID).Find(&allUsers).Error; err != nil {
+		return nil, err
+	}
+
+	if len(allUsers) == 0 {
+		return &models.CardResult{
+			Message:     "No other users found to high-five. The card fizzles out.",
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	// Pick a random user
+	randomIndex := rand.Intn(len(allUsers))
+	targetUser := allUsers[randomIndex]
+
+	// Both users gain 10 points
+	gainAmount := 10.0
+	targetID := targetUser.DiscordID
+	return &models.CardResult{
+		Message:           fmt.Sprintf("You high-fived a random user! You both gained %.0f points!", gainAmount),
+		PointsDelta:       gainAmount,
+		PoolDelta:         0,
+		TargetUserID:      &targetID,
+		TargetPointsDelta: gainAmount,
+	}, nil
+}
+
+// handleRickRoll makes the user lose 5 points and includes a YouTube link
+func handleRickRoll(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	// Get user to check current points (after card cost was deducted)
+	var user models.User
+	if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
+		return nil, err
+	}
+
+	// Don't deduct more than user has
+	deductAmount := 5.0
+	if user.Points < deductAmount {
+		deductAmount = user.Points
+	}
+
+	// Include YouTube link in the message - Discord will auto-preview it
+	youtubeLink := "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+	return &models.CardResult{
+		Message:     fmt.Sprintf("You got rick rolled! -%.0f Points.\n\n%s", deductAmount, youtubeLink),
+		PointsDelta: -deductAmount,
+		PoolDelta:   0,
+	}, nil
+}
+
+// handlePocketSand refunds the cost of drawing the card
+func handlePocketSand(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	// Get user and guild to determine card cost
+	var user models.User
+	var guild models.Guild
+	if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
+		return nil, err
+	}
+	if err := db.Where("guild_id = ?", guildID).First(&guild).Error; err != nil {
+		return nil, err
+	}
+
+	// Calculate the cost that was paid (CardDrawCount was already incremented before handler is called)
+	var refundAmount float64
+	switch user.CardDrawCount {
+	case 1:
+		refundAmount = guild.CardDrawCost
+	case 2:
+		refundAmount = guild.CardDrawCost * 10
+	default:
+		refundAmount = guild.CardDrawCost * 100
+	}
+
+	// Refund the cost (remove from pool and give back to user)
+	return &models.CardResult{
+		Message:     fmt.Sprintf("It's very effective! Refunded %.0f points (the cost of this card).", refundAmount),
+		PointsDelta: refundAmount,
+		PoolDelta:   -refundAmount, // Remove from pool
+	}, nil
+}
+
+// handleShield adds the Shield to the user's inventory (already handled by AddToInventory)
+// and informs the user that the next negative effect against them will be blocked.
+func handleShield(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	return &models.CardResult{
+		Message:     "A shimmering barrier surrounds you. Your next negative effect against you will be blocked.",
+		PointsDelta: 0,
+		PoolDelta:   0,
+	}, nil
+}
+
+// handleMajorGlitch gives 100 points to everyone in the server
+func handleMajorGlitch(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	// Get all users in the guild
+	var allUsers []models.User
+	if err := db.Where("guild_id = ?", guildID).Find(&allUsers).Error; err != nil {
+		return nil, err
+	}
+
+	if len(allUsers) == 0 {
+		return &models.CardResult{
+			Message:     "No users found in the server. The glitch fizzles out.",
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	// Update all users except the current user (current user will get points via PointsDelta)
+	gainAmount := 100.0
+	updatedCount := 0
+	for i := range allUsers {
+		if allUsers[i].DiscordID != userID {
+			allUsers[i].Points += gainAmount
+			if err := db.Save(&allUsers[i]).Error; err != nil {
+				return nil, err
+			}
+			updatedCount++
+		}
+	}
+
+	return &models.CardResult{
+		Message:     fmt.Sprintf("A major glitch occurred! Everyone in the server gained %.0f points! (%d users affected)", gainAmount, updatedCount+1),
+		PointsDelta: gainAmount, // Current user gets points through normal flow
+		PoolDelta:   0,
+	}, nil
+}
+
+// handleDoubleDown adds the Double Down card to the user's inventory (already handled by AddToInventory)
+// The next winning bet payout will be doubled
+func handleDoubleDown(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	return &models.CardResult{
+		Message:     "Your next winning bet payout will be doubled! (Does not apply to parlays)",
+		PointsDelta: 0,
+		PoolDelta:   0,
+	}, nil
+}

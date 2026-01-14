@@ -6,6 +6,7 @@ import (
 	"perfectOddsBot/models"
 	"perfectOddsBot/models/external"
 	"perfectOddsBot/services/betService"
+	cardService "perfectOddsBot/services/cardService"
 	"perfectOddsBot/services/common"
 	"perfectOddsBot/services/extService"
 	"perfectOddsBot/services/guildService"
@@ -324,17 +325,31 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 
 		if entry.AutoCloseWin {
 			payout := common.CalculatePayout(entry.Amount, entry.Option, bet)
-			user.Points += payout
+			
+			// Check for Double Down card and apply 2x multiplier if available
+			modifiedPayout, hasDoubleDown, err := cardService.ApplyDoubleDownIfAvailable(db, s, user, payout)
+			if err != nil {
+				log.Printf("Error checking Double Down for auto-resolved bet: %v", err)
+				// Continue with original payout if error
+				modifiedPayout = payout
+				hasDoubleDown = false
+			}
+			
+			user.Points += modifiedPayout
 			user.TotalBetsWon++
-			user.TotalPointsWon += payout
+			user.TotalPointsWon += modifiedPayout
 			db.Save(&user)
-			totalPayout += payout
+			totalPayout += modifiedPayout
 
-			if payout > 0 {
+			if modifiedPayout > 0 {
+				doubleDownMsg := ""
+				if hasDoubleDown {
+					doubleDownMsg = " (Double Down: 2x payout!)"
+				}
 				if spreadDisplay != "" {
-					winnersList += fmt.Sprintf("%s - Bet: %s %s - **Won $%.1f**\n", username, betOption, spreadDisplay, payout)
+					winnersList += fmt.Sprintf("%s - Bet: %s %s - **Won $%.1f**%s\n", username, betOption, spreadDisplay, modifiedPayout, doubleDownMsg)
 				} else {
-					winnersList += fmt.Sprintf("%s - Bet: %s - **Won $%.1f**\n", username, betOption, payout)
+					winnersList += fmt.Sprintf("%s - Bet: %s - **Won $%.1f**%s\n", username, betOption, modifiedPayout, doubleDownMsg)
 				}
 			}
 		} else {

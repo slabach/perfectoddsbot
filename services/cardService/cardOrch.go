@@ -3,6 +3,7 @@ package cardService
 import (
 	"fmt"
 	"perfectOddsBot/models"
+	"perfectOddsBot/services/cardService/cards"
 	"perfectOddsBot/services/common"
 	"perfectOddsBot/services/guildService"
 	"time"
@@ -10,9 +11,6 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"gorm.io/gorm"
 )
-
-const LuckyHorseshoeCardID = 17
-const UnluckyCatCardID = 18
 
 // DrawCard handles the /draw-card command
 func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
@@ -139,7 +137,7 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 
 	// Consume Lucky Horseshoe if user has one (inside transaction)
 	if hasLuckyHorseshoe {
-		if err := PlayCardFromInventory(s, tx, user, LuckyHorseshoeCardID); err != nil {
+		if err := PlayCardFromInventory(s, tx, user, cards.LuckyHorseshoeCardID); err != nil {
 			tx.Rollback()
 			common.SendError(s, i, fmt.Errorf("error consuming Lucky Horseshoe: %v", err), db)
 			return
@@ -148,7 +146,7 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 
 	// Consume Unlucky Cat if user has one (inside transaction)
 	if hasUnluckyCat {
-		if err := PlayCardFromInventory(s, tx, user, UnluckyCatCardID); err != nil {
+		if err := PlayCardFromInventory(s, tx, user, cards.UnluckyCatCardID); err != nil {
 			tx.Rollback()
 			common.SendError(s, i, fmt.Errorf("error consuming Unlucky Cat: %v", err), db)
 			return
@@ -245,6 +243,30 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	}
 
 	// Apply card effects
+	// If the user has a Shield and this is a negative effect, block it
+	if cardResult.PointsDelta < 0 {
+		hasShield, err := hasShieldInInventory(tx, user.ID, guildID)
+		if err != nil {
+			tx.Rollback()
+			common.SendError(s, i, err, db)
+			return
+		}
+		if hasShield {
+			if err := PlayCardFromInventory(s, tx, user, cards.ShieldCardID); err != nil {
+				tx.Rollback()
+				common.SendError(s, i, err, db)
+				return
+			}
+
+			cardResult.PointsDelta = 0
+			if cardResult.Message == "" {
+				cardResult.Message = "Your Shield blocked the hit!"
+			} else {
+				cardResult.Message += " (Your Shield blocked the hit!)"
+			}
+		}
+	}
+
 	user.Points += cardResult.PointsDelta
 	// Ensure points never go below 0
 	if user.Points < 0 {
@@ -257,6 +279,30 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	if cardResult.TargetUserID != nil {
 		var targetUser models.User
 		if err := tx.Where("discord_id = ? AND guild_id = ?", *cardResult.TargetUserID, guildID).First(&targetUser).Error; err == nil {
+			// If the target has a Shield and this is a negative effect, block it
+			if cardResult.TargetPointsDelta < 0 {
+				hasShield, err := hasShieldInInventory(tx, targetUser.ID, guildID)
+				if err != nil {
+					tx.Rollback()
+					common.SendError(s, i, err, db)
+					return
+				}
+				if hasShield {
+					if err := PlayCardFromInventory(s, tx, targetUser, cards.ShieldCardID); err != nil {
+						tx.Rollback()
+						common.SendError(s, i, err, db)
+						return
+					}
+
+					cardResult.TargetPointsDelta = 0
+					if cardResult.Message == "" {
+						cardResult.Message = "Their Shield blocked the hit!"
+					} else {
+						cardResult.Message += " (Their Shield blocked the hit!)"
+					}
+				}
+			}
+
 			targetUser.Points += cardResult.TargetPointsDelta
 			if targetUser.Points < 0 {
 				targetUser.Points = 0
@@ -283,10 +329,17 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	// Build embed response
 	embed := buildCardEmbed(card, cardResult, user, targetUsername, guild.Pool, drawCardCost)
 
+	// Special handling for Rick Roll card - add YouTube link to content for auto-preview
+	var content string
+	if card.ID == cards.RickRollCardID { // Rick Roll card ID
+		content = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+	}
+
 	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
-			Embeds: []*discordgo.MessageEmbed{embed},
+			Content: content,
+			Embeds:  []*discordgo.MessageEmbed{embed},
 		},
 	})
 	if err != nil {
@@ -410,7 +463,7 @@ func buildCardEmbed(card *models.Card, result *models.CardResult, user models.Us
 func hasLuckyHorseshoeInInventory(db *gorm.DB, userID uint, guildID string) (bool, error) {
 	var count int64
 	err := db.Model(&models.UserInventory{}).
-		Where("user_id = ? AND guild_id = ? AND card_id = ?", userID, guildID, LuckyHorseshoeCardID).
+		Where("user_id = ? AND guild_id = ? AND card_id = ?", userID, guildID, cards.LuckyHorseshoeCardID).
 		Count(&count).Error
 	return count > 0, err
 }
@@ -419,9 +472,41 @@ func hasLuckyHorseshoeInInventory(db *gorm.DB, userID uint, guildID string) (boo
 func hasUnluckyCatInInventory(db *gorm.DB, userID uint, guildID string) (bool, error) {
 	var count int64
 	err := db.Model(&models.UserInventory{}).
-		Where("user_id = ? AND guild_id = ? AND card_id = ?", userID, guildID, UnluckyCatCardID).
+		Where("user_id = ? AND guild_id = ? AND card_id = ?", userID, guildID, cards.UnluckyCatCardID).
 		Count(&count).Error
 	return count > 0, err
+}
+
+// hasShieldInInventory checks if user has a Shield in inventory (read-only)
+func hasShieldInInventory(db *gorm.DB, userID uint, guildID string) (bool, error) {
+	var count int64
+	err := db.Model(&models.UserInventory{}).
+		Where("user_id = ? AND guild_id = ? AND card_id = ?", userID, guildID, cards.ShieldCardID).
+		Count(&count).Error
+	return count > 0, err
+}
+
+// ApplyDoubleDownIfAvailable checks if user has Double Down card and applies 2x multiplier to payout
+// Returns the modified payout and whether Double Down was applied
+func ApplyDoubleDownIfAvailable(db *gorm.DB, s *discordgo.Session, user models.User, originalPayout float64) (float64, bool, error) {
+	var count int64
+	err := db.Model(&models.UserInventory{}).
+		Where("user_id = ? AND guild_id = ? AND card_id = ?", user.ID, user.GuildID, cards.DoubleDownCardID).
+		Count(&count).Error
+
+	if err != nil {
+		return originalPayout, false, err
+	}
+
+	if count > 0 {
+		// User has Double Down - consume it and double the payout
+		if err := PlayCardFromInventory(s, db, user, cards.DoubleDownCardID); err != nil {
+			return originalPayout, false, err
+		}
+		return originalPayout * 2.0, true, nil
+	}
+
+	return originalPayout, false, nil
 }
 
 // addCardToInventory adds a card to the user's inventory
