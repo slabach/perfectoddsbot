@@ -18,8 +18,16 @@ type Card struct {
 	Rarity               string // "Common", "Rare", "Epic", "Mythic"
 	Weight               int    // For RNG weighted distribution
 	Handler              CardHandler
-	AddToInventory       bool    // If true, card is added to user's inventory when drawn
-	RoyaltyDiscordUserID *string // Optional user ID for royalty payments
+	AddToInventory       bool         // If true, card is added to user's inventory when drawn
+	RoyaltyDiscordUserID *string      // Optional user ID for royalty payments
+	RequiredSubscription bool         // If true, card can only be drawn by guilds with a subscribed team
+	Options              []CardOption // If true, card is a choice card
+}
+
+type CardOption struct {
+	ID          int
+	Name        string
+	Description string
 }
 
 // CardResult contains the outcome of executing a card

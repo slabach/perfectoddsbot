@@ -9,9 +9,15 @@ const (
 	W_Mythic   = 350
 
 	// Card IDs
-	LuckyHorseshoeCardID = 17
-	UnluckyCatCardID     = 18
-	ShieldCardID         = 25
-	RickRollCardID       = 59
-	DoubleDownCardID     = 27
+	LuckyHorseshoeCardID   = 17
+	UnluckyCatCardID       = 18
+	ShieldCardID           = 25
+	RickRollCardID         = 59
+	DoubleDownCardID       = 27
+	JesterCardID           = 29
+	PettyTheftCardID       = 4
+	GenerousDonationCardID = 28
+	EmotionalHedgeCardID   = 62
+
+	RoyaltyGuildID = "761721066959667220"
 )

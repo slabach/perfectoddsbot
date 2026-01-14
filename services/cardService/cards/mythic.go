@@ -29,6 +29,15 @@ func registerMythicCards(deck *[]models.Card) {
 		// 	Weight:      W_Mythic,
 		// 	Handler:     handleJackpot,
 		// },
+		// {
+		// 	ID:                   66,
+		// 	Name:                 "Uno Reverse",
+		// 	Description:          "If you have any active bets, one of them randomly gets their option reversed.",
+		// 	Rarity:               "Legendary",
+		// 	Weight:               W_Epic,
+		// 	Handler:              handlePurpleShell,
+		// 	RoyaltyDiscordUserID: &[]string{"447827835797766144"}[0],
+		// },
 	}
 
 	// Add to deck

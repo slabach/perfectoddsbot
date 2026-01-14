@@ -92,6 +92,30 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		drawCardCost = guild.CardDrawCost * 100
 	}
 
+	// Check for Generous Donation (if cost is standard/level 1)
+	var donorUserID uint
+	var donorName string
+	if drawCardCost == guild.CardDrawCost {
+		donorID, err := hasGenerousDonationInInventory(db, guildID)
+		if err != nil {
+			common.SendError(s, i, fmt.Errorf("error checking donation inventory: %v", err), db)
+			return
+		}
+
+		// If found and donor is NOT the current user
+		if donorID != 0 && donorID != user.ID {
+			donorUserID = donorID
+			// Get donor name for display
+			var donor models.User
+			if err := db.First(&donor, donorID).Error; err == nil {
+				donorName = common.GetUsernameWithDB(db, s, guildID, donor.DiscordID)
+			}
+
+			// Reduce cost to 0 for this user
+			drawCardCost = 0
+		}
+	}
+
 	// Check for Lucky Horseshoe (read-only check before transaction)
 	hasLuckyHorseshoe, err := hasLuckyHorseshoeInInventory(db, user.ID, guildID)
 	if err != nil {
@@ -153,6 +177,22 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		}
 	}
 
+	// Consume Generous Donation if applied
+	if donorUserID != 0 {
+		var donorUser models.User
+		if err := tx.First(&donorUser, donorUserID).Error; err != nil {
+			tx.Rollback()
+			common.SendError(s, i, fmt.Errorf("error fetching donor user: %v", err), db)
+			return
+		}
+
+		if err := PlayCardFromInventory(s, tx, donorUser, cards.GenerousDonationCardID); err != nil {
+			tx.Rollback()
+			common.SendError(s, i, fmt.Errorf("error consuming Generous Donation: %v", err), db)
+			return
+		}
+	}
+
 	// Deduct cost
 	user.Points -= drawCardCost
 
@@ -171,10 +211,19 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	}
 
 	// Pick random card
-	card := PickRandomCard()
+	// Check if guild has a subscribed team
+	hasSubscription := guild.SubscribedTeam != nil && *guild.SubscribedTeam != ""
+	card := PickRandomCard(hasSubscription)
 	if card == nil {
 		tx.Rollback()
 		common.SendError(s, i, fmt.Errorf("no cards available"), db)
+		return
+	}
+
+	// Process royalty payment if card has a royalty user
+	if err := processRoyaltyPayment(tx, card, cards.RoyaltyGuildID); err != nil {
+		tx.Rollback()
+		common.SendError(s, i, fmt.Errorf("error processing royalty payment: %v", err), db)
 		return
 	}
 
@@ -328,6 +377,15 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 
 	// Build embed response
 	embed := buildCardEmbed(card, cardResult, user, targetUsername, guild.Pool, drawCardCost)
+
+	// If Generous Donation was used, append to footer
+	if donorUserID != 0 && donorName != "" {
+		if embed.Footer == nil {
+			embed.Footer = &discordgo.MessageEmbedFooter{}
+		}
+		originalText := embed.Footer.Text
+		embed.Footer.Text = fmt.Sprintf("%s | Paid for by generous donation from %s!", originalText, donorName)
+	}
 
 	// Special handling for Rick Roll card - add YouTube link to content for auto-preview
 	var content string
@@ -486,9 +544,30 @@ func hasShieldInInventory(db *gorm.DB, userID uint, guildID string) (bool, error
 	return count > 0, err
 }
 
+// hasGenerousDonationInInventory checks if ANY user in the guild has a Generous Donation card
+// Returns the user ID of the first donor found, or 0 if none
+func hasGenerousDonationInInventory(db *gorm.DB, guildID string) (uint, error) {
+	var inventory models.UserInventory
+	// Find ANY user in this guild who has the card
+	err := db.Model(&models.UserInventory{}).
+		Where("guild_id = ? AND card_id = ?", guildID, cards.GenerousDonationCardID).
+		First(&inventory).Error
+
+	if err == gorm.ErrRecordNotFound {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return inventory.UserID, nil
+}
+
+// CardConsumer is a function type for consuming a card from inventory
+type CardConsumer func(db *gorm.DB, user models.User, cardID int) error
+
 // ApplyDoubleDownIfAvailable checks if user has Double Down card and applies 2x multiplier to payout
 // Returns the modified payout and whether Double Down was applied
-func ApplyDoubleDownIfAvailable(db *gorm.DB, s *discordgo.Session, user models.User, originalPayout float64) (float64, bool, error) {
+func ApplyDoubleDownIfAvailable(db *gorm.DB, consumer CardConsumer, user models.User, originalPayout float64) (float64, bool, error) {
 	var count int64
 	err := db.Model(&models.UserInventory{}).
 		Where("user_id = ? AND guild_id = ? AND card_id = ?", user.ID, user.GuildID, cards.DoubleDownCardID).
@@ -500,13 +579,139 @@ func ApplyDoubleDownIfAvailable(db *gorm.DB, s *discordgo.Session, user models.U
 
 	if count > 0 {
 		// User has Double Down - consume it and double the payout
-		if err := PlayCardFromInventory(s, db, user, cards.DoubleDownCardID); err != nil {
+		if err := consumer(db, user, cards.DoubleDownCardID); err != nil {
 			return originalPayout, false, err
 		}
 		return originalPayout * 2.0, true, nil
 	}
 
 	return originalPayout, false, nil
+}
+
+// ApplyEmotionalHedgeIfApplicable checks if user has Emotional Hedge card and applies refund if conditions met
+// Returns the refund amount (if any) and whether the card was applied (consumed)
+func ApplyEmotionalHedgeIfApplicable(db *gorm.DB, consumer CardConsumer, user models.User, bet models.Bet, userPick int, betAmount float64, scoreDiff int) (float64, bool, error) {
+	// 1. Check if user has the card
+	var count int64
+	err := db.Model(&models.UserInventory{}).
+		Where("user_id = ? AND guild_id = ? AND card_id = ?", user.ID, user.GuildID, cards.EmotionalHedgeCardID).
+		Count(&count).Error
+	if err != nil {
+		return 0, false, err
+	}
+	if count == 0 {
+		return 0, false, nil
+	}
+
+	// 2. Check if guild has a subscribed team
+	var guild models.Guild
+	if err := db.Where("guild_id = ?", user.GuildID).First(&guild).Error; err != nil {
+		return 0, false, err
+	}
+	if guild.SubscribedTeam == nil || *guild.SubscribedTeam == "" {
+		return 0, false, nil
+	}
+	subscribedTeam := *guild.SubscribedTeam
+
+	// 3. Check if user's pick is the subscribed team
+	var userPickedTeamName string
+	if userPick == 1 {
+		userPickedTeamName = bet.Option1
+	} else {
+		userPickedTeamName = bet.Option2
+	}
+
+	userPickedTeamNameNormalized := common.GetSchoolName(userPickedTeamName)
+	subscribedTeamNormalized := common.GetSchoolName(subscribedTeam)
+
+	isBetOnSubscribedTeam := userPickedTeamNameNormalized == subscribedTeamNormalized
+
+	if !isBetOnSubscribedTeam {
+		// Try looser check in case normalization misses
+		isBetOnSubscribedTeam = (userPickedTeamName == subscribedTeam)
+	}
+
+	if !isBetOnSubscribedTeam {
+		return 0, false, nil
+	}
+
+	// 4. Consume the card
+	if err := consumer(db, user, cards.EmotionalHedgeCardID); err != nil {
+		return 0, false, err
+	}
+
+	// 5. Check if the subscribed team lost STRAIGHT UP
+	// scoreDiff is (Option1Score - Option2Score).
+	// If userPick == 1, team won if scoreDiff > 0.
+	// If userPick == 2, team won if scoreDiff < 0.
+
+	teamWonStraightUp := false
+	if userPick == 1 {
+		teamWonStraightUp = scoreDiff > 0
+	} else {
+		teamWonStraightUp = scoreDiff < 0
+	}
+
+	if !teamWonStraightUp {
+		// Team lost straight up -> Refund 50%
+		refund := betAmount * 0.5
+		return refund, true, nil
+	}
+
+	return 0, true, nil
+}
+
+// processRoyaltyPayment handles royalty payments to card creators when their cards are drawn
+func processRoyaltyPayment(tx *gorm.DB, card *models.Card, royaltyGuildID string) error {
+	// Check if card has a royalty user
+	if card.RoyaltyDiscordUserID == nil {
+		return nil // No royalty to pay
+	}
+
+	// Calculate royalty amount based on rarity
+	var royaltyAmount float64
+	switch card.Rarity {
+	case "Common":
+		royaltyAmount = 0.5
+	case "Uncommon":
+		royaltyAmount = 1.0
+	case "Rare":
+		royaltyAmount = 2.0
+	case "Epic":
+		royaltyAmount = 5.0
+	case "Mythic":
+		royaltyAmount = 25.0
+	default:
+		// Unknown rarity, default to common
+		royaltyAmount = 0.5
+	}
+
+	// Get or create guild info for the royalty guild to set starting points if needed
+	var royaltyGuild models.Guild
+	guildResult := tx.Where("guild_id = ?", royaltyGuildID).First(&royaltyGuild)
+	if guildResult.Error != nil {
+		return fmt.Errorf("error fetching royalty guild: %v", guildResult.Error)
+	}
+
+	// Get or create royalty user in the specific guild
+	var royaltyUser models.User
+	result := tx.First(&royaltyUser, models.User{
+		DiscordID: *card.RoyaltyDiscordUserID,
+		GuildID:   royaltyGuildID,
+	})
+	if result.Error != nil {
+		return fmt.Errorf("error fetching royalty user: %v", result.Error)
+	}
+
+	// Add royalty amount to user's points
+	royaltyUser.Points += royaltyAmount
+
+	// Save the royalty user
+	if err := tx.Save(&royaltyUser).Error; err != nil {
+		return fmt.Errorf("error saving royalty user: %v", err)
+	}
+
+	return nil
 }
 
 // addCardToInventory adds a card to the user's inventory

@@ -25,14 +25,28 @@ func RegisterAllCards() {
 }
 
 // PickRandomCard selects a random card based on weighted distribution
-func PickRandomCard() *models.Card {
+// hasSubscription indicates if the guild has a subscribed team (allowing access to premium cards)
+func PickRandomCard(hasSubscription bool) *models.Card {
 	if len(Deck) == 0 {
 		return nil
 	}
 
-	// Calculate total weight
+	// Filter deck based on subscription requirement
+	var eligibleCards []*models.Card
+	for i := range Deck {
+		if Deck[i].RequiredSubscription && !hasSubscription {
+			continue // Skip cards requiring subscription if guild doesn't have one
+		}
+		eligibleCards = append(eligibleCards, &Deck[i])
+	}
+
+	if len(eligibleCards) == 0 {
+		return nil
+	}
+
+	// Calculate total weight of eligible cards
 	totalWeight := 0
-	for _, card := range Deck {
+	for _, card := range eligibleCards {
 		totalWeight += card.Weight
 	}
 
@@ -45,15 +59,15 @@ func PickRandomCard() *models.Card {
 
 	// Select card based on cumulative weight
 	cumulativeWeight := 0
-	for i := range Deck {
-		cumulativeWeight += Deck[i].Weight
+	for _, card := range eligibleCards {
+		cumulativeWeight += card.Weight
 		if random < cumulativeWeight {
-			return &Deck[i]
+			return card
 		}
 	}
 
 	// Fallback (shouldn't reach here)
-	return &Deck[0]
+	return eligibleCards[0]
 }
 
 // GetCardByID returns a card by its ID, or nil if not found

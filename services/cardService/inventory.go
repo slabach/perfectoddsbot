@@ -15,7 +15,7 @@ func PlayCardFromInventory(s *discordgo.Session, db *gorm.DB, user models.User, 
 	var inventory models.UserInventory
 	// Using the provided db (which should be a transaction if called from within one)
 	result := db.Where("user_id = ? AND guild_id = ? AND card_id = ?", user.ID, user.GuildID, cardID).First(&inventory)
-	
+
 	if result.Error != nil {
 		return result.Error // Card not found or other DB error
 	}

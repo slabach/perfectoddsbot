@@ -1,6 +1,8 @@
 package cards
 
-import "perfectOddsBot/models"
+import (
+	"perfectOddsBot/models"
+)
 
 func registerUncommonCards(deck *[]models.Card) {
 	uncommonCards := []models.Card{
@@ -31,38 +33,40 @@ func registerUncommonCards(deck *[]models.Card) {
 			RoyaltyDiscordUserID: &[]string{"195444122578845696"}[0],
 		},
 		{
-			ID:             27,
-			Name:           "Double Down",
-			Description:    "The payout of your next winning bet is increased by 2x",
+			ID:                   27,
+			Name:                 "Double Down",
+			Description:          "The payout of your next winning bet is increased by 2x",
+			Rarity:               "Uncommon",
+			Weight:               W_Uncommon,
+			Handler:              handleDoubleDown,
+			AddToInventory:       true,
+			RoyaltyDiscordUserID: &[]string{"130863485969104896"}[0],
+		},
+		{
+			ID:             28,
+			Name:           "Generous Donation",
+			Description:    "You pay for the next (standard cost) card bought by another user.",
 			Rarity:         "Uncommon",
 			Weight:         W_Uncommon,
-			Handler:        handleDoubleDown,
+			Handler:        handleGenerousDonation,
 			AddToInventory: true,
 		},
-		// {
-		// 	ID:          28,
-		// 	Name:        "Slippery Slope",
-		// 	Description: "The next person to buy a card pays YOUR fee for it.",
-		// 	Rarity:      "Uncommon",
-		// 	Weight:      W_Uncommon,
-		// 	Handler:     handleSlipperySlope,
-		// },
-		// {
-		// 	ID:          29,
-		// 	Name:        "The Jester",
-		// 	Description: "Choose a user to mute for 5 minutes.",
-		// 	Rarity:      "Uncommon",
-		// 	Weight:      W_Uncommon,
-		// 	Handler:     handleJester,
-		// },
-		// {
-		// 	ID:          30,
-		// 	Name:        "Stimulus Check",
-		// 	Description: "Everyone in the server gets 50 points.",
-		// 	Rarity:      "Uncommon",
-		// 	Weight:      W_Uncommon,
-		// 	Handler:     handleStimulusCheck,
-		// },
+		{
+			ID:          29,
+			Name:        "The Jester",
+			Description: "Choose a user to mute for 15 minutes.",
+			Rarity:      "Uncommon",
+			Weight:      W_Uncommon,
+			Handler:     handleJester,
+		},
+		{
+			ID:          30,
+			Name:        "Stimulus Check",
+			Description: "Everyone in the server gets 50 points.",
+			Rarity:      "Uncommon",
+			Weight:      W_Uncommon,
+			Handler:     handleStimulusCheck,
+		},
 		// // {
 		// // 	ID:          31,
 		// // 	Name:        "Grand Larceny",
@@ -119,6 +123,24 @@ func registerUncommonCards(deck *[]models.Card) {
 		// 	Rarity:      "Uncommon",
 		// 	Weight:      W_Uncommon,
 		// 	Handler:     handleLoanShark,
+		// },
+		// {
+		// 	ID:                   63,
+		// 	Name:                 "Green Shells",
+		// 	Description:          "3 people are randomly selected to randomly lose between 1-25 points.",
+		// 	Rarity:               "Uncommon",
+		// 	Weight:               W_Uncommon,
+		// 	Handler:              handleGreenShells,
+		// 	RoyaltyDiscordUserID: &[]string{"447827835797766144"}[0],
+		// },
+		// {
+		// 	ID:                   65,
+		// 	Name:                 "Whack-a-Mole",
+		// 	Description:          "Bonk 3-5 random players who each randomly lose between 1-10 points",
+		// 	Rarity:               "Uncommon",
+		// 	Weight:               W_Uncommon,
+		// 	Handler:              handleWhackAMole,
+		// 	RoyaltyDiscordUserID: &[]string{"447827835797766144"}[0],
 		// },
 	}
 

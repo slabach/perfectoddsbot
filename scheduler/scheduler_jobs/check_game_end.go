@@ -325,42 +325,96 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 
 		if entry.AutoCloseWin {
 			payout := common.CalculatePayout(entry.Amount, entry.Option, bet)
-			
+
+			// Define card consumer closure
+			consumer := func(db *gorm.DB, user models.User, cardID int) error {
+				return cardService.PlayCardFromInventory(s, db, user, cardID)
+			}
+
 			// Check for Double Down card and apply 2x multiplier if available
-			modifiedPayout, hasDoubleDown, err := cardService.ApplyDoubleDownIfAvailable(db, s, user, payout)
+			modifiedPayout, hasDoubleDown, err := cardService.ApplyDoubleDownIfAvailable(db, consumer, user, payout)
 			if err != nil {
 				log.Printf("Error checking Double Down for auto-resolved bet: %v", err)
 				// Continue with original payout if error
 				modifiedPayout = payout
 				hasDoubleDown = false
 			}
-			
+
+			// Check for Emotional Hedge
+			hedgeRefund, hedgeApplied, err := cardService.ApplyEmotionalHedgeIfApplicable(db, consumer, user, bet, entry.Option, float64(entry.Amount), scoreDiff)
+			if err != nil {
+				log.Printf("Error checking Emotional Hedge: %v", err)
+			}
+
 			user.Points += modifiedPayout
 			user.TotalBetsWon++
 			user.TotalPointsWon += modifiedPayout
+
+			if hedgeApplied && hedgeRefund > 0 {
+				user.Points += hedgeRefund
+				// Subtract refund from pool (since we are paying it out)
+				// We'll accumulate negative pool delta
+				lostPoolAmount -= hedgeRefund
+			}
+
 			db.Save(&user)
-			totalPayout += modifiedPayout
+			totalPayout += modifiedPayout + hedgeRefund
 
 			if modifiedPayout > 0 {
 				doubleDownMsg := ""
 				if hasDoubleDown {
 					doubleDownMsg = " (Double Down: 2x payout!)"
 				}
+				hedgeMsg := ""
+				if hedgeApplied && hedgeRefund > 0 {
+					hedgeMsg = fmt.Sprintf(" (Emotional Hedge: Refunding $%.1f)", hedgeRefund)
+				} else if hedgeApplied {
+					hedgeMsg = " (Emotional Hedge: consumed)"
+				}
+
 				if spreadDisplay != "" {
-					winnersList += fmt.Sprintf("%s - Bet: %s %s - **Won $%.1f**%s\n", username, betOption, spreadDisplay, modifiedPayout, doubleDownMsg)
+					winnersList += fmt.Sprintf("%s - Bet: %s %s - **Won $%.1f**%s%s\n", username, betOption, spreadDisplay, modifiedPayout, doubleDownMsg, hedgeMsg)
 				} else {
-					winnersList += fmt.Sprintf("%s - Bet: %s - **Won $%.1f**%s\n", username, betOption, modifiedPayout, doubleDownMsg)
+					winnersList += fmt.Sprintf("%s - Bet: %s - **Won $%.1f**%s%s\n", username, betOption, modifiedPayout, doubleDownMsg, hedgeMsg)
 				}
 			}
 		} else {
+			// Define card consumer closure
+			consumer := func(db *gorm.DB, user models.User, cardID int) error {
+				return cardService.PlayCardFromInventory(s, db, user, cardID)
+			}
+
+			// Check for Emotional Hedge
+			hedgeRefund, hedgeApplied, err := cardService.ApplyEmotionalHedgeIfApplicable(db, consumer, user, bet, entry.Option, float64(entry.Amount), scoreDiff)
+			if err != nil {
+				log.Printf("Error checking Emotional Hedge: %v", err)
+			}
+
 			user.TotalBetsLost++
 			user.TotalPointsLost += float64(entry.Amount)
+
+			if hedgeApplied && hedgeRefund > 0 {
+				user.Points += hedgeRefund
+				// We effectively subtract the refund from the amount lost to pool
+				// entry.Amount is added to lostPoolAmount below.
+				// So we subtract hedgeRefund from it.
+				lostPoolAmount -= hedgeRefund
+			}
+
 			db.Save(&user)
 			lostPoolAmount += float64(entry.Amount)
+
+			hedgeMsg := ""
+			if hedgeApplied && hedgeRefund > 0 {
+				hedgeMsg = fmt.Sprintf(" (Emotional Hedge: Refunding $%.1f)", hedgeRefund)
+			} else if hedgeApplied {
+				hedgeMsg = " (Emotional Hedge: consumed)"
+			}
+
 			if spreadDisplay != "" {
-				loserList += fmt.Sprintf("%s - Bet: %s %s - **Lost $%d**\n", username, betOption, spreadDisplay, entry.Amount)
+				loserList += fmt.Sprintf("%s - Bet: %s %s - **Lost $%d**%s\n", username, betOption, spreadDisplay, entry.Amount, hedgeMsg)
 			} else {
-				loserList += fmt.Sprintf("%s - Bet: %s - **Lost $%d**\n", username, betOption, entry.Amount)
+				loserList += fmt.Sprintf("%s - Bet: %s - **Lost $%d**%s\n", username, betOption, entry.Amount, hedgeMsg)
 			}
 		}
 	}

@@ -5,15 +5,6 @@ import "perfectOddsBot/models"
 func registerRareCards(deck *[]models.Card) {
 	rareCards := []models.Card{
 		// {
-		// 	ID:                   38,
-		// 	Name:                 "The Blue Shell",
-		// 	Description:          "The player in 1st place loses 20% of their total points to the Pool.",
-		// 	Rarity:               "Rare",
-		// 	Weight:               W_Rare,
-		// 	Handler:              handleBlueShell,
-		// 	RoyaltyDiscordUserID: &[]string{"698712210515558432"}[0],
-		// },
-		// {
 		// 	ID:          39,
 		// 	Name:        "The Red Shell",
 		// 	Description: "Choose a player. They lose 10% of their points to you.",
@@ -62,6 +53,24 @@ func registerRareCards(deck *[]models.Card) {
 		// 	Weight:      W_Rare,
 		// 	Handler:     handleChaosDunk,
 		// },
+		// {
+		// 	ID:                   64,
+		// 	Name:                 "Red Shells",
+		// 	Description:          "The 3 people directly in front of you on the leaderboard randomly lose between 10-25 points.",
+		// 	Rarity:               "Rare",
+		// 	Weight:               W_Rare,
+		// 	Handler:              handleRedShells,
+		// 	RoyaltyDiscordUserID: &[]string{"447827835797766144"}[0],
+		// },
+		{
+			ID:                   67,
+			Name:                 "Factory Reset",
+			Description:          "If you have less than 1000 points, you are reset to 1000 points.",
+			Rarity:               "Rare",
+			Weight:               W_Rare,
+			Handler:              handleFactoryReset,
+			RoyaltyDiscordUserID: &[]string{"447827835797766144"}[0],
+		},
 	}
 
 	// Add to deck

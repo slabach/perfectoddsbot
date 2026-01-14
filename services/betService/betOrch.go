@@ -147,8 +147,13 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 			// Winning entry - calculate payout
 			payout := common.CalculatePayout(entry.Amount, winningOption, bet)
 
+			// Define card consumer closure
+			consumer := func(db *gorm.DB, user models.User, cardID int) error {
+				return cardService.PlayCardFromInventory(s, db, user, cardID)
+			}
+
 			// Check for Double Down card and apply 2x multiplier if available
-			modifiedPayout, hasDoubleDown, err := cardService.ApplyDoubleDownIfAvailable(db, s, user, payout)
+			modifiedPayout, hasDoubleDown, err := cardService.ApplyDoubleDownIfAvailable(db, consumer, user, payout)
 			if err != nil {
 				common.SendError(s, i, fmt.Errorf("error checking Double Down: %v", err), db)
 				return

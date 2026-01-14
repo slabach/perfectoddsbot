@@ -68,16 +68,17 @@ func HandleCardUserSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 		return nil
 	}
 
-	// Handle different card types
 	switch cardID {
-	case 4: // Pickpocket
-		return handlePickpocketSelection(s, i, db, userID, targetUserID, guildID)
+	case cards.PettyTheftCardID:
+		return handlePettyTheftSelection(s, i, db, userID, targetUserID, guildID)
+	case cards.JesterCardID:
+		return handleJesterSelection(s, i, db, userID, targetUserID, guildID)
 	default:
 		return fmt.Errorf("card %d does not support user selection", cardID)
 	}
 }
 
-func handlePickpocketSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, userID string, targetUserID string, guildID string) error {
+func handlePettyTheftSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, userID string, targetUserID string, guildID string) error {
 	// Execute the steal
 	result, err := cards.ExecutePickpocketSteal(db, userID, targetUserID, guildID)
 	if err != nil {
@@ -120,6 +121,47 @@ func handlePickpocketSelection(s *discordgo.Session, i *discordgo.InteractionCre
 	}
 
 	return nil
+}
+
+func handleJesterSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, userID string, targetUserID string, guildID string) error {
+	// Execute the mute
+	result, err := cards.ExecuteJesterMute(s, db, userID, targetUserID, guildID)
+	if err != nil {
+		return err
+	}
+
+	// Get guild info for pool balance
+	guild, err := guildService.GetGuildInfo(s, db, guildID, i.ChannelID)
+	if err != nil {
+		return err
+	}
+
+	// Get user info
+	var user models.User
+	if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
+		return err
+	}
+
+	// Get target username
+	targetUsername := common.GetUsernameWithDB(db, s, guildID, targetUserID)
+
+	// Get card info
+	card := cardService.GetCardByID(29) // ID 29 is Jester
+	if card == nil {
+		return fmt.Errorf("card not found")
+	}
+
+	// Build embed
+	embed := buildCardResultEmbed(card, result, user, targetUsername, guild.Pool)
+
+	// Acknowledge interaction and send result
+	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{embed},
+		},
+	})
+	return err
 }
 
 func buildCardResultEmbed(card *models.Card, result *models.CardResult, user models.User, targetUsername string, poolBalance float64) *discordgo.MessageEmbed {

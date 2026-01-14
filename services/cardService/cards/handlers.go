@@ -749,3 +749,193 @@ func handleDoubleDown(s *discordgo.Session, db *gorm.DB, userID string, guildID 
 		PoolDelta:   0,
 	}, nil
 }
+
+// handleEmotionalHedge adds the card to the user's inventory (already handled by AddToInventory)
+// It provides a refund if the subscribed team loses straight up
+func handleEmotionalHedge(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	return &models.CardResult{
+		Message:     "Emotional Hedge active! If your subscribed team loses straight up on your next bet, you get 50% refund.",
+		PointsDelta: 0,
+		PoolDelta:   0,
+	}, nil
+}
+
+// handleJester requires user selection to mute them
+func handleJester(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	return &models.CardResult{
+		Message:           "The Jester requires you to select a target to mute!",
+		PointsDelta:       0,
+		PoolDelta:         0,
+		RequiresSelection: true,
+		SelectionType:     "user",
+	}, nil
+}
+
+// ExecuteJesterMute applies a 15-minute timeout to the target user
+func ExecuteJesterMute(s *discordgo.Session, db *gorm.DB, userID string, targetUserID string, guildID string) (*models.CardResult, error) {
+	// 15 minutes from now
+	timeoutUntil := time.Now().Add(15 * time.Minute)
+
+	// Apply the timeout using Discord's native feature
+	// This disables sending messages, reacting, and speaking in voice
+	err := s.GuildMemberTimeout(guildID, targetUserID, &timeoutUntil)
+	if err != nil {
+		// If it fails (e.g., target is Admin or Bot has low permissions), return a friendly error
+		return &models.CardResult{
+			Message:     "Failed to mute the target! They might be an Admin or too powerful.",
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil // Return nil error so the bot doesn't crash, just shows the message
+	}
+
+	targetID := targetUserID
+	return &models.CardResult{
+		Message:           "The Jester laughs! Target has been muted for 15 minutes.",
+		PointsDelta:       0,
+		PoolDelta:         0,
+		TargetUserID:      &targetID,
+		TargetPointsDelta: 0,
+	}, nil
+}
+
+// handleGenerousDonation adds the card to the user's inventory (already handled by AddToInventory)
+// It also pre-charges the cost of a standard card draw (level 1 cost) if the user can afford it.
+// The actual logic for applying this to another user is in cardOrch.go
+func handleGenerousDonation(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	// Get user and guild to determine cost
+	var user models.User
+	var guild models.Guild
+	if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
+		return nil, err
+	}
+	if err := db.Where("guild_id = ?", guildID).First(&guild).Error; err != nil {
+		return nil, err
+	}
+
+	// Check if user has Shield - if so, Shield blocks Generous Donation and card fizzles
+	var count int64
+	err := db.Model(&models.UserInventory{}).
+		Where("user_id = ? AND guild_id = ? AND card_id = ?", user.ID, guildID, ShieldCardID).
+		Count(&count).Error
+	if err != nil {
+		return nil, err
+	}
+	if count > 0 {
+		// Shield blocks it - remove both Generous Donation (just added) and Shield
+		if err := removeCardFromInventory(db, user.ID, guildID, GenerousDonationCardID); err != nil {
+			return nil, fmt.Errorf("failed to remove blocked donation card: %v", err)
+		}
+		if err := removeCardFromInventory(db, user.ID, guildID, ShieldCardID); err != nil {
+			return nil, fmt.Errorf("failed to consume shield: %v", err)
+		}
+
+		return &models.CardResult{
+			Message:     "Your Shield blocked the Generous Donation! The card fizzles out.",
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	// Cost of a standard (level 1) card draw
+	standardCost := guild.CardDrawCost
+
+	var message string
+	var pointsDelta float64
+	var poolDelta float64
+
+	// If user can afford it, charge them now
+	if user.Points >= standardCost {
+		pointsDelta = -standardCost
+		poolDelta = standardCost // Add to pool immediately
+		message = fmt.Sprintf("You have generously paid %.0f points forward! The next user to draw a standard cost card will get it for free.", standardCost)
+	} else {
+		// If the user cannot afford the donation, remove the card from their inventory so it doesn't trigger the free draw effect.
+		if err := removeCardFromInventory(db, user.ID, guildID, GenerousDonationCardID); err != nil {
+			return nil, fmt.Errorf("failed to remove unfunded donation card: %v", err)
+		}
+
+		return &models.CardResult{
+			Message:     fmt.Sprintf("You don't have enough points (%.0f) to make a generous donation! The card was returned.", standardCost),
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	return &models.CardResult{
+		Message:     message,
+		PointsDelta: pointsDelta,
+		PoolDelta:   poolDelta,
+	}, nil
+}
+
+// removeCardFromInventory removes a specific card from the user's inventory (one instance)
+func removeCardFromInventory(db *gorm.DB, userID uint, guildID string, cardID int) error {
+	// Find one instance
+	var item models.UserInventory
+	result := db.Where("user_id = ? AND guild_id = ? AND card_id = ?", userID, guildID, cardID).First(&item)
+	if result.Error != nil {
+		return result.Error
+	}
+	// Delete it
+	return db.Delete(&item).Error
+}
+
+// handleStimulusCheck gives 50 points to everyone in the server
+func handleStimulusCheck(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	// Get all users in the guild
+	var allUsers []models.User
+	if err := db.Where("guild_id = ?", guildID).Find(&allUsers).Error; err != nil {
+		return nil, err
+	}
+
+	if len(allUsers) == 0 {
+		return &models.CardResult{
+			Message:     "No users found in the server. The stimulus check bounces.",
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	// Update all users except the current user (current user will get points via PointsDelta)
+	gainAmount := 50.0
+	updatedCount := 0
+	for i := range allUsers {
+		if allUsers[i].DiscordID != userID {
+			allUsers[i].Points += gainAmount
+			if err := db.Save(&allUsers[i]).Error; err != nil {
+				return nil, err
+			}
+			updatedCount++
+		}
+	}
+
+	return &models.CardResult{
+		Message:     fmt.Sprintf("Stimulus Check arrived! Everyone in the server gained %.0f points! (%d users affected)", gainAmount, updatedCount+1),
+		PointsDelta: gainAmount, // Current user gets points through normal flow
+		PoolDelta:   0,
+	}, nil
+}
+
+// handleFactoryReset resets the user's points to 1000 if they have less than 1000 points
+func handleFactoryReset(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	// Get user to check current points
+	var user models.User
+	if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
+		return nil, err
+	}
+
+	if user.Points < 1000 {
+		diff := 1000.0 - user.Points
+		return &models.CardResult{
+			Message:     fmt.Sprintf("Factory Reset! Your points were reset to 1000 (+%.0f points).", diff),
+			PointsDelta: diff,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	return &models.CardResult{
+		Message:     "Factory Reset triggered, but you have 1000 or more points. Nothing changed.",
+		PointsDelta: 0,
+		PoolDelta:   0,
+	}, nil
+}
