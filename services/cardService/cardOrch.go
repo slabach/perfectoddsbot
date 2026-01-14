@@ -485,8 +485,8 @@ func MyInventory(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.
 	// Organize cards by rarity
 	rarityOrder := []string{"Mythic", "Epic", "Rare", "Common"}
 	cardsByRarity := make(map[string][]struct {
-		Card   *models.Card
-		Count  int
+		Card  *models.Card
+		Count int
 	})
 
 	for cardID, count := range cardCounts {
@@ -496,13 +496,13 @@ func MyInventory(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.
 		}
 		if cardsByRarity[card.Rarity] == nil {
 			cardsByRarity[card.Rarity] = []struct {
-				Card   *models.Card
-				Count  int
+				Card  *models.Card
+				Count int
 			}{}
 		}
 		cardsByRarity[card.Rarity] = append(cardsByRarity[card.Rarity], struct {
-			Card   *models.Card
-			Count  int
+			Card  *models.Card
+			Count int
 		}{Card: card, Count: count})
 	}
 
