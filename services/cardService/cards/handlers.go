@@ -103,10 +103,7 @@ func ExecutePickpocketSteal(db *gorm.DB, userID string, targetUserID string, gui
 	}
 
 	// Steal 5% of target's points
-	stealAmount := targetUser.Points * 0.05
-
-	// Round to 1 decimal place
-	stealAmount = float64(int(stealAmount*10+0.5)) / 10.0
+	stealAmount := 150.0
 
 	// Don't steal more than target has (shouldn't happen, but safety check)
 	if stealAmount > targetUser.Points {
@@ -290,7 +287,7 @@ func handleTimeout(s *discordgo.Session, db *gorm.DB, userID string, guildID str
 	}
 
 	// Set timeout to 1 hour from now
-	timeoutUntil := time.Now().Add(1 * time.Hour)
+	timeoutUntil := time.Now().Add(2 * time.Hour)
 	user.CardDrawTimeoutUntil = &timeoutUntil
 
 	// Save the timeout (this is part of the transaction in DrawCard)

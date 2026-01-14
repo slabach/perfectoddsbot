@@ -71,6 +71,15 @@ func registerRareCards(deck *[]models.Card) {
 			Handler:              handleFactoryReset,
 			RoyaltyDiscordUserID: &[]string{"447827835797766144"}[0],
 		},
+		// {
+		// 	ID:                   68,
+		// 	Name:                 "Anti-Anti-Bet",
+		// 	Description:          "Choose a player. You place a new bet that that user will lose their next bet they place.",
+		// 	Rarity:               "Rare",
+		// 	Weight:               W_Rare,
+		// 	Handler:              handleAntiAntiBet,
+		// 	RoyaltyDiscordUserID: &[]string{"238274131722764288"}[0],
+		// },
 	}
 
 	// Add to deck

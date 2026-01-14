@@ -11,24 +11,26 @@ import (
 
 // PlayCardFromInventory consumes a card from a user's inventory and announces it
 func PlayCardFromInventory(s *discordgo.Session, db *gorm.DB, user models.User, cardID int) error {
-	// 1. Verify & Consume
-	var inventory models.UserInventory
-	// Using the provided db (which should be a transaction if called from within one)
-	result := db.Where("user_id = ? AND guild_id = ? AND card_id = ?", user.ID, user.GuildID, cardID).First(&inventory)
-
-	if result.Error != nil {
-		return result.Error // Card not found or other DB error
-	}
-
-	// Soft delete the card (consume it)
-	if err := db.Delete(&inventory).Error; err != nil {
-		return err
-	}
-
-	// 2. Get Details
+	// 1. Get Details
 	card := GetCardByID(cardID)
 	if card == nil {
 		return fmt.Errorf("card definition not found for ID %d", cardID)
+	}
+
+	// 2. Verify & Consume
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		var inventory models.UserInventory
+		// Using the transaction tx
+		result := tx.Where("user_id = ? AND guild_id = ? AND card_id = ?", user.ID, user.GuildID, cardID).First(&inventory)
+
+		if result.Error != nil {
+			return result.Error // Card not found or other DB error
+		}
+
+		// Soft delete the card (consume it)
+		return tx.Delete(&inventory).Error
+	}); err != nil {
+		return err
 	}
 
 	// 3. Get Channel

@@ -93,7 +93,7 @@ func registerCommonCards(deck *[]models.Card) {
 	// 		Handler:     handleTimeout,
 	// 	},
 	// 	{
-	// 		ID:          13,
+	// 		ID:          24,
 	// 		Name:        "Bad Investment",
 	// 		Description: "Lose 50 points.",
 	// 		Rarity:      "Common",

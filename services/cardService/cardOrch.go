@@ -24,6 +24,21 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		return
 	}
 
+	// Check if card drawing is enabled
+	if !guild.CardDrawingEnabled {
+		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "Card drawing is currently disabled for this server.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
+
 	// Get or create user
 	var user models.User
 	result := db.FirstOrCreate(&user, models.User{DiscordID: userID, GuildID: guildID})
@@ -736,9 +751,15 @@ func MyInventory(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.
 	userID := i.Member.User.ID
 	guildID := i.GuildID
 
+	guild, err := guildService.GetGuildInfo(s, db, guildID, i.ChannelID)
+	if err != nil {
+		common.SendError(s, i, fmt.Errorf("error getting guild info: %v", err), db)
+		return
+	}
+
 	// Get or create user
 	var user models.User
-	result := db.FirstOrCreate(&user, models.User{DiscordID: userID, GuildID: guildID})
+	result := db.FirstOrCreate(&user, models.User{DiscordID: userID, GuildID: guildID, Points: guild.StartingPoints})
 	if result.Error != nil {
 		common.SendError(s, i, fmt.Errorf("error fetching user: %v", result.Error), db)
 		return

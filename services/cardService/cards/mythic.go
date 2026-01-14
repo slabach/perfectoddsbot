@@ -3,12 +3,12 @@ package cards
 import "perfectOddsBot/models"
 
 func registerMythicCards(deck *[]models.Card) {
-	rareCards := []models.Card{
+	mythicCards := []models.Card{
 		{
 			ID:          3,
 			Name:        "The Grail",
 			Description: "You discovered the Holy Grail! Win 50% of the pool!",
-			Rarity:      "Rare",
+			Rarity:      "Mythic",
 			Weight:      W_Mythic,
 			Handler:     handleGrail,
 		},
@@ -16,8 +16,8 @@ func registerMythicCards(deck *[]models.Card) {
 		// 	ID:             43,
 		// 	Name:           "Get Out of Jail Free",
 		// 	Description:    "Nullifies the next lost bet completely.",
-		// 	Rarity:         "Rare",
-		// 	Weight:         W_Rare,
+		// 	Rarity:         "Mythic",
+		// 	Weight:         W_Mythic,
 		// 	Handler:        handleGetOutOfJail,
 		// 	AddToInventory: true,
 		// },
@@ -41,5 +41,5 @@ func registerMythicCards(deck *[]models.Card) {
 	}
 
 	// Add to deck
-	*deck = append(*deck, rareCards...)
+	*deck = append(*deck, mythicCards...)
 }

@@ -15,4 +15,5 @@ type Guild struct {
 	Pool                    float64 `gorm:"default:0"`
 	CardDrawCost            float64 `gorm:"default:10"`
 	CardDrawCooldownMinutes int     `gorm:"default:60"`
+	CardDrawingEnabled      bool    `gorm:"default:true"`
 }

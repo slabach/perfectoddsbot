@@ -9,8 +9,8 @@ func registerUncommonCards(deck *[]models.Card) {
 		{
 			ID:          4,
 			Name:        "Petty Theft",
-			Description: "Choose a user. Steal 5% of their points.",
-			Rarity:      "Epic",
+			Description: "Choose a user. Steal 50 of their points.",
+			Rarity:      "Uncommon",
 			Weight:      W_Uncommon,
 			Handler:     handlePettyTheft,
 		},

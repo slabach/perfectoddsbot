@@ -61,6 +61,8 @@ func HandleSlashCommand(s *discordgo.Session, i *discordgo.InteractionCreate, db
 		cardService.DrawCard(s, i, db)
 	case "my-inventory":
 		cardService.MyInventory(s, i, db)
+	case "toggle-card-drawing":
+		guildService.ToggleCardDrawing(s, i, db)
 	}
 }
 
@@ -86,6 +88,7 @@ func ShowHelp(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		{"create-cfb-bet", "Create a new College Football bet", false, true},
 		{"create-cbb-bet", "Create a new College Basketball bet", false, true},
 		{"subscribe-to-team", "Choose a College team to subscribe to all CFB & CBB events for", true, true},
+		{"toggle-card-drawing", "Toggle card drawing on/off for this server", true, false},
 	}
 
 	var fields []*discordgo.MessageEmbedField
@@ -262,11 +265,15 @@ func RegisterCommands(s *discordgo.Session) error {
 		},
 		{
 			Name:        "draw-card",
-			Description: "Draw a random card from the deck (Costs 50 points, adds to pool)",
+			Description: "Draw a random card from the deck (cost increases per draw, adds to pool)",
 		},
 		{
 			Name:        "my-inventory",
 			Description: "View the cards currently in your hand",
+		},
+		{
+			Name:        "toggle-card-drawing",
+			Description: "🛡 Toggle card drawing on/off for this server - ADMIN ONLY",
 		},
 	}
 
