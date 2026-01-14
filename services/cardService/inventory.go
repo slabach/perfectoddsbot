@@ -5,6 +5,8 @@ import (
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/guildService"
 
+	"perfectOddsBot/services/cardService/cards"
+
 	"github.com/bwmarrin/discordgo"
 	"gorm.io/gorm"
 )
@@ -49,15 +51,17 @@ func PlayCardFromInventory(s *discordgo.Session, db *gorm.DB, user models.User, 
 	var color int
 	switch card.Rarity {
 	case "Common":
-		color = 0x95A5A6 // Gray
+		color = cards.C_Common // Gray
+	case "Uncommon":
+		color = cards.C_Uncommon // Green
 	case "Rare":
-		color = 0x3498DB // Blue
+		color = cards.C_Rare // Blue
 	case "Epic":
-		color = 0x9B59B6 // Purple
+		color = cards.C_Epic // Purple
 	case "Mythic":
-		color = 0xF1C40F // Gold
+		color = cards.C_Mythic // Gold
 	default:
-		color = 0x95A5A6
+		color = cards.C_Common // Gray
 	}
 
 	description := fmt.Sprintf("<@%s> played **%s**", user.DiscordID, card.Name)

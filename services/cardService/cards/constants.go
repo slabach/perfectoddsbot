@@ -8,6 +8,13 @@ const (
 	W_Epic     = 1000
 	W_Mythic   = 350
 
+	// Card colors
+	C_Common   = 0x95A5A6
+	C_Uncommon = 0x2ECC71
+	C_Rare     = 0x3498DB
+	C_Epic     = 0x9B59B6
+	C_Mythic   = 0xF1C40F
+
 	// Card IDs
 	LuckyHorseshoeCardID   = 17
 	UnluckyCatCardID       = 18
