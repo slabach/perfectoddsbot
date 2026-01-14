@@ -12,12 +12,14 @@ type CardHandler func(s *discordgo.Session, db *gorm.DB, userID string, guildID 
 
 // Card represents a single playing card with its properties
 type Card struct {
-	ID          int
-	Name        string
-	Description string
-	Rarity      string // "Common", "Rare", "Epic", "Mythic"
-	Weight      int    // For RNG weighted distribution
-	Handler     CardHandler
+	ID                   int
+	Name                 string
+	Description          string
+	Rarity               string // "Common", "Rare", "Epic", "Mythic"
+	Weight               int    // For RNG weighted distribution
+	Handler              CardHandler
+	AddToInventory       bool    // If true, card is added to user's inventory when drawn
+	RoyaltyDiscordUserID *string // Optional user ID for royalty payments
 }
 
 // CardResult contains the outcome of executing a card

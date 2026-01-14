@@ -1,8 +1,11 @@
 package cards
 
 import (
+	"fmt"
+	"math/rand"
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/guildService"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"gorm.io/gorm"
@@ -28,9 +31,21 @@ func handlePenny(s *discordgo.Session, db *gorm.DB, userID string, guildID strin
 
 // handlePapercut makes the user lose 10 points
 func handlePapercut(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	// Get user to check current points (after card cost was deducted)
+	var user models.User
+	if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
+		return nil, err
+	}
+
+	// Don't deduct more than user has
+	deductAmount := 10.0
+	if user.Points < deductAmount {
+		deductAmount = user.Points
+	}
+
 	return &models.CardResult{
-		Message:     "You cut your finger drawing the card. -10 Points.",
-		PointsDelta: -10,
+		Message:     fmt.Sprintf("You cut your finger drawing the card. -%.0f Points.", deductAmount),
+		PointsDelta: -deductAmount,
 		PoolDelta:   0,
 	}, nil
 }
@@ -63,10 +78,10 @@ func handleGrail(s *discordgo.Session, db *gorm.DB, userID string, guildID strin
 	}, nil
 }
 
-// handlePickpocket requires user selection, returns special result
-func handlePickpocket(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+// handlePettyTheft requires user selection, returns special result
+func handlePettyTheft(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
 	return &models.CardResult{
-		Message:           "The Pickpocket requires you to select a target!",
+		Message:           "Petty Theft requires you to select a target!",
 		PointsDelta:       0,
 		PoolDelta:         0,
 		RequiresSelection: true,
@@ -117,5 +132,478 @@ func ExecutePickpocketSteal(db *gorm.DB, userID string, targetUserID string, gui
 		PoolDelta:         0,
 		TargetUserID:      &targetID,
 		TargetPointsDelta: -stealAmount,
+	}, nil
+}
+
+// handleNilFee makes the user pay 50 points to the pool
+func handleNilFee(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	// Get user to check current points (after card cost was deducted)
+	var user models.User
+	if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
+		return nil, err
+	}
+
+	// Don't deduct more than user has
+	deductAmount := 50.0
+	if user.Points < deductAmount {
+		deductAmount = user.Points
+	}
+
+	return &models.CardResult{
+		Message:     fmt.Sprintf("You paid %.0f points to the pool to retain the kicker.", deductAmount),
+		PointsDelta: -deductAmount,
+		PoolDelta:   deductAmount,
+	}, nil
+}
+
+// handleSmallRebate refunds the cost of buying this card
+func handleSmallRebate(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	// Get user to determine card cost
+	var user models.User
+	var guild models.Guild
+	if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
+		return nil, err
+	}
+	if err := db.Where("guild_id = ?", guildID).First(&guild).Error; err != nil {
+		return nil, err
+	}
+
+	// Calculate the cost that was paid (CardDrawCount was already incremented before handler is called)
+	var refundAmount float64
+	switch user.CardDrawCount {
+	case 1:
+		refundAmount = guild.CardDrawCost
+	case 2:
+		refundAmount = guild.CardDrawCost * 10
+	default:
+		refundAmount = guild.CardDrawCost * 100
+	}
+
+	return &models.CardResult{
+		Message:     fmt.Sprintf("You got a rebate! Refunded %.0f points (the cost of this card).", refundAmount),
+		PointsDelta: refundAmount,
+		PoolDelta:   -refundAmount,
+	}, nil
+}
+
+// handleTipJar forces the person above you on the leaderboard to give you 10 points
+func handleTipJar(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	// Get current user to find their position
+	var user models.User
+	if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
+		return nil, err
+	}
+
+	// Find user above on leaderboard (higher points, or same points but lower ID if tied)
+	var userAbove models.User
+	result := db.Where("guild_id = ? AND (points > ? OR (points = ? AND id < ?))", guildID, user.Points, user.Points, user.ID).
+		Order("points DESC, id ASC").
+		First(&userAbove)
+
+	if result.Error != nil || userAbove.ID == 0 {
+		// No one above you on leaderboard
+		return &models.CardResult{
+			Message:     "You're at the top of the leaderboard! No one to tip you. The card fizzles out.",
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	// Transfer 10 points (DrawCard will handle the actual updates)
+	transferAmount := 10.0
+	if userAbove.Points < transferAmount {
+		transferAmount = userAbove.Points // Can't transfer more than they have
+	}
+
+	targetID := userAbove.DiscordID
+	return &models.CardResult{
+		Message:           fmt.Sprintf("You shook the tip jar! The person above you gave you %.1f points.", transferAmount),
+		PointsDelta:       transferAmount,
+		PoolDelta:         0,
+		TargetUserID:      &targetID,
+		TargetPointsDelta: -transferAmount,
+	}, nil
+}
+
+// handleHoleInPocket makes the user lose 5% of their total points to the Pool
+func handleHoleInPocket(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	// Get user to calculate 5% of their points
+	var user models.User
+	if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
+		return nil, err
+	}
+
+	// Calculate 5% loss
+	lossAmount := user.Points * 0.05
+
+	// Round to 1 decimal place
+	lossAmount = float64(int(lossAmount*10+0.5)) / 10.0
+
+	// Don't lose more than user has
+	if lossAmount > user.Points {
+		lossAmount = user.Points
+	}
+
+	return &models.CardResult{
+		Message:     fmt.Sprintf("You found a hole in your pocket! Lost %.1f points (5%% of your total) to the Pool.", lossAmount),
+		PointsDelta: -lossAmount,
+		PoolDelta:   lossAmount,
+	}, nil
+}
+
+// handlePiggyBank gives the user 5% of their total points from the void
+func handlePiggyBank(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	// Get user to calculate 5% of their points
+	var user models.User
+	if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
+		return nil, err
+	}
+
+	// Calculate 5% gain
+	gainAmount := user.Points * 0.05
+
+	// Round to 1 decimal place
+	gainAmount = float64(int(gainAmount*10+0.5)) / 10.0
+
+	return &models.CardResult{
+		Message:     fmt.Sprintf("You broke open your piggy bank! Gained %.1f points (5%% of your total) from the void.", gainAmount),
+		PointsDelta: gainAmount,
+		PoolDelta:   0,
+	}, nil
+}
+
+// handleParticipationTrophy gives the user 1 point
+func handleParticipationTrophy(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	return &models.CardResult{
+		Message:     "You received a participation trophy! +1 Point and a pat on the back.",
+		PointsDelta: 1,
+		PoolDelta:   0,
+	}, nil
+}
+
+// handleTimeout prevents the user from drawing another card for 1 hour
+func handleTimeout(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	// Get user to set timeout
+	var user models.User
+	if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
+		return nil, err
+	}
+
+	// Set timeout to 1 hour from now
+	timeoutUntil := time.Now().Add(1 * time.Hour)
+	user.CardDrawTimeoutUntil = &timeoutUntil
+
+	// Save the timeout (this is part of the transaction in DrawCard)
+	if err := db.Save(&user).Error; err != nil {
+		return nil, err
+	}
+
+	return &models.CardResult{
+		Message:     "You've been timed out! You cannot buy another card for 1 hour.",
+		PointsDelta: 0,
+		PoolDelta:   0,
+	}, nil
+}
+
+// handleBadInvestment makes the user lose 50 points
+func handleBadInvestment(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	// Get user to check current points (after card cost was deducted)
+	var user models.User
+	if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
+		return nil, err
+	}
+
+	// Don't deduct more than user has
+	deductAmount := 50.0
+	if user.Points < deductAmount {
+		deductAmount = user.Points
+	}
+
+	return &models.CardResult{
+		Message:     fmt.Sprintf("Your bad investment cost you dearly. -%.0f Points.", deductAmount),
+		PointsDelta: -deductAmount,
+		PoolDelta:   0,
+	}, nil
+}
+
+// handleFoundWallet gives the user 50 points
+func handleFoundWallet(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	return &models.CardResult{
+		Message:     "You found a wallet on the ground! +50 Points.",
+		PointsDelta: 50,
+		PoolDelta:   0,
+	}, nil
+}
+
+// handleCharityCase gives 75 points if user is in bottom 50% of players
+func handleCharityCase(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	// Get current user
+	var user models.User
+	if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
+		return nil, err
+	}
+
+	// Get all users in guild ordered by points (descending)
+	var allUsers []models.User
+	if err := db.Where("guild_id = ?", guildID).Order("points DESC").Find(&allUsers).Error; err != nil {
+		return nil, err
+	}
+
+	if len(allUsers) == 0 {
+		return &models.CardResult{
+			Message:     "No other players found. The charity has no one to help.",
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	// Find user's position (1-indexed from top)
+	userPosition := 0
+	for i, u := range allUsers {
+		if u.ID == user.ID {
+			userPosition = i + 1
+			break
+		}
+	}
+
+	if userPosition == 0 {
+		return &models.CardResult{
+			Message:     "Could not determine your position. The charity passed you by.",
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	// Check if user is in bottom 50%
+	totalPlayers := len(allUsers)
+	bottom50PercentThreshold := totalPlayers / 2
+	if totalPlayers%2 != 0 {
+		bottom50PercentThreshold = (totalPlayers + 1) / 2
+	}
+
+	isBottom50Percent := userPosition > bottom50PercentThreshold
+
+	if isBottom50Percent {
+		return &models.CardResult{
+			Message:     "Charity found you! You're in the bottom 50% of players. +75 Points.",
+			PointsDelta: 75,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	return &models.CardResult{
+		Message:     "You're doing too well for charity. Nothing happens.",
+		PointsDelta: 0,
+		PoolDelta:   0,
+	}, nil
+}
+
+// handleTaxSeason makes user lose 75 points if they are in top 50% of players
+func handleTaxSeason(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	// Get current user
+	var user models.User
+	if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
+		return nil, err
+	}
+
+	// Get all users in guild ordered by points (descending)
+	var allUsers []models.User
+	if err := db.Where("guild_id = ?", guildID).Order("points DESC").Find(&allUsers).Error; err != nil {
+		return nil, err
+	}
+
+	if len(allUsers) == 0 {
+		return &models.CardResult{
+			Message:     "No other players found. Tax season skipped you.",
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	// Find user's position (1-indexed from top)
+	userPosition := 0
+	for i, u := range allUsers {
+		if u.ID == user.ID {
+			userPosition = i + 1
+			break
+		}
+	}
+
+	if userPosition == 0 {
+		return &models.CardResult{
+			Message:     "Could not determine your position. Tax season passed you by.",
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	// Check if user is in top 50%
+	totalPlayers := len(allUsers)
+	top50PercentThreshold := totalPlayers / 2
+	if totalPlayers%2 != 0 {
+		top50PercentThreshold = (totalPlayers + 1) / 2
+	}
+
+	isTop50Percent := userPosition <= top50PercentThreshold
+
+	if isTop50Percent {
+		// Don't deduct more than user has (points already loaded above)
+		deductAmount := 75.0
+		if user.Points < deductAmount {
+			deductAmount = user.Points
+		}
+
+		return &models.CardResult{
+			Message:     fmt.Sprintf("Tax season hit you hard! You're in the top 50%% of players. -%.0f Points.", deductAmount),
+			PointsDelta: -deductAmount,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	return &models.CardResult{
+		Message:     "You're not wealthy enough to be taxed. Nothing happens.",
+		PointsDelta: 0,
+		PoolDelta:   0,
+	}, nil
+}
+
+// handleLuckyHorseshoe adds the card to the user's inventory
+// The discount will be applied when they draw their next card
+func handleLuckyHorseshoe(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	return &models.CardResult{
+		Message:     "You found a lucky horseshoe! Your next card purchase will cost half price.",
+		PointsDelta: 0,
+		PoolDelta:   0,
+	}, nil
+}
+
+// handleUnluckyCat adds the card to the user's inventory
+// The penalty will be applied when they draw their next card
+func handleUnluckyCat(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	return &models.CardResult{
+		Message:     "An unlucky cat crossed your path! Your next card purchase will cost double.",
+		PointsDelta: 0,
+		PoolDelta:   0,
+	}, nil
+}
+
+// handlePickpocketCommon steals 50 points from a random active user
+func handlePickpocketCommon(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	// Get all users in guild except the current user
+	var allUsers []models.User
+	if err := db.Where("guild_id = ? AND discord_id != ?", guildID, userID).Find(&allUsers).Error; err != nil {
+		return nil, err
+	}
+
+	if len(allUsers) == 0 {
+		return &models.CardResult{
+			Message:     "No other users found to pickpocket. The card fizzles out.",
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	// Pick a random user
+	randomIndex := rand.Intn(len(allUsers))
+	targetUser := allUsers[randomIndex]
+
+	// Steal 50 points (DrawCard will handle the actual updates)
+	stealAmount := 50.0
+	if targetUser.Points < stealAmount {
+		stealAmount = targetUser.Points // Can't steal more than they have
+	}
+
+	targetID := targetUser.DiscordID
+	return &models.CardResult{
+		Message:           fmt.Sprintf("You pickpocketed a random user and stole %.0f points!", stealAmount),
+		PointsDelta:       stealAmount,
+		PoolDelta:         0,
+		TargetUserID:      &targetID,
+		TargetPointsDelta: -stealAmount,
+	}, nil
+}
+
+// handleDroppedLoot gives 50 points to a random active user
+func handleDroppedLoot(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	// Get current user to check points
+	var user models.User
+	if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
+		return nil, err
+	}
+
+	// Get all users in guild except the current user
+	var allUsers []models.User
+	if err := db.Where("guild_id = ? AND discord_id != ?", guildID, userID).Find(&allUsers).Error; err != nil {
+		return nil, err
+	}
+
+	if len(allUsers) == 0 {
+		return &models.CardResult{
+			Message:     "No other users found to give loot to. The card fizzles out.",
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	// Pick a random user
+	randomIndex := rand.Intn(len(allUsers))
+	targetUser := allUsers[randomIndex]
+
+	// Give 50 points (DrawCard will handle the actual updates)
+	giveAmount := 50.0
+	// Ensure user doesn't go below 0 (DrawCard will also check, but we adjust here for accuracy)
+	if user.Points < giveAmount {
+		giveAmount = user.Points
+	}
+
+	targetID := targetUser.DiscordID
+	return &models.CardResult{
+		Message:           fmt.Sprintf("You dropped some loot! A random user received %.0f points.", giveAmount),
+		PointsDelta:       -giveAmount,
+		PoolDelta:         0,
+		TargetUserID:      &targetID,
+		TargetPointsDelta: giveAmount,
+	}, nil
+}
+
+// handleScrapingBy gives the user 20 points
+func handleScrapingBy(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	return &models.CardResult{
+		Message:     "You're scraping by! +20 Points.",
+		PointsDelta: 20,
+		PoolDelta:   0,
+	}, nil
+}
+
+// handleRust makes the user lose 20 points
+func handleRust(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	// Get user to check current points (after card cost was deducted)
+	var user models.User
+	if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
+		return nil, err
+	}
+
+	// Don't deduct more than user has
+	deductAmount := 20.0
+	if user.Points < deductAmount {
+		deductAmount = user.Points
+	}
+
+	return &models.CardResult{
+		Message:     fmt.Sprintf("Rust has set in. -%.0f Points.", deductAmount),
+		PointsDelta: -deductAmount,
+		PoolDelta:   0,
+	}, nil
+}
+
+// handleMinorGlitch gives the user 1-100 points (randomized)
+func handleMinorGlitch(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	// Generate random number between 1 and 100
+	randomPoints := float64(rand.Intn(100) + 1)
+
+	return &models.CardResult{
+		Message:     fmt.Sprintf("A minor glitch occurred! You gained %.0f points.", randomPoints),
+		PointsDelta: randomPoints,
+		PoolDelta:   0,
 	}, nil
 }

@@ -8,7 +8,7 @@ func registerMythicCards(deck *[]models.Card) {
 		Name:        "The Grail",
 		Description: "You discovered the Holy Grail! Win 50% of the pool!",
 		Rarity:      "Rare",
-		Weight:      5,
+		Weight:      W_Mythic,
 		Handler:     handleGrail,
 	},
 	}

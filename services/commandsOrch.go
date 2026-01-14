@@ -12,8 +12,17 @@ import (
 	"gorm.io/gorm"
 )
 
+type commandInfo struct {
+	name        string
+	description string
+	isAdmin     bool
+	isPremium   bool
+}
+
 func HandleSlashCommand(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
 	switch i.ApplicationCommandData().Name {
+	case "help":
+		ShowHelp(s, i, db)
 	case "my-points":
 		ShowPoints(s, i, db)
 	case "my-stats":
@@ -50,11 +59,81 @@ func HandleSlashCommand(s *discordgo.Session, i *discordgo.InteractionCreate, db
 		betService.MyParlays(s, i, db)
 	case "draw-card":
 		cardService.DrawCard(s, i, db)
+	case "my-inventory":
+		cardService.MyInventory(s, i, db)
+	}
+}
+
+func ShowHelp(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
+	commands := []commandInfo{
+		{"help", "Show this help message with all available commands", false, false},
+		{"my-points", "Show your current points", false, false},
+		{"my-stats", "Show your betting statistics", false, false},
+		{"leaderboard", "Show the top users by points", false, false},
+		{"my-bets", "Show your current open, active bets", false, false},
+		{"my-parlays", "Show your active parlays", false, false},
+		{"create-parlay", "Create a parlay by combining multiple open bets", false, false},
+		{"draw-card", "Draw a random card from the deck (Costs X points, adds to pool)", false, false},
+		{"my-inventory", "View the cards currently in your hand", false, false},
+		{"create-bet", "Create a new bet", true, false},
+		{"give-points", "Give points to a user", true, false},
+		{"reset-points", "Reset all users' points to a default value", true, false},
+		{"set-betting-channel", "Set the current channel as the main channel for payouts", true, false},
+		{"set-points-per-message", "Set the amount of points users get per message", true, false},
+		{"set-starting-points", "Set the amount of points new users start with", true, false},
+		{"list-cfb-games", "List this week's CFB games and their current lines", false, true},
+		{"list-cbb-games", "List the currently open CBB games", false, true},
+		{"create-cfb-bet", "Create a new College Football bet", false, true},
+		{"create-cbb-bet", "Create a new College Basketball bet", false, true},
+		{"subscribe-to-team", "Choose a College team to subscribe to all CFB & CBB events for", true, true},
+	}
+
+	var fields []*discordgo.MessageEmbedField
+	for _, cmd := range commands {
+		description := cmd.description
+		badges := ""
+		if cmd.isAdmin {
+			badges += "🛡 Admin "
+		}
+		if cmd.isPremium {
+			badges += "★ Premium"
+		}
+		if badges != "" {
+			description += " | " + badges
+		}
+
+		fields = append(fields, &discordgo.MessageEmbedField{
+			Name:   fmt.Sprintf("/%s", cmd.name),
+			Value:  description,
+			Inline: false,
+		})
+	}
+
+	embed := &discordgo.MessageEmbed{
+		Title:       "📚 Available Commands",
+		Description: "Here are all the available slash commands:",
+		Fields:      fields,
+		Color:       0x3498db,
+	}
+
+	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{embed},
+			Flags:  discordgo.MessageFlagsEphemeral,
+		},
+	})
+	if err != nil {
+		return
 	}
 }
 
 func RegisterCommands(s *discordgo.Session) error {
 	commands := []*discordgo.ApplicationCommand{
+		{
+			Name:        "help",
+			Description: "Show all available commands and their descriptions",
+		},
 		{
 			Name:        "list-cfb-games",
 			Description: "★ List this weeks CFB games and their current lines (PREMIUM)",
@@ -184,6 +263,10 @@ func RegisterCommands(s *discordgo.Session) error {
 		{
 			Name:        "draw-card",
 			Description: "Draw a random card from the deck (Costs 50 points, adds to pool)",
+		},
+		{
+			Name:        "my-inventory",
+			Description: "View the cards currently in your hand",
 		},
 	}
 

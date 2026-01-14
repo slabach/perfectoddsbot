@@ -11,6 +11,9 @@ import (
 	"gorm.io/gorm"
 )
 
+const LuckyHorseshoeCardID = 17
+const UnluckyCatCardID = 18
+
 // DrawCard handles the /draw-card command
 func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
 	userID := i.Member.User.ID
@@ -39,28 +42,76 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	username := common.GetUsernameFromUser(i.Member.User)
 	common.UpdateUserUsername(db, &user, username)
 
-	// Get card draw settings from guild
-	drawCardCost := guild.CardDrawCost
-	cardDrawCooldown := time.Duration(guild.CardDrawCooldownMinutes) * time.Minute
-
-	// Check cooldown
-	if user.LastCardDraw != nil {
-		timeSinceLastDraw := time.Since(*user.LastCardDraw)
-		if timeSinceLastDraw < cardDrawCooldown {
-			remainingTime := cardDrawCooldown - timeSinceLastDraw
-			minutes := int(remainingTime.Minutes())
-			err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Content: fmt.Sprintf("You must wait %d more minutes before drawing another card.", minutes+1),
-					Flags:   discordgo.MessageFlagsEphemeral,
-				},
-			})
-			if err != nil {
-				common.SendError(s, i, err, db)
-			}
-			return
+	// Check if user is timed out from drawing cards
+	now := time.Now()
+	if user.CardDrawTimeoutUntil != nil && now.Before(*user.CardDrawTimeoutUntil) {
+		timeRemaining := user.CardDrawTimeoutUntil.Sub(now)
+		minutesRemaining := int(timeRemaining.Minutes())
+		secondsRemaining := int(timeRemaining.Seconds()) % 60
+		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: fmt.Sprintf("You are timed out from drawing cards. Time remaining: %d minutes and %d seconds.", minutesRemaining, secondsRemaining),
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		if err != nil {
+			common.SendError(s, i, err, db)
 		}
+		return
+	}
+
+	// Clear timeout if it has expired
+	if user.CardDrawTimeoutUntil != nil && now.After(*user.CardDrawTimeoutUntil) {
+		user.CardDrawTimeoutUntil = nil
+	}
+
+	// Get reset period from guild
+	resetPeriod := time.Duration(guild.CardDrawCooldownMinutes) * time.Minute
+
+	// Check if reset period has passed, reset if needed
+	if user.FirstCardDrawCycle != nil {
+		timeSinceFirstDraw := now.Sub(*user.FirstCardDrawCycle)
+		if timeSinceFirstDraw >= resetPeriod {
+			// Reset cycle
+			user.FirstCardDrawCycle = &now
+			user.CardDrawCount = 0
+		}
+	} else {
+		// First draw ever - start cycle
+		user.FirstCardDrawCycle = &now
+		user.CardDrawCount = 0
+	}
+
+	// Calculate progressive cost: 10, 100, 1000, 1000, ...
+	var drawCardCost float64
+	switch user.CardDrawCount {
+	case 0:
+		drawCardCost = guild.CardDrawCost
+	case 1:
+		drawCardCost = guild.CardDrawCost * 10
+	default:
+		drawCardCost = guild.CardDrawCost * 100
+	}
+
+	// Check for Lucky Horseshoe (read-only check before transaction)
+	hasLuckyHorseshoe, err := hasLuckyHorseshoeInInventory(db, user.ID, guildID)
+	if err != nil {
+		common.SendError(s, i, fmt.Errorf("error checking inventory: %v", err), db)
+		return
+	}
+	if hasLuckyHorseshoe {
+		drawCardCost = drawCardCost * 0.5
+	}
+
+	// Check for Unlucky Cat (read-only check before transaction)
+	hasUnluckyCat, err := hasUnluckyCatInInventory(db, user.ID, guildID)
+	if err != nil {
+		common.SendError(s, i, fmt.Errorf("error checking inventory: %v", err), db)
+		return
+	}
+	if hasUnluckyCat {
+		drawCardCost = drawCardCost * 2.0
 	}
 
 	// Check if user has enough points
@@ -86,15 +137,40 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		}
 	}()
 
+	// Consume Lucky Horseshoe if user has one (inside transaction)
+	if hasLuckyHorseshoe {
+		if err := PlayCardFromInventory(s, tx, user, LuckyHorseshoeCardID); err != nil {
+			tx.Rollback()
+			common.SendError(s, i, fmt.Errorf("error consuming Lucky Horseshoe: %v", err), db)
+			return
+		}
+	}
+
+	// Consume Unlucky Cat if user has one (inside transaction)
+	if hasUnluckyCat {
+		if err := PlayCardFromInventory(s, tx, user, UnluckyCatCardID); err != nil {
+			tx.Rollback()
+			common.SendError(s, i, fmt.Errorf("error consuming Unlucky Cat: %v", err), db)
+			return
+		}
+	}
+
 	// Deduct cost
 	user.Points -= drawCardCost
 
 	// Add to pool
 	guild.Pool += drawCardCost
 
-	// Update last card draw timestamp
-	now := time.Now()
-	user.LastCardDraw = &now
+	// Increment draw count
+	user.CardDrawCount++
+
+	// Save user changes (cost deducted, count incremented) before handler
+	// This ensures handler can update user and we can reload it with all changes
+	if err := tx.Save(&user).Error; err != nil {
+		tx.Rollback()
+		common.SendError(s, i, err, db)
+		return
+	}
 
 	// Pick random card
 	card := PickRandomCard()
@@ -104,8 +180,17 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		return
 	}
 
-	// Execute card handler
-	cardResult, err := card.Handler(s, db, userID, guildID)
+	// Add card to inventory if it should be added
+	if card.AddToInventory {
+		if err := addCardToInventory(tx, user.ID, guildID, card.ID); err != nil {
+			tx.Rollback()
+			common.SendError(s, i, fmt.Errorf("error adding card to inventory: %v", err), db)
+			return
+		}
+	}
+
+	// Execute card handler (pass tx so handler updates are part of transaction)
+	cardResult, err := card.Handler(s, tx, userID, guildID)
 	if err != nil {
 		tx.Rollback()
 		common.SendError(s, i, fmt.Errorf("error executing card effect: %v", err), db)
@@ -120,8 +205,19 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 			// Show user select menu
 			showUserSelectMenu(s, i, card.ID, card.Name, card.Description, userID, guildID, db)
 
-			// Still deduct the draw cost and update pool
+			// Reload user to get any handler updates (e.g., timeout)
+			if err := tx.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
+				tx.Rollback()
+				common.SendError(s, i, err, db)
+				return
+			}
+
+			// Apply card effects
 			user.Points += cardResult.PointsDelta
+			// Ensure points never go below 0
+			if user.Points < 0 {
+				user.Points = 0
+			}
 			guild.Pool += cardResult.PoolDelta
 
 			// Save partial state (cost deducted, pool updated, cooldown set)
@@ -141,8 +237,19 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		}
 	}
 
+	// Reload user from transaction to get any updates made by handler (e.g., timeout)
+	if err := tx.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
+		tx.Rollback()
+		common.SendError(s, i, fmt.Errorf("error reloading user: %v", err), db)
+		return
+	}
+
 	// Apply card effects
 	user.Points += cardResult.PointsDelta
+	// Ensure points never go below 0
+	if user.Points < 0 {
+		user.Points = 0
+	}
 	guild.Pool += cardResult.PoolDelta
 
 	// Update target user if applicable
@@ -297,4 +404,173 @@ func buildCardEmbed(card *models.Card, result *models.CardResult, user models.Us
 	}
 
 	return embed
+}
+
+// hasLuckyHorseshoeInInventory checks if user has a Lucky Horseshoe in inventory (read-only)
+func hasLuckyHorseshoeInInventory(db *gorm.DB, userID uint, guildID string) (bool, error) {
+	var count int64
+	err := db.Model(&models.UserInventory{}).
+		Where("user_id = ? AND guild_id = ? AND card_id = ?", userID, guildID, LuckyHorseshoeCardID).
+		Count(&count).Error
+	return count > 0, err
+}
+
+// hasUnluckyCatInInventory checks if user has an Unlucky Cat in inventory (read-only)
+func hasUnluckyCatInInventory(db *gorm.DB, userID uint, guildID string) (bool, error) {
+	var count int64
+	err := db.Model(&models.UserInventory{}).
+		Where("user_id = ? AND guild_id = ? AND card_id = ?", userID, guildID, UnluckyCatCardID).
+		Count(&count).Error
+	return count > 0, err
+}
+
+// addCardToInventory adds a card to the user's inventory
+func addCardToInventory(db *gorm.DB, userID uint, guildID string, cardID int) error {
+	inventory := models.UserInventory{
+		UserID:  userID,
+		GuildID: guildID,
+		CardID:  cardID,
+	}
+	return db.Create(&inventory).Error
+}
+
+// getUserInventory gets all active cards in a user's inventory
+func getUserInventory(db *gorm.DB, userID uint, guildID string) ([]models.UserInventory, error) {
+	var inventory []models.UserInventory
+	err := db.Where("user_id = ? AND guild_id = ?", userID, guildID).Find(&inventory).Error
+	return inventory, err
+}
+
+// MyInventory handles the /my-inventory command
+func MyInventory(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
+	userID := i.Member.User.ID
+	guildID := i.GuildID
+
+	// Get or create user
+	var user models.User
+	result := db.FirstOrCreate(&user, models.User{DiscordID: userID, GuildID: guildID})
+	if result.Error != nil {
+		common.SendError(s, i, fmt.Errorf("error fetching user: %v", result.Error), db)
+		return
+	}
+
+	// Get user's inventory
+	inventory, err := getUserInventory(db, user.ID, guildID)
+	if err != nil {
+		common.SendError(s, i, fmt.Errorf("error fetching inventory: %v", err), db)
+		return
+	}
+
+	// Group inventory by card ID and count quantities
+	cardCounts := make(map[int]int)
+	for _, item := range inventory {
+		cardCounts[item.CardID]++
+	}
+
+	// If inventory is empty
+	if len(cardCounts) == 0 {
+		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "Your inventory is empty. Draw some cards to add them to your hand!",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
+
+	// Organize cards by rarity
+	rarityOrder := []string{"Mythic", "Epic", "Rare", "Common"}
+	cardsByRarity := make(map[string][]struct {
+		Card   *models.Card
+		Count  int
+	})
+
+	for cardID, count := range cardCounts {
+		card := GetCardByID(cardID)
+		if card == nil {
+			continue // Skip if card not found
+		}
+		if cardsByRarity[card.Rarity] == nil {
+			cardsByRarity[card.Rarity] = []struct {
+				Card   *models.Card
+				Count  int
+			}{}
+		}
+		cardsByRarity[card.Rarity] = append(cardsByRarity[card.Rarity], struct {
+			Card   *models.Card
+			Count  int
+		}{Card: card, Count: count})
+	}
+
+	// Build embed
+	embed := &discordgo.MessageEmbed{
+		Title:       "🎴 Your Inventory",
+		Description: "Cards currently in your hand",
+		Color:       0x3498DB, // Blue
+		Fields:      []*discordgo.MessageEmbedField{},
+	}
+
+	// Add cards organized by rarity
+	for _, rarity := range rarityOrder {
+		cards, exists := cardsByRarity[rarity]
+		if !exists || len(cards) == 0 {
+			continue
+		}
+
+		// Build field value for this rarity
+		var fieldValue string
+		for _, cardInfo := range cards {
+			quantityText := ""
+			if cardInfo.Count > 1 {
+				quantityText = fmt.Sprintf(" (x%d)", cardInfo.Count)
+			}
+			fieldValue += fmt.Sprintf("**%s**%s\n%s\n\n", cardInfo.Card.Name, quantityText, cardInfo.Card.Description)
+		}
+
+		// Determine rarity color/emoji
+		var rarityEmoji string
+		switch rarity {
+		case "Mythic":
+			rarityEmoji = "✨"
+		case "Epic":
+			rarityEmoji = "💜"
+		case "Rare":
+			rarityEmoji = "💙"
+		case "Common":
+			rarityEmoji = "⚪"
+		default:
+			rarityEmoji = "📄"
+		}
+
+		embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
+			Name:   fmt.Sprintf("%s %s", rarityEmoji, rarity),
+			Value:  fieldValue,
+			Inline: false,
+		})
+	}
+
+	// Add footer with total count
+	totalCards := 0
+	for _, count := range cardCounts {
+		totalCards += count
+	}
+	embed.Footer = &discordgo.MessageEmbedFooter{
+		Text: fmt.Sprintf("Total cards: %d", totalCards),
+	}
+
+	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{embed},
+			Flags:  discordgo.MessageFlagsEphemeral,
+		},
+	})
+	if err != nil {
+		common.SendError(s, i, err, db)
+		return
+	}
 }
