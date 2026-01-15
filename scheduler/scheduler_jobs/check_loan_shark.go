@@ -31,25 +31,36 @@ func CheckLoanShark(s *discordgo.Session, db *gorm.DB) error {
 
 	for _, loan := range loans {
 		var user models.User
-		if err := db.First(&user, loan.UserID).Error; err != nil {
+		err := db.Transaction(func(tx *gorm.DB) error {
+			if err := tx.First(&user, loan.UserID).Error; err != nil {
+				return err
+			}
+
+			deduction := 600.0
+			if user.Points < deduction {
+				deduction = user.Points
+			}
+
+			user.Points -= deduction
+			if user.Points < 0 {
+				user.Points = 0
+			}
+
+			if err := tx.Save(&user).Error; err != nil {
+				return err
+			}
+
+			if err := tx.Delete(&loan).Error; err != nil {
+				return err
+			}
+
+			return nil
+		})
+
+		if err != nil {
+			fmt.Printf("Error processing loan shark for user %d: %v\n", loan.UserID, err)
 			continue
 		}
-
-		deduction := 600.0
-		if user.Points < deduction {
-			deduction = user.Points
-		}
-
-		user.Points -= deduction
-		if user.Points < 0 {
-			user.Points = 0
-		}
-
-		if err := db.Save(&user).Error; err != nil {
-			continue
-		}
-
-		db.Delete(&loan)
 
 		if err := cardService.NotifyCardPlayed(s, db, user, card); err != nil {
 			fmt.Printf("Error notifying loan shark collection: %v\n", err)

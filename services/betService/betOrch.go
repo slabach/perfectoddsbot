@@ -215,14 +215,64 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 				// Calculate payout as if they won
 				payout := common.CalculatePayout(entry.Amount, entry.Option, bet)
 
-				user.Points += payout
+				// Define card consumer closure
+				consumer := func(db *gorm.DB, user models.User, cardID int) error {
+					return cardService.PlayCardFromInventory(s, db, user, cardID)
+				}
+
+				// Check for Double Down card and apply 2x multiplier if available
+				modifiedPayout, hasDoubleDown, err := cardService.ApplyDoubleDownIfAvailable(db, consumer, user, payout)
+				if err != nil {
+					common.SendError(s, i, fmt.Errorf("error checking Double Down: %v", err), db)
+					return
+				}
+
+				// Check for Emotional Hedge
+				// Using scoreDiff=0 for manual resolution
+				hedgeRefund, hedgeApplied, err := cardService.ApplyEmotionalHedgeIfApplicable(db, consumer, user, bet, entry.Option, float64(entry.Amount), 0)
+				if err != nil {
+					common.SendError(s, i, fmt.Errorf("error checking Emotional Hedge: %v", err), db)
+					return
+				}
+
+				// Check for Bet Insurance (fizzle on win)
+				_, insuranceApplied, err := cardService.ApplyBetInsuranceIfApplicable(db, consumer, user, 0, true)
+				if err != nil {
+					common.SendError(s, i, fmt.Errorf("error checking Bet Insurance: %v", err), db)
+					return
+				}
+
+				user.Points += modifiedPayout
 				user.TotalBetsWon++
-				user.TotalPointsWon += payout
+				user.TotalPointsWon += modifiedPayout
+
+				if hedgeApplied && hedgeRefund > 0 {
+					user.Points += hedgeRefund
+					// Subtract refund from pool (since we are paying it out)
+					lostPoolAmount -= hedgeRefund
+				}
+
 				db.Save(&user)
-				totalPayout += payout
+				totalPayout += modifiedPayout + hedgeRefund
 
 				username := common.GetUsernameWithDB(db, s, user.GuildID, user.DiscordID)
-				winnersList += fmt.Sprintf("%s - Won $%.1f (Uno Reverse!)\n", username, payout)
+
+				doubleDownMsg := ""
+				if hasDoubleDown {
+					doubleDownMsg = " (Double Down: 2x payout!)"
+				}
+				hedgeMsg := ""
+				if hedgeApplied && hedgeRefund > 0 {
+					hedgeMsg = fmt.Sprintf(" (Emotional Hedge: Refunding $%.1f)", hedgeRefund)
+				} else if hedgeApplied {
+					hedgeMsg = " (Emotional Hedge: consumed)"
+				}
+				insuranceMsg := ""
+				if insuranceApplied {
+					insuranceMsg = " (Bet Insurance: consumed)"
+				}
+
+				winnersList += fmt.Sprintf("%s - Won $%.1f (Uno Reverse!)%s%s%s\n", username, modifiedPayout, doubleDownMsg, hedgeMsg, insuranceMsg)
 				continue
 			}
 
