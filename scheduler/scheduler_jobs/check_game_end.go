@@ -420,16 +420,66 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 				// Flipped to WIN
 				payout := common.CalculatePayout(entry.Amount, entry.Option, bet)
 
-				user.Points += payout
-				user.TotalBetsWon++
-				user.TotalPointsWon += payout
-				db.Save(&user)
-				totalPayout += payout
+				// Define card consumer closure
+				consumer := func(db *gorm.DB, user models.User, cardID int) error {
+					return cardService.PlayCardFromInventory(s, db, user, cardID)
+				}
 
-				if spreadDisplay != "" {
-					winnersList += fmt.Sprintf("%s - Bet: %s %s - **Won $%.1f** (Uno Reverse!)\n", username, betOption, spreadDisplay, payout)
-				} else {
-					winnersList += fmt.Sprintf("%s - Bet: %s - **Won $%.1f** (Uno Reverse!)\n", username, betOption, payout)
+				// Check for Double Down card and apply 2x multiplier if available
+				modifiedPayout, hasDoubleDown, err := cardService.ApplyDoubleDownIfAvailable(db, consumer, user, payout)
+				if err != nil {
+					log.Printf("Error checking Double Down for auto-resolved bet (Uno Reverse): %v", err)
+					modifiedPayout = payout
+					hasDoubleDown = false
+				}
+
+				// Check for Emotional Hedge
+				hedgeRefund, hedgeApplied, err := cardService.ApplyEmotionalHedgeIfApplicable(db, consumer, user, bet, entry.Option, float64(entry.Amount), scoreDiff)
+				if err != nil {
+					log.Printf("Error checking Emotional Hedge (Uno Reverse): %v", err)
+				}
+
+				// Check for Bet Insurance (fizzle on win)
+				_, insuranceApplied, err := cardService.ApplyBetInsuranceIfApplicable(db, consumer, user, 0, true)
+				if err != nil {
+					log.Printf("Error checking Bet Insurance (Win/Uno Reverse): %v", err)
+				}
+
+				user.Points += modifiedPayout
+				user.TotalBetsWon++
+				user.TotalPointsWon += modifiedPayout
+
+				if hedgeApplied && hedgeRefund > 0 {
+					user.Points += hedgeRefund
+					// Subtract refund from pool (since we are paying it out)
+					// We'll accumulate negative pool delta
+					lostPoolAmount -= hedgeRefund
+				}
+
+				db.Save(&user)
+				totalPayout += modifiedPayout + hedgeRefund
+
+				if modifiedPayout > 0 {
+					doubleDownMsg := ""
+					if hasDoubleDown {
+						doubleDownMsg = " (Double Down: 2x payout!)"
+					}
+					hedgeMsg := ""
+					if hedgeApplied && hedgeRefund > 0 {
+						hedgeMsg = fmt.Sprintf(" (Emotional Hedge: Refunding $%.1f)", hedgeRefund)
+					} else if hedgeApplied {
+						hedgeMsg = " (Emotional Hedge: consumed)"
+					}
+					insuranceMsg := ""
+					if insuranceApplied {
+						insuranceMsg = " (Bet Insurance: consumed)"
+					}
+
+					if spreadDisplay != "" {
+						winnersList += fmt.Sprintf("%s - Bet: %s %s - **Won $%.1f** (Uno Reverse!)%s%s%s\n", username, betOption, spreadDisplay, modifiedPayout, doubleDownMsg, hedgeMsg, insuranceMsg)
+					} else {
+						winnersList += fmt.Sprintf("%s - Bet: %s - **Won $%.1f** (Uno Reverse!)%s%s%s\n", username, betOption, modifiedPayout, doubleDownMsg, hedgeMsg, insuranceMsg)
+					}
 				}
 				continue
 			}
