@@ -4,18 +4,18 @@ import "perfectOddsBot/models"
 
 func registerRareCards(deck *[]models.Card) {
 	rareCards := []models.Card{
-		// {
-		// 	ID:          40,
-		// 	Name:        "Uno Reverse",
-		// 	Description: "Select an active bet you placed. If it loses, you win (and vice versa).",
-		// 	Rarity:      "Rare",
-		// 	Weight:      W_Rare,
-		// 	Handler:     handleUnoReverse,
-		// },
+		{
+			ID:          40,
+			Name:        "Uno Reverse",
+			Description: "Select an active bet you placed. If it loses, you win (and vice versa).",
+			Rarity:      "Rare",
+			Weight:      W_Rare,
+			Handler:     handleUnoReverse,
+		},
 		// {
 		// 	ID:          41,
 		// 	Name:        "Socialism",
-		// 	Description: "Take 90 from the Top 3 players and distribute it evenly among the Bottom 3.",
+		// 	Description: "Take 90 from each of the Top 3 players and distribute it evenly among the Bottom 3.",
 		// 	Rarity:      "Rare",
 		// 	Weight:      W_Rare,
 		// 	Handler:     handleSocialism,
@@ -23,7 +23,7 @@ func registerRareCards(deck *[]models.Card) {
 		// {
 		// 	ID:          42,
 		// 	Name:        "Robin Hood",
-		// 	Description: "Steal 300 points from the richest player; keep 100, give 200 to the poorest player.",
+		// 	Description: "Steal 200 points from the richest player; keep 50, give 150 to the poorest player.",
 		// 	Rarity:      "Rare",
 		// 	Weight:      W_Rare,
 		// 	Handler:     handleRobinHood,
@@ -40,7 +40,7 @@ func registerRareCards(deck *[]models.Card) {
 		// {
 		// 	ID:          45,
 		// 	Name:        "Chaos Dunk",
-		// 	Description: "Randomize the points of the middle 3 players on the leaderboard.",
+		// 	Description: "Randomize the points of the middle 3 players on the leaderboard. (swaps  players' points)",
 		// 	Rarity:      "Rare",
 		// 	Weight:      W_Rare,
 		// 	Handler:     handleChaosDunk,
@@ -66,7 +66,7 @@ func registerRareCards(deck *[]models.Card) {
 		// {
 		// 	ID:                   68,
 		// 	Name:                 "Anti-Anti-Bet",
-		// 	Description:          "Choose a player. You place a new bet that that user will lose their next bet they place.",
+		// 	Description:          "Choose a user. You place a new bet that that user will lose their next bet they place.",
 		// 	Rarity:               "Rare",
 		// 	Weight:               W_Rare,
 		// 	Handler:              handleAntiAntiBet,
@@ -79,14 +79,6 @@ func registerRareCards(deck *[]models.Card) {
 		// 	Rarity:      "Uncommon",
 		// 	Weight:      W_Uncommon,
 		// 	Handler:     handleGrandLarceny,
-		// },
-		// {
-		// 	ID:          37,
-		// 	Name:        "Loan Shark",
-		// 	Description: "Get 500 points now, but you automatically lose 600 points in 3 days.",
-		// 	Rarity:      "Uncommon",
-		// 	Weight:      W_Uncommon,
-		// 	Handler:     handleLoanShark,
 		// },
 	}
 

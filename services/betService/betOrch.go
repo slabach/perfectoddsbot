@@ -147,6 +147,22 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 			// Winning entry - calculate payout
 			payout := common.CalculatePayout(entry.Amount, winningOption, bet)
 
+			// Uno Reverse Check
+			unoApplied, isWinAfterUno, err := cardService.ApplyUnoReverseIfApplicable(db, user, bet.ID, true)
+			if err != nil {
+				common.SendError(s, i, fmt.Errorf("error checking Uno Reverse: %v", err), db)
+				return
+			}
+
+			if unoApplied && !isWinAfterUno {
+				// Flipped to LOSS
+				user.TotalBetsLost++
+				user.TotalPointsLost += float64(entry.Amount)
+				db.Save(&user)
+				lostPoolAmount += float64(entry.Amount)
+				continue
+			}
+
 			// Define card consumer closure
 			consumer := func(db *gorm.DB, user models.User, cardID int) error {
 				return cardService.PlayCardFromInventory(s, db, user, cardID)
@@ -156,6 +172,13 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 			modifiedPayout, hasDoubleDown, err := cardService.ApplyDoubleDownIfAvailable(db, consumer, user, payout)
 			if err != nil {
 				common.SendError(s, i, fmt.Errorf("error checking Double Down: %v", err), db)
+				return
+			}
+
+			// Check for Bet Insurance (fizzle on win)
+			_, insuranceApplied, err := cardService.ApplyBetInsuranceIfApplicable(db, consumer, user, 0, true)
+			if err != nil {
+				common.SendError(s, i, fmt.Errorf("error checking Bet Insurance: %v", err), db)
 				return
 			}
 
@@ -171,12 +194,59 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 				if hasDoubleDown {
 					doubleDownMsg = " (Double Down: 2x payout!)"
 				}
-				winnersList += fmt.Sprintf("%s - Won $%.1f%s\n", username, modifiedPayout, doubleDownMsg)
+				insuranceMsg := ""
+				if insuranceApplied {
+					insuranceMsg = " (Bet Insurance: consumed)"
+				}
+				winnersList += fmt.Sprintf("%s - Won $%.1f%s%s\n", username, modifiedPayout, doubleDownMsg, insuranceMsg)
 			}
 		} else {
 			// Losing entry - add to pool
+
+			// Uno Reverse Check
+			unoApplied, isWinAfterUno, err := cardService.ApplyUnoReverseIfApplicable(db, user, bet.ID, false)
+			if err != nil {
+				common.SendError(s, i, fmt.Errorf("error checking Uno Reverse: %v", err), db)
+				return
+			}
+
+			if unoApplied && isWinAfterUno {
+				// Flipped to WIN
+				// Calculate payout as if they won
+				payout := common.CalculatePayout(entry.Amount, entry.Option, bet)
+
+				user.Points += payout
+				user.TotalBetsWon++
+				user.TotalPointsWon += payout
+				db.Save(&user)
+				totalPayout += payout
+
+				username := common.GetUsernameWithDB(db, s, user.GuildID, user.DiscordID)
+				winnersList += fmt.Sprintf("%s - Won $%.1f (Uno Reverse!)\n", username, payout)
+				continue
+			}
+
+			// Define card consumer closure
+			consumer := func(db *gorm.DB, user models.User, cardID int) error {
+				return cardService.PlayCardFromInventory(s, db, user, cardID)
+			}
+
+			// Check for Bet Insurance (refund on loss)
+			insuranceRefund, insuranceApplied, err := cardService.ApplyBetInsuranceIfApplicable(db, consumer, user, float64(entry.Amount), false)
+			if err != nil {
+				common.SendError(s, i, fmt.Errorf("error checking Bet Insurance: %v", err), db)
+				return
+			}
+
 			user.TotalBetsLost++
 			user.TotalPointsLost += float64(entry.Amount)
+			
+			if insuranceApplied && insuranceRefund > 0 {
+				user.Points += insuranceRefund
+				// Subtract refund from pool loss
+				lostPoolAmount -= insuranceRefund
+			}
+
 			db.Save(&user)
 			lostPoolAmount += float64(entry.Amount)
 		}

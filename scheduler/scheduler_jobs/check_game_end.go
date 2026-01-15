@@ -326,6 +326,27 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 		if entry.AutoCloseWin {
 			payout := common.CalculatePayout(entry.Amount, entry.Option, bet)
 
+			// Check for Uno Reverse (Win -> Loss)
+			unoApplied, isWinAfterUno, err := cardService.ApplyUnoReverseIfApplicable(db, user, bet.ID, true)
+			if err != nil {
+				log.Printf("Error checking Uno Reverse: %v", err)
+			}
+
+			if unoApplied && !isWinAfterUno {
+				// Flipped to LOSS
+				user.TotalBetsLost++
+				user.TotalPointsLost += float64(entry.Amount)
+				db.Save(&user)
+				lostPoolAmount += float64(entry.Amount)
+
+				if spreadDisplay != "" {
+					loserList += fmt.Sprintf("%s - Bet: %s %s - **Lost $%d** (Uno Reverse!)\n", username, betOption, spreadDisplay, entry.Amount)
+				} else {
+					loserList += fmt.Sprintf("%s - Bet: %s - **Lost $%d** (Uno Reverse!)\n", username, betOption, entry.Amount)
+				}
+				continue
+			}
+
 			// Define card consumer closure
 			consumer := func(db *gorm.DB, user models.User, cardID int) error {
 				return cardService.PlayCardFromInventory(s, db, user, cardID)
@@ -344,6 +365,12 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 			hedgeRefund, hedgeApplied, err := cardService.ApplyEmotionalHedgeIfApplicable(db, consumer, user, bet, entry.Option, float64(entry.Amount), scoreDiff)
 			if err != nil {
 				log.Printf("Error checking Emotional Hedge: %v", err)
+			}
+
+			// Check for Bet Insurance (fizzle on win)
+			_, insuranceApplied, err := cardService.ApplyBetInsuranceIfApplicable(db, consumer, user, 0, true)
+			if err != nil {
+				log.Printf("Error checking Bet Insurance (Win): %v", err)
 			}
 
 			user.Points += modifiedPayout
@@ -371,14 +398,42 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 				} else if hedgeApplied {
 					hedgeMsg = " (Emotional Hedge: consumed)"
 				}
+				insuranceMsg := ""
+				if insuranceApplied {
+					insuranceMsg = " (Bet Insurance: consumed)"
+				}
 
 				if spreadDisplay != "" {
-					winnersList += fmt.Sprintf("%s - Bet: %s %s - **Won $%.1f**%s%s\n", username, betOption, spreadDisplay, modifiedPayout, doubleDownMsg, hedgeMsg)
+					winnersList += fmt.Sprintf("%s - Bet: %s %s - **Won $%.1f**%s%s%s\n", username, betOption, spreadDisplay, modifiedPayout, doubleDownMsg, hedgeMsg, insuranceMsg)
 				} else {
-					winnersList += fmt.Sprintf("%s - Bet: %s - **Won $%.1f**%s%s\n", username, betOption, modifiedPayout, doubleDownMsg, hedgeMsg)
+					winnersList += fmt.Sprintf("%s - Bet: %s - **Won $%.1f**%s%s%s\n", username, betOption, modifiedPayout, doubleDownMsg, hedgeMsg, insuranceMsg)
 				}
 			}
 		} else {
+			// Uno Reverse Check (Loss -> Win)
+			unoApplied, isWinAfterUno, err := cardService.ApplyUnoReverseIfApplicable(db, user, bet.ID, false)
+			if err != nil {
+				log.Printf("Error checking Uno Reverse: %v", err)
+			}
+
+			if unoApplied && isWinAfterUno {
+				// Flipped to WIN
+				payout := common.CalculatePayout(entry.Amount, entry.Option, bet)
+
+				user.Points += payout
+				user.TotalBetsWon++
+				user.TotalPointsWon += payout
+				db.Save(&user)
+				totalPayout += payout
+
+				if spreadDisplay != "" {
+					winnersList += fmt.Sprintf("%s - Bet: %s %s - **Won $%.1f** (Uno Reverse!)\n", username, betOption, spreadDisplay, payout)
+				} else {
+					winnersList += fmt.Sprintf("%s - Bet: %s - **Won $%.1f** (Uno Reverse!)\n", username, betOption, payout)
+				}
+				continue
+			}
+
 			// Define card consumer closure
 			consumer := func(db *gorm.DB, user models.User, cardID int) error {
 				return cardService.PlayCardFromInventory(s, db, user, cardID)
@@ -388,6 +443,12 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 			hedgeRefund, hedgeApplied, err := cardService.ApplyEmotionalHedgeIfApplicable(db, consumer, user, bet, entry.Option, float64(entry.Amount), scoreDiff)
 			if err != nil {
 				log.Printf("Error checking Emotional Hedge: %v", err)
+			}
+
+			// Check for Bet Insurance (refund on loss)
+			insuranceRefund, insuranceApplied, err := cardService.ApplyBetInsuranceIfApplicable(db, consumer, user, float64(entry.Amount), false)
+			if err != nil {
+				log.Printf("Error checking Bet Insurance (Loss): %v", err)
 			}
 
 			user.TotalBetsLost++
@@ -401,6 +462,12 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 				lostPoolAmount -= hedgeRefund
 			}
 
+			if insuranceApplied && insuranceRefund > 0 {
+				user.Points += insuranceRefund
+				// Subtract refund from pool loss
+				lostPoolAmount -= insuranceRefund
+			}
+
 			db.Save(&user)
 			lostPoolAmount += float64(entry.Amount)
 
@@ -411,10 +478,17 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 				hedgeMsg = " (Emotional Hedge: consumed)"
 			}
 
+			insuranceMsg := ""
+			if insuranceApplied && insuranceRefund > 0 {
+				insuranceMsg = fmt.Sprintf(" (Bet Insurance: Refunding $%.1f)", insuranceRefund)
+			} else if insuranceApplied {
+				insuranceMsg = " (Bet Insurance: consumed)"
+			}
+
 			if spreadDisplay != "" {
-				loserList += fmt.Sprintf("%s - Bet: %s %s - **Lost $%d**%s\n", username, betOption, spreadDisplay, entry.Amount, hedgeMsg)
+				loserList += fmt.Sprintf("%s - Bet: %s %s - **Lost $%d**%s%s\n", username, betOption, spreadDisplay, entry.Amount, hedgeMsg, insuranceMsg)
 			} else {
-				loserList += fmt.Sprintf("%s - Bet: %s - **Lost $%d**%s\n", username, betOption, entry.Amount, hedgeMsg)
+				loserList += fmt.Sprintf("%s - Bet: %s - **Lost $%d**%s%s\n", username, betOption, entry.Amount, hedgeMsg, insuranceMsg)
 			}
 		}
 	}

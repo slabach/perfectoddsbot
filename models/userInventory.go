@@ -7,9 +7,10 @@ import (
 // UserInventory represents a card in a user's inventory
 type UserInventory struct {
 	gorm.Model
-	ID       uint   `gorm:"primaryKey"`
-	UserID   uint   `gorm:"index:idx_user_guild_card; not null"`
-	GuildID  string `gorm:"index:idx_user_guild_card; size:64; not null"`
-	CardID   int    `gorm:"index:idx_user_guild_card; not null"`
-	User     User   `gorm:"foreignKey:UserID; constraint:OnDelete:CASCADE"`
+	ID          uint   `gorm:"primaryKey"`
+	UserID      uint   `gorm:"index:idx_user_guild_card; not null"`
+	GuildID     string `gorm:"index:idx_user_guild_card; size:64; not null"`
+	CardID      int    `gorm:"index:idx_user_guild_card; not null"`
+	TargetBetID *uint
+	User        User `gorm:"foreignKey:UserID; constraint:OnDelete:CASCADE"`
 }

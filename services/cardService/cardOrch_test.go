@@ -339,3 +339,291 @@ func TestApplyEmotionalHedgeIfApplicable(t *testing.T) {
 		}
 	})
 }
+
+func TestApplyBetInsuranceIfApplicable(t *testing.T) {
+	t.Run("User has insurance card and loses bet", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		user := models.User{ID: 1, GuildID: "guild1"}
+		betAmount := 100.0
+
+		// Expect check for card
+		mock.ExpectQuery("SELECT count\\(\\*\\) FROM `user_inventories`").
+			WithArgs(user.ID, user.GuildID, cards.BetInsuranceCardID).
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+
+		// Mock consumer
+		consumed := false
+		consumer := func(db *gorm.DB, u models.User, cardID int) error {
+			if u.ID != user.ID {
+				t.Errorf("Expected user ID %d, got %d", user.ID, u.ID)
+			}
+			if cardID != cards.BetInsuranceCardID {
+				t.Errorf("Expected card ID %d, got %d", cards.BetInsuranceCardID, cardID)
+			}
+			consumed = true
+			return nil
+		}
+
+		refund, applied, err := ApplyBetInsuranceIfApplicable(db, consumer, user, betAmount, false)
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if !applied {
+			t.Error("Expected card to be applied")
+		}
+		if !consumed {
+			t.Error("Expected consumer to be called")
+		}
+		if refund != betAmount*0.25 {
+			t.Errorf("Expected refund %.2f, got %.2f", betAmount*0.25, refund)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+
+	t.Run("User has insurance card and wins bet", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		user := models.User{ID: 1, GuildID: "guild1"}
+		betAmount := 100.0
+
+		// Expect check for card
+		mock.ExpectQuery("SELECT count\\(\\*\\) FROM `user_inventories`").
+			WithArgs(user.ID, user.GuildID, cards.BetInsuranceCardID).
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+
+		consumed := false
+		consumer := func(db *gorm.DB, u models.User, cardID int) error {
+			consumed = true
+			return nil
+		}
+
+		refund, applied, err := ApplyBetInsuranceIfApplicable(db, consumer, user, betAmount, true)
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if !applied {
+			t.Error("Expected card to be applied (fizzle)")
+		}
+		if !consumed {
+			t.Error("Expected consumer to be called")
+		}
+		if refund != 0 {
+			t.Errorf("Expected refund 0, got %.2f", refund)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+
+	t.Run("User does not have insurance card", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		user := models.User{ID: 1, GuildID: "guild1"}
+		betAmount := 100.0
+
+		// Expect check for card - return 0
+		mock.ExpectQuery("SELECT count\\(\\*\\) FROM `user_inventories`").
+			WithArgs(user.ID, user.GuildID, cards.BetInsuranceCardID).
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+
+		consumer := func(db *gorm.DB, u models.User, cardID int) error {
+			t.Error("Consumer should not be called")
+			return nil
+		}
+
+		refund, applied, err := ApplyBetInsuranceIfApplicable(db, consumer, user, betAmount, false)
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if applied {
+			t.Error("Expected card NOT to be applied")
+		}
+		if refund != 0 {
+			t.Errorf("Expected refund 0, got %.2f", refund)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+
+	t.Run("DB Error", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		user := models.User{ID: 1, GuildID: "guild1"}
+		betAmount := 100.0
+
+		// Expect check for card - return error
+		mock.ExpectQuery("SELECT count\\(\\*\\) FROM `user_inventories`").
+			WithArgs(user.ID, user.GuildID, cards.BetInsuranceCardID).
+			WillReturnError(errors.New("db error"))
+
+		consumer := func(db *gorm.DB, u models.User, cardID int) error {
+			t.Error("Consumer should not be called")
+			return nil
+		}
+
+		_, applied, err := ApplyBetInsuranceIfApplicable(db, consumer, user, betAmount, false)
+
+		if err == nil {
+			t.Error("Expected error")
+		}
+		if applied {
+			t.Error("Expected card NOT to be applied")
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+}
+
+func TestApplyUnoReverseIfApplicable(t *testing.T) {
+	t.Run("Card exists (Win -> Loss)", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		user := models.User{ID: 1, GuildID: "guild1"}
+		betID := uint(123)
+
+		// Expect check for card
+		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
+			WithArgs(user.ID, user.GuildID, cards.UnoReverseCardID, betID).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "guild_id", "card_id", "target_bet_id"}).
+				AddRow(1, user.ID, user.GuildID, cards.UnoReverseCardID, betID))
+
+		// Expect deletion
+		mock.ExpectBegin()
+		mock.ExpectExec("DELETE FROM `user_inventories`").
+			WithArgs(1).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectCommit()
+
+		applied, newIsWin, err := ApplyUnoReverseIfApplicable(db, user, betID, true)
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if !applied {
+			t.Error("Expected card to be applied")
+		}
+		if newIsWin {
+			t.Error("Expected newIsWin to be false (flipped from true)")
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+
+	t.Run("Card exists (Loss -> Win)", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		user := models.User{ID: 1, GuildID: "guild1"}
+		betID := uint(123)
+
+		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
+			WithArgs(user.ID, user.GuildID, cards.UnoReverseCardID, betID).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "guild_id", "card_id", "target_bet_id"}).
+				AddRow(1, user.ID, user.GuildID, cards.UnoReverseCardID, betID))
+
+		mock.ExpectBegin()
+		mock.ExpectExec("DELETE FROM `user_inventories`").
+			WithArgs(1).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectCommit()
+
+		applied, newIsWin, err := ApplyUnoReverseIfApplicable(db, user, betID, false)
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if !applied {
+			t.Error("Expected card to be applied")
+		}
+		if !newIsWin {
+			t.Error("Expected newIsWin to be true (flipped from false)")
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+
+	t.Run("Card does not exist", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		user := models.User{ID: 1, GuildID: "guild1"}
+		betID := uint(123)
+
+		// Expect check for card - not found
+		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
+			WithArgs(user.ID, user.GuildID, cards.UnoReverseCardID, betID).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "guild_id", "card_id", "target_bet_id"})) // Empty result
+
+		applied, newIsWin, err := ApplyUnoReverseIfApplicable(db, user, betID, true)
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if applied {
+			t.Error("Expected card NOT to be applied")
+		}
+		if !newIsWin {
+			t.Error("Expected newIsWin to remain true")
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+}

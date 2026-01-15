@@ -20,4 +20,5 @@ type User struct {
 	FirstCardDrawCycle *time.Time // Timestamp when current draw cycle started
 	CardDrawCount      int        `gorm:"default:0"` // Number of draws in current cycle
 	CardDrawTimeoutUntil *time.Time // Timestamp when card draw timeout expires (nil if not timed out)
+	BetLockoutUntil    *time.Time // Timestamp when bet lockout expires (nil if not locked out)
 }
