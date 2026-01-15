@@ -32,7 +32,7 @@ func registerEpicCards(deck *[]models.Card) {
 		// {
 		// 	ID:          48,
 		// 	Name:        "Hostile Takeover",
-		// 	Description: "Swap your point balance with a user of your choice (Max swap 2,000 points).",
+		// 	Description: "Swap your point balance with a user of your choice (Max swap 500 points).",
 		// 	Rarity:      "Epic",
 		// 	Weight:      W_Epic,
 		// 	Handler:     handleHostileTakeover,
@@ -40,7 +40,7 @@ func registerEpicCards(deck *[]models.Card) {
 		// {
 		// 	ID:          49,
 		// 	Name:        "The Whale",
-		// 	Description: "Gain 1000 points immediately.",
+		// 	Description: "Gain 750 points immediately.",
 		// 	Rarity:      "Epic",
 		// 	Weight:      W_Epic,
 		// 	Handler:     handleWhale,
@@ -103,6 +103,15 @@ func registerEpicCards(deck *[]models.Card) {
 		// 	Weight:               W_Epic,
 		// 	Handler:              handleStopTheSteal,
 		// 	RoyaltyDiscordUserID: &[]string{"195444122578845696"}[0],
+		// },
+		// {
+		// 	ID:                   66,
+		// 	Name:                 "Snip Snap Snip Snap",
+		// 	Description:          "If you have any active bets, one of them randomly gets their option reversed.",
+		// 	Rarity:               "Epic",
+		// 	Weight:               W_Epic,
+		// 	Handler:              handlePurpleShell,
+		// 	RoyaltyDiscordUserID: &[]string{"447827835797766144"}[0],
 		// },
 	}
 

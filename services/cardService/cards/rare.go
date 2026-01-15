@@ -5,14 +5,6 @@ import "perfectOddsBot/models"
 func registerRareCards(deck *[]models.Card) {
 	rareCards := []models.Card{
 		// {
-		// 	ID:          39,
-		// 	Name:        "The Red Shell",
-		// 	Description: "Choose a player. They lose 10% of their points to you.",
-		// 	Rarity:      "Rare",
-		// 	Weight:      W_Rare,
-		// 	Handler:     handleRedShell,
-		// },
-		// {
 		// 	ID:          40,
 		// 	Name:        "Uno Reverse",
 		// 	Description: "Select an active bet you placed. If it loses, you win (and vice versa).",
@@ -23,7 +15,7 @@ func registerRareCards(deck *[]models.Card) {
 		// {
 		// 	ID:          41,
 		// 	Name:        "Socialism",
-		// 	Description: "Take 5% from the Top 3 players and distribute it evenly among the Bottom 3.",
+		// 	Description: "Take 90 from the Top 3 players and distribute it evenly among the Bottom 3.",
 		// 	Rarity:      "Rare",
 		// 	Weight:      W_Rare,
 		// 	Handler:     handleSocialism,
@@ -79,6 +71,22 @@ func registerRareCards(deck *[]models.Card) {
 		// 	Weight:               W_Rare,
 		// 	Handler:              handleAntiAntiBet,
 		// 	RoyaltyDiscordUserID: &[]string{"238274131722764288"}[0],
+		// },
+		// {
+		// 	ID:          31,
+		// 	Name:        "Grand Larceny",
+		// 	Description: "Steal 150 points from a chosen user.",
+		// 	Rarity:      "Uncommon",
+		// 	Weight:      W_Uncommon,
+		// 	Handler:     handleGrandLarceny,
+		// },
+		// {
+		// 	ID:          37,
+		// 	Name:        "Loan Shark",
+		// 	Description: "Get 500 points now, but you automatically lose 600 points in 3 days.",
+		// 	Rarity:      "Uncommon",
+		// 	Weight:      W_Uncommon,
+		// 	Handler:     handleLoanShark,
 		// },
 	}
 

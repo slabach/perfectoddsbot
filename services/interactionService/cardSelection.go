@@ -80,7 +80,7 @@ func HandleCardUserSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 
 func handlePettyTheftSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, userID string, targetUserID string, guildID string) error {
 	// Execute the steal
-	result, err := cards.ExecutePickpocketSteal(db, userID, targetUserID, guildID)
+	result, err := cards.ExecutePickpocketSteal(db, userID, targetUserID, guildID, 50.0)
 	if err != nil {
 		return err
 	}

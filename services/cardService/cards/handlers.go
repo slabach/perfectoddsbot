@@ -90,7 +90,7 @@ func handlePettyTheft(s *discordgo.Session, db *gorm.DB, userID string, guildID 
 }
 
 // ExecutePickpocketSteal executes the actual steal after user selection
-func ExecutePickpocketSteal(db *gorm.DB, userID string, targetUserID string, guildID string) (*models.CardResult, error) {
+func ExecutePickpocketSteal(db *gorm.DB, userID string, targetUserID string, guildID string, amount float64) (*models.CardResult, error) {
 	// Get both users
 	var user models.User
 	if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
@@ -103,7 +103,7 @@ func ExecutePickpocketSteal(db *gorm.DB, userID string, targetUserID string, gui
 	}
 
 	// Steal 5% of target's points
-	stealAmount := 150.0
+	stealAmount := amount
 
 	// Don't steal more than target has (shouldn't happen, but safety check)
 	if stealAmount > targetUser.Points {
@@ -932,6 +932,50 @@ func handleFactoryReset(s *discordgo.Session, db *gorm.DB, userID string, guildI
 
 	return &models.CardResult{
 		Message:     "Factory Reset triggered, but you have 1000 or more points. Nothing changed.",
+		PointsDelta: 0,
+		PoolDelta:   0,
+	}, nil
+}
+
+// handleQuickFlip flips a coin. Heads: Double your card cost back. Tails: Get nothing.
+func handleQuickFlip(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	// Get user and guild to determine card cost
+	var user models.User
+	var guild models.Guild
+	if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
+		return nil, err
+	}
+	if err := db.Where("guild_id = ?", guildID).First(&guild).Error; err != nil {
+		return nil, err
+	}
+
+	// Calculate the cost that was paid (CardDrawCount was already incremented before handler is called)
+	var cardCost float64
+	switch user.CardDrawCount {
+	case 1:
+		cardCost = guild.CardDrawCost
+	case 2:
+		cardCost = guild.CardDrawCost * 10
+	default:
+		cardCost = guild.CardDrawCost * 100
+	}
+
+	// Flip a coin: 0 = tails, 1 = heads
+	coinFlip := rand.Intn(2)
+
+	if coinFlip == 1 {
+		// Heads: Double your card cost back
+		winnings := cardCost * 2
+		return &models.CardResult{
+			Message:     fmt.Sprintf("Heads! You doubled your card cost back and gained %.0f points!", winnings),
+			PointsDelta: winnings,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	// Tails: Get nothing
+	return &models.CardResult{
+		Message:     "Tails! You get nothing.",
 		PointsDelta: 0,
 		PoolDelta:   0,
 	}, nil
