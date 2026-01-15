@@ -93,7 +93,7 @@ func handlePettyTheftSelection(s *discordgo.Session, i *discordgo.InteractionCre
 
 	targetUsername := common.GetUsernameWithDB(db, s, guildID, targetUserID)
 
-	card := cardService.GetCardByID(4)
+	card := cardService.GetCardByID(cards.PettyTheftCardID)
 	if card == nil {
 		return fmt.Errorf("card not found")
 	}
@@ -297,7 +297,7 @@ func HandleCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCreate
 	if err := db.First(&bet, targetBetID).Error; err != nil {
 		return fmt.Errorf("bet not found")
 	}
-	
+
 	guild, err := guildService.GetGuildInfo(s, db, guildID, i.ChannelID)
 	if err != nil {
 		return err
