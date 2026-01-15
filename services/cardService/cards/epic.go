@@ -113,6 +113,14 @@ func registerEpicCards(deck *[]models.Card) {
 		// 	Handler:              handlePurpleShell,
 		// 	RoyaltyDiscordUserID: &[]string{"447827835797766144"}[0],
 		// },
+		// {
+		// 	ID:          71,
+		// 	Name:        "Robbing the Hood",
+		// 	Description: "Steal 50% of the poorest player's points and give it to yourself.",
+		// 	Rarity:      "Epic",
+		// 	Weight:      W_Epic,
+		// 	Handler:     handleRobbingTheHood,
+		// },
 	}
 
 	// Add to deck

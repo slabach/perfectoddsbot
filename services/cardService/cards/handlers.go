@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/guildService"
+	"strings"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -1139,6 +1140,337 @@ func handleLoanShark(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 	return &models.CardResult{
 		Message:     "You took a loan! +500 points. You will automatically lose 600 points in 3 days.",
 		PointsDelta: 500,
+		PoolDelta:   0,
+	}, nil
+}
+
+func handleSocialism(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	var allUsers []models.User
+	if err := db.Where("guild_id = ?", guildID).Order("points DESC").Find(&allUsers).Error; err != nil {
+		return nil, err
+	}
+
+	if len(allUsers) == 0 {
+		return &models.CardResult{
+			Message:     "No players found in the server. Socialism has no one to redistribute from.",
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	numTopPlayers := 3
+	if len(allUsers) < numTopPlayers {
+		numTopPlayers = len(allUsers)
+	}
+	topPlayers := allUsers[:numTopPlayers]
+
+	var bottomPlayers []models.User
+	topPlayerIDs := make(map[uint]bool)
+	for _, topPlayer := range topPlayers {
+		topPlayerIDs[topPlayer.ID] = true
+	}
+
+	for i := len(allUsers) - 1; i >= 0 && len(bottomPlayers) < 3; i-- {
+		if !topPlayerIDs[allUsers[i].ID] {
+			bottomPlayers = append(bottomPlayers, allUsers[i])
+		}
+	}
+
+	for i, j := 0, len(bottomPlayers)-1; i < j; i, j = i+1, j-1 {
+		bottomPlayers[i], bottomPlayers[j] = bottomPlayers[j], bottomPlayers[i]
+	}
+
+	if len(topPlayers) == 0 {
+		return &models.CardResult{
+			Message:     "No top players found to take points from. Socialism fizzles out.",
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	if len(bottomPlayers) == 0 {
+		return &models.CardResult{
+			Message:     "No bottom players found to give points to. Socialism fizzles out.",
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	var totalCollected float64
+	var topMessage string
+	var bottomMessage string
+
+	for _, topPlayer := range topPlayers {
+		blocked, err := checkAndConsumeShield(db, topPlayer.ID, guildID)
+		if err != nil {
+			return nil, err
+		}
+
+		topPlayerName := topPlayer.Username
+		topDisplayName := ""
+		if topPlayerName == nil || *topPlayerName == "" {
+			topDisplayName = fmt.Sprintf("<@%s>", topPlayer.DiscordID)
+		} else {
+			topDisplayName = *topPlayerName
+		}
+
+		if blocked {
+			topMessage += fmt.Sprintf("%s's Shield blocked!\n", topDisplayName)
+			continue
+		}
+
+		takeAmount := 90.0
+		if topPlayer.Points < takeAmount {
+			takeAmount = topPlayer.Points
+		}
+
+		if takeAmount > 0 {
+			topPlayer.Points -= takeAmount
+			totalCollected += takeAmount
+			if err := db.Save(&topPlayer).Error; err != nil {
+				return nil, err
+			}
+			topMessage += fmt.Sprintf("%s lost %.0f points\n", topDisplayName, takeAmount)
+		}
+	}
+
+	if totalCollected > 0 && len(bottomPlayers) > 0 {
+		amountPerBottomPlayer := totalCollected / float64(len(bottomPlayers))
+
+		for _, bottomPlayer := range bottomPlayers {
+			bottomPlayer.Points += amountPerBottomPlayer
+			if err := db.Save(&bottomPlayer).Error; err != nil {
+				return nil, err
+			}
+
+			bottomPlayerName := bottomPlayer.Username
+			bottomDisplayName := ""
+			if bottomPlayerName == nil || *bottomPlayerName == "" {
+				bottomDisplayName = fmt.Sprintf("<@%s>", bottomPlayer.DiscordID)
+			} else {
+				bottomDisplayName = *bottomPlayerName
+			}
+
+			bottomMessage += fmt.Sprintf("%s gained %.0f points\n", bottomDisplayName, amountPerBottomPlayer)
+		}
+	}
+
+	var message string
+	if topMessage != "" {
+		message = "Socialism activated! Top players:\n" + topMessage
+	}
+	if bottomMessage != "" {
+		message += "Bottom players: \n" + bottomMessage
+	}
+
+	message = strings.TrimSuffix(message, " ")
+
+	if message == "" {
+		message = "Socialism activated but no redistribution occurred (all top players were shielded or had no points)."
+	}
+
+	return &models.CardResult{
+		Message:     message,
+		PointsDelta: 0,
+		PoolDelta:   0,
+	}, nil
+}
+
+func handleRobinHood(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	var allUsers []models.User
+	if err := db.Where("guild_id = ?", guildID).Order("points DESC").Find(&allUsers).Error; err != nil {
+		return nil, err
+	}
+
+	if len(allUsers) == 0 {
+		return &models.CardResult{
+			Message:     "No players found in the server. Robin Hood has no one to rob from.",
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	if len(allUsers) == 1 {
+		return &models.CardResult{
+			Message:     "Only one player in the server. Robin Hood needs both rich and poor to operate!",
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	topPlayer := allUsers[0]
+	bottomPlayer := allUsers[len(allUsers)-1]
+
+	if topPlayer.ID == bottomPlayer.ID {
+		return &models.CardResult{
+			Message:     "The richest and poorest players are the same! Robin Hood has no one to redistribute from.",
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	topPlayerName := topPlayer.Username
+	topDisplayName := ""
+	if topPlayerName == nil || *topPlayerName == "" {
+		topDisplayName = fmt.Sprintf("<@%s>", topPlayer.DiscordID)
+	} else {
+		topDisplayName = *topPlayerName
+	}
+
+	bottomPlayerName := bottomPlayer.Username
+	bottomDisplayName := ""
+	if bottomPlayerName == nil || *bottomPlayerName == "" {
+		bottomDisplayName = fmt.Sprintf("<@%s>", bottomPlayer.DiscordID)
+	} else {
+		bottomDisplayName = *bottomPlayerName
+	}
+
+	blocked, err := checkAndConsumeShield(db, topPlayer.ID, guildID)
+	if err != nil {
+		return nil, err
+	}
+
+	if blocked {
+		return &models.CardResult{
+			Message:     fmt.Sprintf("Robin Hood attempted to steal from %s, but their Shield parried the theif! The card fizzles out.", topDisplayName),
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	takeAmount := 200.0
+	if topPlayer.Points < takeAmount {
+		takeAmount = topPlayer.Points
+	}
+
+	if takeAmount <= 0 {
+		return &models.CardResult{
+			Message:     fmt.Sprintf("Robin Hood attempted to steal from %s, but they have no points! The card fizzles out.", topDisplayName),
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	topPlayer.Points -= takeAmount
+	if err := db.Save(&topPlayer).Error; err != nil {
+		return nil, err
+	}
+
+	bottomPlayer.Points += 150.0
+	if err := db.Save(&bottomPlayer).Error; err != nil {
+		return nil, err
+	}
+
+	message := fmt.Sprintf("Robin Hood strikes! Stole %.0f points from %s, gave 150 to %s, and kept 50 for yourself!", takeAmount, topDisplayName, bottomDisplayName)
+
+	return &models.CardResult{
+		Message:     message,
+		PointsDelta: 50.0,
+		PoolDelta:   0,
+	}, nil
+}
+
+func handleRedShells(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	var allUsers []models.User
+	if err := db.Where("guild_id = ?", guildID).Order("points DESC").Find(&allUsers).Error; err != nil {
+		return nil, err
+	}
+
+	if len(allUsers) == 0 {
+		return &models.CardResult{
+			Message:     "No players found in the server. Red Shells have no targets.",
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	var drawerIndex int = -1
+	for i, user := range allUsers {
+		if user.DiscordID == userID {
+			drawerIndex = i
+			break
+		}
+	}
+
+	if drawerIndex == -1 {
+		return &models.CardResult{
+			Message:     "Could not find your position on the leaderboard. Red Shells fizzle out.",
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	if drawerIndex == 0 {
+		return &models.CardResult{
+			Message:     "You're at the top of the leaderboard! There's no one in front of you to hit with Red Shells.",
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	numTargets := 3
+	if drawerIndex < numTargets {
+		numTargets = drawerIndex
+	}
+
+	var targets []models.User
+	for i := drawerIndex - numTargets; i < drawerIndex; i++ {
+		targets = append(targets, allUsers[i])
+	}
+
+	if len(targets) == 0 {
+		return &models.CardResult{
+			Message:     "No targets found in front of you. Red Shells fizzle out.",
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	var message string
+
+	for _, target := range targets {
+		blocked, err := checkAndConsumeShield(db, target.ID, guildID)
+		if err != nil {
+			return nil, err
+		}
+
+		targetName := target.Username
+		displayName := ""
+		if targetName == nil || *targetName == "" {
+			displayName = fmt.Sprintf("<@%s>", target.DiscordID)
+		} else {
+			displayName = *targetName
+		}
+
+		if blocked {
+			message += fmt.Sprintf("%s's Shield blocked a shell! ", displayName)
+			continue
+		}
+
+		loss := float64(rand.Intn(26) + 25)
+
+		if target.Points < loss {
+			loss = target.Points
+		}
+
+		if loss > 0 {
+			target.Points -= loss
+			if err := db.Save(&target).Error; err != nil {
+				return nil, err
+			}
+			message += fmt.Sprintf("%s was hit for %.0f points! ", displayName, loss)
+		}
+	}
+
+	if message == "" {
+		message = "Red Shells were thrown but all were blocked!"
+	} else {
+		message = "Red Shells thrown! " + message
+	}
+
+	return &models.CardResult{
+		Message:     message,
+		PointsDelta: 0,
 		PoolDelta:   0,
 	}, nil
 }
