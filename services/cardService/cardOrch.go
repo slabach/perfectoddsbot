@@ -630,6 +630,77 @@ func ApplyUnoReverseIfApplicable(db *gorm.DB, user models.User, betID uint, orig
 	return true, !originalIsWin, nil
 }
 
+type AntiAntiBetWinner struct {
+	DiscordID string
+	Payout    float64
+}
+
+func ApplyAntiAntiBetIfApplicable(db *gorm.DB, bettorUser models.User, isWin bool) (totalPayout float64, winners []AntiAntiBetWinner, losers []AntiAntiBetWinner, applied bool, err error) {
+	var userCards []models.UserInventory
+	err = db.Where("guild_id = ? AND card_id = ? AND target_user_id = ?", bettorUser.GuildID, cards.AntiAntiBetCardID, bettorUser.DiscordID).
+		Find(&userCards).Error
+
+	if err != nil {
+		return 0, nil, nil, false, err
+	}
+
+	if len(userCards) == 0 {
+		return 0, nil, nil, false, nil
+	}
+
+	totalPayout = 0.0
+	applied = true
+	winners = []AntiAntiBetWinner{}
+	losers = []AntiAntiBetWinner{}
+
+	for _, card := range userCards {
+		if isWin {
+			// Bet won: card holder loses, just delete the card
+			var cardHolder models.User
+			if err := db.First(&cardHolder, card.UserID).Error; err != nil {
+				// If we can't find the user, still delete the card
+				db.Delete(&card)
+				continue
+			}
+
+			// Add card holder to losers list
+			losers = append(losers, AntiAntiBetWinner{
+				DiscordID: cardHolder.DiscordID,
+				Payout:    card.BetAmount, // The amount they bet (which they lose)
+			})
+
+			if err := db.Delete(&card).Error; err != nil {
+				return totalPayout, winners, losers, applied, err
+			}
+		} else {
+			payout := common.CalculateSimplePayout(card.BetAmount)
+
+			var cardHolder models.User
+			if err := db.First(&cardHolder, card.UserID).Error; err != nil {
+				db.Delete(&card)
+				continue
+			}
+
+			cardHolder.Points += payout
+			if err := db.Model(&cardHolder).UpdateColumn("points", gorm.Expr("points + ?", payout)).Error; err != nil {
+				return totalPayout, winners, losers, applied, err
+			}
+
+			totalPayout += payout
+			winners = append(winners, AntiAntiBetWinner{
+				DiscordID: cardHolder.DiscordID,
+				Payout:    payout,
+			})
+
+			if err := db.Delete(&card).Error; err != nil {
+				return totalPayout, winners, losers, applied, err
+			}
+		}
+	}
+
+	return totalPayout, winners, losers, applied, nil
+}
+
 func ApplyDoubleDownIfAvailable(db *gorm.DB, consumer CardConsumer, user models.User, originalPayout float64) (float64, bool, error) {
 	var count int64
 	err := db.Model(&models.UserInventory{}).

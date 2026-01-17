@@ -106,6 +106,7 @@ func CreateCustomBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *g
 func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID int, winningOption int, db *gorm.DB) {
 	var bet models.Bet
 	winnersList := ""
+	loserList := ""
 	result := db.First(&bet, "id = ? AND guild_id = ?", betID, i.GuildID)
 	if result.Error != nil || bet.ID == 0 {
 		response := "Bet not found or already resolved."
@@ -161,6 +162,20 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 				db.Save(&user)
 				lostPoolAmount += float64(entry.Amount)
 				continue
+			}
+
+			_, _, antiAntiBetLosers, antiAntiBetApplied, err := cardService.ApplyAntiAntiBetIfApplicable(db, user, true)
+			if err != nil {
+				common.SendError(s, i, fmt.Errorf("error checking Anti-Anti-Bet: %v", err), db)
+				return
+			}
+			if antiAntiBetApplied {
+				if len(antiAntiBetLosers) > 0 {
+					for _, loser := range antiAntiBetLosers {
+						cardHolderUsername := common.GetUsernameWithDB(db, s, user.GuildID, loser.DiscordID)
+						loserList += fmt.Sprintf("%s - **Lost $%.1f** (Anti-Anti-Bet!)\n", cardHolderUsername, loser.Payout)
+					}
+				}
 			}
 
 			// Define card consumer closure
@@ -276,6 +291,22 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 				continue
 			}
 
+			antiAntiBetPayout, antiAntiBetWinners, _, antiAntiBetApplied, err := cardService.ApplyAntiAntiBetIfApplicable(db, user, false)
+			if err != nil {
+				common.SendError(s, i, fmt.Errorf("error checking Anti-Anti-Bet: %v", err), db)
+				return
+			}
+			if antiAntiBetApplied && antiAntiBetPayout > 0 {
+				totalPayout += antiAntiBetPayout
+
+				if len(antiAntiBetWinners) > 0 {
+					for _, winner := range antiAntiBetWinners {
+						username := common.GetUsernameWithDB(db, s, user.GuildID, winner.DiscordID)
+						winnersList += fmt.Sprintf("%s - Won $%.1f (Anti-Anti-Bet!)\n", username, winner.Payout)
+					}
+				}
+			}
+
 			// Define card consumer closure
 			consumer := func(db *gorm.DB, user models.User, cardID int) error {
 				return cardService.PlayCardFromInventory(s, db, user, cardID)
@@ -290,7 +321,7 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 
 			user.TotalBetsLost++
 			user.TotalPointsLost += float64(entry.Amount)
-			
+
 			if insuranceApplied && insuranceRefund > 0 {
 				user.Points += insuranceRefund
 				// Subtract refund from pool loss
@@ -325,12 +356,13 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 	}
 
 	winnersText := strings.TrimSpace(winnersList)
+	losersText := strings.TrimSpace(loserList)
 	embed := messageService.BuildBetResolutionEmbed(
 		bet.Description,
 		fmt.Sprintf("Winning option: **%s**", winningOptionName),
 		totalPayout,
 		winnersText,
-		"",
+		losersText,
 	)
 	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,

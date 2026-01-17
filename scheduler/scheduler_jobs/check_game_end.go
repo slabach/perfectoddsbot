@@ -347,6 +347,19 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 				continue
 			}
 
+			_, _, antiAntiBetLosers, antiAntiBetApplied, err := cardService.ApplyAntiAntiBetIfApplicable(db, user, true)
+			if err != nil {
+				log.Printf("Error checking Anti-Anti-Bet (Win): %v", err)
+			}
+			if antiAntiBetApplied {
+				if len(antiAntiBetLosers) > 0 {
+					for _, loser := range antiAntiBetLosers {
+						cardHolderUsername := common.GetUsernameWithDB(db, s, user.GuildID, loser.DiscordID)
+						loserList += fmt.Sprintf("%s - **Lost $%.1f** (Anti-Anti-Bet!)\n", cardHolderUsername, loser.Payout)
+					}
+				}
+			}
+
 			// Define card consumer closure
 			consumer := func(db *gorm.DB, user models.User, cardID int) error {
 				return cardService.PlayCardFromInventory(s, db, user, cardID)
@@ -482,6 +495,18 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 					}
 				}
 				continue
+			}
+
+			antiAntiBetPayout, antiAntiBetWinners, _, antiAntiBetApplied, err := cardService.ApplyAntiAntiBetIfApplicable(db, user, false)
+			if err != nil {
+				log.Printf("Error checking Anti-Anti-Bet (Loss): %v", err)
+			}
+			if antiAntiBetApplied && antiAntiBetPayout > 0 {
+				totalPayout += antiAntiBetPayout
+				for _, winner := range antiAntiBetWinners {
+					cardHolderUsername := common.GetUsernameWithDB(db, s, user.GuildID, winner.DiscordID)
+					winnersList += fmt.Sprintf("%s - **Won $%.1f** (Anti-Anti-Bet!)\n", cardHolderUsername, winner.Payout)
+				}
 			}
 
 			// Define card consumer closure

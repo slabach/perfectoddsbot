@@ -854,7 +854,7 @@ func handleFactoryReset(s *discordgo.Session, db *gorm.DB, userID string, guildI
 	}
 
 	return &models.CardResult{
-		Message:     "Factory Reset triggered, but you have 1000 or more points. Nothing changed.",
+		Message:     "Factory Reset triggered, but you have 1000 or more points. Factory Reset fizzles out.",
 		PointsDelta: 0,
 		PoolDelta:   0,
 	}, nil
@@ -1292,7 +1292,7 @@ func handleRobinHood(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 
 	if len(allUsers) == 1 {
 		return &models.CardResult{
-			Message:     "Only one player in the server. Robin Hood needs both rich and poor to operate!",
+			Message:     "Only one player in the server. Robin Hood fizzles out.",
 			PointsDelta: 0,
 			PoolDelta:   0,
 		}, nil
@@ -1394,7 +1394,7 @@ func handleRedShells(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 
 	if drawerIndex == -1 {
 		return &models.CardResult{
-			Message:     "Could not find your position on the leaderboard. Red Shells fizzle out.",
+			Message:     "Could not find your position on the leaderboard. Red Shells break against the wall.",
 			PointsDelta: 0,
 			PoolDelta:   0,
 		}, nil
@@ -1402,7 +1402,7 @@ func handleRedShells(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 
 	if drawerIndex == 0 {
 		return &models.CardResult{
-			Message:     "You're at the top of the leaderboard! There's no one in front of you to hit with Red Shells.",
+			Message:     "You're at the top of the leaderboard! There's no one in front of you to hit with Red Shells. Red Shells break against the wall.",
 			PointsDelta: 0,
 			PoolDelta:   0,
 		}, nil
@@ -1420,7 +1420,7 @@ func handleRedShells(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 
 	if len(targets) == 0 {
 		return &models.CardResult{
-			Message:     "No targets found in front of you. Red Shells fizzle out.",
+			Message:     "No targets found in front of you. Red Shells break against the wall.",
 			PointsDelta: 0,
 			PoolDelta:   0,
 		}, nil
@@ -1496,6 +1496,16 @@ func checkAndConsumeShield(db *gorm.DB, userID uint, guildID string) (bool, erro
 func handleGrandLarceny(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
 	return &models.CardResult{
 		Message:           "Grand Larceny requires you to select a target!",
+		PointsDelta:       0,
+		PoolDelta:         0,
+		RequiresSelection: true,
+		SelectionType:     "user",
+	}, nil
+}
+
+func handleAntiAntiBet(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	return &models.CardResult{
+		Message:           "Anti-Anti-Bet requires you to select a target user!",
 		PointsDelta:       0,
 		PoolDelta:         0,
 		RequiresSelection: true,

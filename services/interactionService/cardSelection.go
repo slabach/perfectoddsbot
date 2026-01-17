@@ -2,6 +2,7 @@ package interactionService
 
 import (
 	"fmt"
+	"math"
 	"perfectOddsBot/models"
 	cardService "perfectOddsBot/services/cardService"
 	"perfectOddsBot/services/cardService/cards"
@@ -72,6 +73,8 @@ func HandleCardUserSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 		return handleBetFreezeSelection(s, i, db, userID, targetUserID, guildID)
 	case cards.GrandLarcenyCardID:
 		return handleGrandLarcenySelection(s, i, db, userID, targetUserID, guildID)
+	case cards.AntiAntiBetCardID:
+		return handleAntiAntiBetSelection(s, i, db, userID, targetUserID, guildID)
 	default:
 		return fmt.Errorf("card %d does not support user selection", cardID)
 	}
@@ -227,6 +230,72 @@ func handleGrandLarcenySelection(s *discordgo.Session, i *discordgo.InteractionC
 	}
 
 	return nil
+}
+
+func handleAntiAntiBetSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, userID string, targetUserID string, guildID string) error {
+	// Get the user who drew the card
+	var user models.User
+	if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
+		return err
+	}
+
+	// Calculate bet amount: 100 points if user has >= 100 points, otherwise half of current points rounded to nearest whole number
+	var betAmount float64
+	if user.Points >= 100.0 {
+		betAmount = 100.0
+	} else {
+		betAmount = math.Round(user.Points / 2.0)
+	}
+
+	// Deduct the bet amount from user's points
+	user.Points -= betAmount
+	if user.Points < 0 {
+		user.Points = 0
+	}
+
+	// Save user points
+	if err := db.Save(&user).Error; err != nil {
+		return err
+	}
+
+	// Add card to inventory with TargetUserID and BetAmount
+	inventory := models.UserInventory{
+		UserID:       user.ID,
+		GuildID:      guildID,
+		CardID:       cards.AntiAntiBetCardID,
+		TargetUserID: &targetUserID,
+		BetAmount:    betAmount,
+	}
+
+	if err := db.Create(&inventory).Error; err != nil {
+		return err
+	}
+
+	guild, err := guildService.GetGuildInfo(s, db, guildID, i.ChannelID)
+	if err != nil {
+		return err
+	}
+
+	targetUsername := common.GetUsernameWithDB(db, s, guildID, targetUserID)
+
+	card := cardService.GetCardByID(cards.AntiAntiBetCardID)
+	if card == nil {
+		return fmt.Errorf("card not found")
+	}
+
+	embed := buildCardResultEmbed(card, &models.CardResult{
+		Message:     fmt.Sprintf("Anti-Anti-Bet active! You bet %.0f points that <@%s> will lose their next bet. If they lose, you'll get %.0f points at even odds (+100).", betAmount, targetUserID, betAmount*2),
+		PointsDelta: -betAmount,
+		PoolDelta:   0,
+	}, user, targetUsername, guild.Pool)
+
+	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{embed},
+		},
+	})
+	return err
 }
 
 func buildCardResultEmbed(card *models.Card, result *models.CardResult, user models.User, targetUsername string, poolBalance float64) *discordgo.MessageEmbed {

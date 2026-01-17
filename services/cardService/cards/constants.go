@@ -43,6 +43,7 @@ const (
 	LoanSharkCardID        = 37
 	EmotionalHedgeCardID   = 62
 	GrandLarcenyCardID     = 31
+	AntiAntiBetCardID      = 68
 
 	RoyaltyGuildID = "761721066959667220"
 )

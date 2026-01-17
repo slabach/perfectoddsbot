@@ -524,16 +524,14 @@ func TestApplyUnoReverseIfApplicable(t *testing.T) {
 		user := models.User{ID: 1, GuildID: "guild1"}
 		betID := uint(123)
 
-		// Expect check for card
 		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
-			WithArgs(user.ID, user.GuildID, cards.UnoReverseCardID, betID).
+			WithArgs(user.ID, user.GuildID, cards.UnoReverseCardID, betID, 1).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "guild_id", "card_id", "target_bet_id"}).
 				AddRow(1, user.ID, user.GuildID, cards.UnoReverseCardID, betID))
 
-		// Expect deletion
 		mock.ExpectBegin()
-		mock.ExpectExec("DELETE FROM `user_inventories`").
-			WithArgs(1).
+		mock.ExpectExec("UPDATE `user_inventories` SET `deleted_at`=").
+			WithArgs(sqlmock.AnyArg(), 1).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 		mock.ExpectCommit()
 
@@ -567,13 +565,13 @@ func TestApplyUnoReverseIfApplicable(t *testing.T) {
 		betID := uint(123)
 
 		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
-			WithArgs(user.ID, user.GuildID, cards.UnoReverseCardID, betID).
+			WithArgs(user.ID, user.GuildID, cards.UnoReverseCardID, betID, 1).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "guild_id", "card_id", "target_bet_id"}).
 				AddRow(1, user.ID, user.GuildID, cards.UnoReverseCardID, betID))
 
 		mock.ExpectBegin()
-		mock.ExpectExec("DELETE FROM `user_inventories`").
-			WithArgs(1).
+		mock.ExpectExec("UPDATE `user_inventories` SET `deleted_at`=").
+			WithArgs(sqlmock.AnyArg(), 1).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 		mock.ExpectCommit()
 
@@ -606,9 +604,8 @@ func TestApplyUnoReverseIfApplicable(t *testing.T) {
 		user := models.User{ID: 1, GuildID: "guild1"}
 		betID := uint(123)
 
-		// Expect check for card - not found
 		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
-			WithArgs(user.ID, user.GuildID, cards.UnoReverseCardID, betID).
+			WithArgs(user.ID, user.GuildID, cards.UnoReverseCardID, betID, 1).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "guild_id", "card_id", "target_bet_id"})) // Empty result
 
 		applied, newIsWin, err := ApplyUnoReverseIfApplicable(db, user, betID, true)
@@ -621,6 +618,284 @@ func TestApplyUnoReverseIfApplicable(t *testing.T) {
 		}
 		if !newIsWin {
 			t.Error("Expected newIsWin to remain true")
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+}
+
+func TestApplyAntiAntiBetIfApplicable(t *testing.T) {
+	t.Run("Card exists, target user wins bet (card holder loses)", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		bettorUser := models.User{ID: 1, DiscordID: "target123", GuildID: "guild1"}
+		targetDiscordID := "target123"
+
+		cardHolderID := uint(2)
+		cardHolderDiscordID := "holder123"
+		betAmount := 100.0
+
+		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
+			WithArgs(bettorUser.GuildID, cards.AntiAntiBetCardID, targetDiscordID).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "guild_id", "card_id", "target_user_id", "bet_amount"}).
+				AddRow(1, cardHolderID, "guild1", cards.AntiAntiBetCardID, targetDiscordID, betAmount))
+
+		mock.ExpectQuery("SELECT \\* FROM `users`").
+			WithArgs(cardHolderID, 1).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "discord_id", "guild_id", "points"}).
+				AddRow(cardHolderID, cardHolderDiscordID, "guild1", 500.0))
+
+		mock.ExpectBegin()
+		mock.ExpectExec("UPDATE `user_inventories` SET `deleted_at`=").
+			WithArgs(sqlmock.AnyArg(), 1).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectCommit()
+
+		payout, winners, losers, applied, err := ApplyAntiAntiBetIfApplicable(db, bettorUser, true)
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if !applied {
+			t.Error("Expected card to be applied")
+		}
+		if payout != 0 {
+			t.Errorf("Expected payout 0 (holder loses), got %.2f", payout)
+		}
+		if len(winners) != 0 {
+			t.Errorf("Expected no winners when target wins, got %d", len(winners))
+		}
+		if len(losers) != 1 {
+			t.Errorf("Expected 1 loser, got %d", len(losers))
+		}
+		if len(losers) > 0 && losers[0].DiscordID != cardHolderDiscordID {
+			t.Errorf("Expected loser DiscordID '%s', got '%s'", cardHolderDiscordID, losers[0].DiscordID)
+		}
+		if len(losers) > 0 && losers[0].Payout != betAmount {
+			t.Errorf("Expected loser payout %.2f (bet amount), got %.2f", betAmount, losers[0].Payout)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+
+	t.Run("Card exists, target user loses bet (card holder wins)", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		bettorUser := models.User{ID: 1, DiscordID: "target123", GuildID: "guild1"}
+		targetDiscordID := "target123"
+		cardHolderID := uint(2)
+		betAmount := 100.0
+
+		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
+			WithArgs(bettorUser.GuildID, cards.AntiAntiBetCardID, targetDiscordID).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "guild_id", "card_id", "target_user_id", "bet_amount"}).
+				AddRow(1, cardHolderID, "guild1", cards.AntiAntiBetCardID, targetDiscordID, betAmount))
+
+		mock.ExpectQuery("SELECT \\* FROM `users`").
+			WithArgs(cardHolderID, 1).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "discord_id", "guild_id", "points"}).
+				AddRow(cardHolderID, "holder123", "guild1", 500.0))
+
+		mock.ExpectBegin()
+		mock.ExpectExec("UPDATE `users` SET `points`=").
+			WithArgs(sqlmock.AnyArg(), cardHolderID).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectCommit()
+
+		mock.ExpectBegin()
+		mock.ExpectExec("UPDATE `user_inventories` SET `deleted_at`=").
+			WithArgs(sqlmock.AnyArg(), 1).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectCommit()
+
+		payout, winners, losers, applied, err := ApplyAntiAntiBetIfApplicable(db, bettorUser, false)
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if !applied {
+			t.Error("Expected card to be applied")
+		}
+		expectedPayout := betAmount * 2.0 // Even odds (+100)
+		if payout != expectedPayout {
+			t.Errorf("Expected payout %.2f, got %.2f", expectedPayout, payout)
+		}
+		if len(winners) != 1 {
+			t.Errorf("Expected 1 winner, got %d", len(winners))
+		}
+		if len(losers) != 0 {
+			t.Errorf("Expected no losers, got %d", len(losers))
+		}
+		if len(winners) > 0 && winners[0].DiscordID != "holder123" {
+			t.Errorf("Expected winner DiscordID 'holder123', got '%s'", winners[0].DiscordID)
+		}
+		if len(winners) > 0 && winners[0].Payout != expectedPayout {
+			t.Errorf("Expected winner payout %.2f, got %.2f", expectedPayout, winners[0].Payout)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+
+	t.Run("Multiple cards exist for same target", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		bettorUser := models.User{ID: 1, DiscordID: "target123", GuildID: "guild1"}
+		targetDiscordID := "target123"
+		cardHolder1ID := uint(2)
+		cardHolder2ID := uint(3)
+		betAmount1 := 100.0
+		betAmount2 := 50.0
+
+		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
+			WithArgs(bettorUser.GuildID, cards.AntiAntiBetCardID, targetDiscordID).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "guild_id", "card_id", "target_user_id", "bet_amount"}).
+				AddRow(1, cardHolder1ID, "guild1", cards.AntiAntiBetCardID, targetDiscordID, betAmount1).
+				AddRow(2, cardHolder2ID, "guild1", cards.AntiAntiBetCardID, targetDiscordID, betAmount2))
+
+		mock.ExpectQuery("SELECT \\* FROM `users`").
+			WithArgs(cardHolder1ID, 1).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "discord_id", "guild_id", "points"}).
+				AddRow(cardHolder1ID, "holder123", "guild1", 500.0))
+
+		mock.ExpectBegin()
+		mock.ExpectExec("UPDATE `users` SET `points`=").
+			WithArgs(sqlmock.AnyArg(), cardHolder1ID).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectCommit()
+
+		mock.ExpectBegin()
+		mock.ExpectExec("UPDATE `user_inventories` SET `deleted_at`=").
+			WithArgs(sqlmock.AnyArg(), 1).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectCommit()
+
+		mock.ExpectQuery("SELECT \\* FROM `users`").
+			WithArgs(cardHolder2ID, 1).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "discord_id", "guild_id", "points"}).
+				AddRow(cardHolder2ID, "holder456", "guild1", 300.0))
+
+		mock.ExpectBegin()
+		mock.ExpectExec("UPDATE `users` SET `points`=").
+			WithArgs(sqlmock.AnyArg(), cardHolder2ID).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectCommit()
+
+		mock.ExpectBegin()
+		mock.ExpectExec("UPDATE `user_inventories` SET `deleted_at`=").
+			WithArgs(sqlmock.AnyArg(), 2).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectCommit()
+
+		payout, winners, losers, applied, err := ApplyAntiAntiBetIfApplicable(db, bettorUser, false)
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if !applied {
+			t.Error("Expected card to be applied")
+		}
+		expectedPayout := (betAmount1 * 2.0) + (betAmount2 * 2.0)
+		if payout != expectedPayout {
+			t.Errorf("Expected payout %.2f, got %.2f", expectedPayout, payout)
+		}
+		if len(winners) != 2 {
+			t.Errorf("Expected 2 winners, got %d", len(winners))
+		}
+		if len(losers) != 0 {
+			t.Errorf("Expected no losers, got %d", len(losers))
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+
+	t.Run("Card does not exist", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		bettorUser := models.User{ID: 1, DiscordID: "target123", GuildID: "guild1"}
+		targetDiscordID := "target123"
+
+		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
+			WithArgs(bettorUser.GuildID, cards.AntiAntiBetCardID, targetDiscordID).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "guild_id", "card_id", "target_user_id", "bet_amount"}))
+
+		payout, winners, losers, applied, err := ApplyAntiAntiBetIfApplicable(db, bettorUser, true)
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if applied {
+			t.Error("Expected card NOT to be applied")
+		}
+		if payout != 0 {
+			t.Errorf("Expected payout 0, got %.2f", payout)
+		}
+		if len(winners) != 0 {
+			t.Errorf("Expected no winners, got %d", len(winners))
+		}
+		if len(losers) != 0 {
+			t.Errorf("Expected no losers, got %d", len(losers))
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+
+	t.Run("DB Error", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		bettorUser := models.User{ID: 1, DiscordID: "target123", GuildID: "guild1"}
+		targetDiscordID := "target123"
+
+		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
+			WithArgs(bettorUser.GuildID, cards.AntiAntiBetCardID, targetDiscordID).
+			WillReturnError(errors.New("db error"))
+
+		_, _, _, applied, err := ApplyAntiAntiBetIfApplicable(db, bettorUser, true)
+
+		if err == nil {
+			t.Error("Expected error")
+		}
+		if applied {
+			t.Error("Expected card NOT to be applied")
 		}
 		if err := mock.ExpectationsWereMet(); err != nil {
 			t.Errorf("Unmet expectations: %v", err)
