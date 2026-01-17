@@ -42,6 +42,7 @@ const (
 	UnoReverseCardID       = 40
 	LoanSharkCardID        = 37
 	EmotionalHedgeCardID   = 62
+	GrandLarcenyCardID     = 31
 
 	RoyaltyGuildID = "761721066959667220"
 )

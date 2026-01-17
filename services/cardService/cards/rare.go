@@ -72,14 +72,14 @@ func registerRareCards(deck *[]models.Card) {
 		// 	Handler:              handleAntiAntiBet,
 		// 	RoyaltyDiscordUserID: &[]string{"238274131722764288"}[0],
 		// },
-		// {
-		// 	ID:          31,
-		// 	Name:        "Grand Larceny",
-		// 	Description: "Steal 150 points from a chosen user.",
-		// 	Rarity:      "Uncommon",
-		// 	Weight:      W_Uncommon,
-		// 	Handler:     handleGrandLarceny,
-		// },
+		{
+			ID:          31,
+			Name:        "Grand Larceny",
+			Description: "Steal 150 points from a chosen user.",
+			Rarity:      "Uncommon",
+			Weight:      W_Uncommon,
+			Handler:     handleGrandLarceny,
+		},
 	}
 
 	// Add to deck

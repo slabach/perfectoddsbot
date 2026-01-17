@@ -70,6 +70,8 @@ func HandleCardUserSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 		return handleJesterSelection(s, i, db, userID, targetUserID, guildID)
 	case cards.BetFreezeCardID:
 		return handleBetFreezeSelection(s, i, db, userID, targetUserID, guildID)
+	case cards.GrandLarcenyCardID:
+		return handleGrandLarcenySelection(s, i, db, userID, targetUserID, guildID)
 	default:
 		return fmt.Errorf("card %d does not support user selection", cardID)
 	}
@@ -179,6 +181,52 @@ func handleBetFreezeSelection(s *discordgo.Session, i *discordgo.InteractionCrea
 		},
 	})
 	return err
+}
+
+func handleGrandLarcenySelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, userID string, targetUserID string, guildID string) error {
+	result, err := cards.ExecutePickpocketSteal(db, userID, targetUserID, guildID, 150.0)
+	if err != nil {
+		return err
+	}
+
+	guild, err := guildService.GetGuildInfo(s, db, guildID, i.ChannelID)
+	if err != nil {
+		return err
+	}
+
+	var user models.User
+	if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
+		return err
+	}
+
+	targetUsername := common.GetUsernameWithDB(db, s, guildID, targetUserID)
+
+	card := cardService.GetCardByID(cards.GrandLarcenyCardID)
+	if card == nil {
+		return fmt.Errorf("card not found")
+	}
+
+	if result.PointsDelta > 0 {
+		targetName := targetUsername
+		if result.TargetUserID != nil {
+			targetName = fmt.Sprintf("<@%s>", *result.TargetUserID)
+		}
+		result.Message = fmt.Sprintf("Grand Larceny successful! You stole %.0f points from %s!", result.PointsDelta, targetName)
+	}
+
+	embed := buildCardResultEmbed(card, result, user, targetUsername, guild.Pool)
+
+	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{embed},
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func buildCardResultEmbed(card *models.Card, result *models.CardResult, user models.User, targetUsername string, poolBalance float64) *discordgo.MessageEmbed {

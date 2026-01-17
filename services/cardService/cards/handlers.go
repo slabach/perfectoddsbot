@@ -1492,3 +1492,13 @@ func checkAndConsumeShield(db *gorm.DB, userID uint, guildID string) (bool, erro
 	}
 	return false, nil
 }
+
+func handleGrandLarceny(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	return &models.CardResult{
+		Message:           "Grand Larceny requires you to select a target!",
+		PointsDelta:       0,
+		PoolDelta:         0,
+		RequiresSelection: true,
+		SelectionType:     "user",
+	}, nil
+}
