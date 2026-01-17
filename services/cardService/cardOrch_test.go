@@ -5,6 +5,7 @@ import (
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/cardService/cards"
 	"testing"
+	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"gorm.io/driver/mysql"
@@ -896,6 +897,338 @@ func TestApplyAntiAntiBetIfApplicable(t *testing.T) {
 		}
 		if applied {
 			t.Error("Expected card NOT to be applied")
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+}
+
+func TestApplyVampireIfApplicable(t *testing.T) {
+	t.Run("Single vampire card exists, multiple winners (vampire holder gets 1% of total)", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		guildID := "guild1"
+		totalWinningPayouts := 1000.0
+		expectedVampirePayout := 10.0 // 1% of 1000
+
+		vampireHolderID := uint(2)
+		vampireHolderDiscordID := "vampire123"
+
+		// Mock query for active vampire cards (created_at >= 24 hours ago)
+		createdAt := time.Now().Add(-12 * time.Hour) // Less than 24 hours ago, so it's active
+		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
+			WithArgs(guildID, cards.VampireCardID, sqlmock.AnyArg()).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "created_at", "updated_at", "deleted_at", "user_id", "guild_id", "card_id", "target_bet_id", "target_user_id", "bet_amount"}).
+				AddRow(1, createdAt, createdAt, nil, vampireHolderID, guildID, cards.VampireCardID, nil, nil, 0.0))
+
+		// Mock query for vampire holder user
+		mock.ExpectQuery("SELECT \\* FROM `users`").
+			WithArgs(vampireHolderID, 1).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "discord_id", "guild_id", "points"}).
+				AddRow(vampireHolderID, vampireHolderDiscordID, guildID, 500.0))
+
+		// Mock update for vampire holder points
+		mock.ExpectBegin()
+		mock.ExpectExec("UPDATE `users` SET `points`=").
+			WithArgs(sqlmock.AnyArg(), vampireHolderID).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectCommit()
+
+		winnerDiscordIDs := make(map[string]float64)
+		winnerDiscordIDs["winner123"] = 500.0 // Other winner with $500 payout, not the vampire holder
+		totalVampirePayout, winners, applied, err := ApplyVampireIfApplicable(db, guildID, totalWinningPayouts, winnerDiscordIDs)
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if !applied {
+			t.Error("Expected vampire to be applied")
+		}
+		if totalVampirePayout != expectedVampirePayout {
+			t.Errorf("Expected total vampire payout %.2f, got %.2f", expectedVampirePayout, totalVampirePayout)
+		}
+		if len(winners) != 1 {
+			t.Errorf("Expected 1 winner, got %d", len(winners))
+		}
+		if len(winners) > 0 && winners[0].DiscordID != vampireHolderDiscordID {
+			t.Errorf("Expected winner DiscordID '%s', got '%s'", vampireHolderDiscordID, winners[0].DiscordID)
+		}
+		if len(winners) > 0 && winners[0].Payout != expectedVampirePayout {
+			t.Errorf("Expected winner payout %.2f, got %.2f", expectedVampirePayout, winners[0].Payout)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+
+	t.Run("Multiple vampire cards exist for different holders (each gets 1% independently)", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		guildID := "guild1"
+		totalWinningPayouts := 350.0
+		expectedVampirePayout := 3.5 // 1% of 350
+
+		vampireHolder1ID := uint(2)
+		vampireHolder1DiscordID := "vampire123"
+		vampireHolder2ID := uint(3)
+		vampireHolder2DiscordID := "vampire456"
+
+		// Mock query for active vampire cards
+		createdAt1 := time.Now().Add(-12 * time.Hour) // Less than 24 hours ago, so it's active
+		createdAt2 := time.Now().Add(-12 * time.Hour) // Less than 24 hours ago, so it's active
+		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
+			WithArgs(guildID, cards.VampireCardID, sqlmock.AnyArg()).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "created_at", "updated_at", "deleted_at", "user_id", "guild_id", "card_id", "target_bet_id", "target_user_id", "bet_amount"}).
+				AddRow(1, createdAt1, createdAt1, nil, vampireHolder1ID, guildID, cards.VampireCardID, nil, nil, 0.0).
+				AddRow(2, createdAt2, createdAt2, nil, vampireHolder2ID, guildID, cards.VampireCardID, nil, nil, 0.0))
+
+		// Mock query for first vampire holder
+		mock.ExpectQuery("SELECT \\* FROM `users`").
+			WithArgs(vampireHolder1ID, 1).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "discord_id", "guild_id", "points"}).
+				AddRow(vampireHolder1ID, vampireHolder1DiscordID, guildID, 500.0))
+
+		// Mock update for first vampire holder
+		mock.ExpectBegin()
+		mock.ExpectExec("UPDATE `users` SET `points`=").
+			WithArgs(sqlmock.AnyArg(), vampireHolder1ID).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectCommit()
+
+		// Mock query for second vampire holder
+		mock.ExpectQuery("SELECT \\* FROM `users`").
+			WithArgs(vampireHolder2ID, 1).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "discord_id", "guild_id", "points"}).
+				AddRow(vampireHolder2ID, vampireHolder2DiscordID, guildID, 600.0))
+
+		// Mock update for second vampire holder
+		mock.ExpectBegin()
+		mock.ExpectExec("UPDATE `users` SET `points`=").
+			WithArgs(sqlmock.AnyArg(), vampireHolder2ID).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectCommit()
+
+		winnerDiscordIDs := make(map[string]float64)
+		winnerDiscordIDs["winner123"] = 500.0 // Other winner with $500 payout, not the vampire holder
+		totalVampirePayout, winners, applied, err := ApplyVampireIfApplicable(db, guildID, totalWinningPayouts, winnerDiscordIDs)
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if !applied {
+			t.Error("Expected vampire to be applied")
+		}
+		expectedTotalPayout := expectedVampirePayout * 2 // Two vampires
+		if totalVampirePayout != expectedTotalPayout {
+			t.Errorf("Expected total vampire payout %.2f, got %.2f", expectedTotalPayout, totalVampirePayout)
+		}
+		if len(winners) != 2 {
+			t.Errorf("Expected 2 winners, got %d", len(winners))
+		}
+		if len(winners) > 0 && winners[0].Payout != expectedVampirePayout {
+			t.Errorf("Expected first winner payout %.2f, got %.2f", expectedVampirePayout, winners[0].Payout)
+		}
+		if len(winners) > 1 && winners[1].Payout != expectedVampirePayout {
+			t.Errorf("Expected second winner payout %.2f, got %.2f", expectedVampirePayout, winners[1].Payout)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+
+	t.Run("No vampire cards exist (no effect)", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		guildID := "guild1"
+		totalWinningPayouts := 1000.0
+
+		// Mock query returning no rows
+		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
+			WithArgs(guildID, cards.VampireCardID, sqlmock.AnyArg()).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "created_at", "updated_at", "deleted_at", "user_id", "guild_id", "card_id", "target_bet_id", "target_user_id", "bet_amount"}))
+
+		winnerDiscordIDs := make(map[string]float64)
+		winnerDiscordIDs["winner123"] = 500.0 // Other winner with $500 payout, not the vampire holder
+		totalVampirePayout, winners, applied, err := ApplyVampireIfApplicable(db, guildID, totalWinningPayouts, winnerDiscordIDs)
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if applied {
+			t.Error("Expected vampire NOT to be applied")
+		}
+		if totalVampirePayout != 0 {
+			t.Errorf("Expected payout 0, got %.2f", totalVampirePayout)
+		}
+		if len(winners) != 0 {
+			t.Errorf("Expected no winners, got %d", len(winners))
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+
+	t.Run("No winning payouts (vampires get nothing)", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		guildID := "guild1"
+		totalWinningPayouts := 0.0
+		expectedVampirePayout := 0.0 // 1% of 0
+
+		vampireHolderID := uint(2)
+		vampireHolderDiscordID := "vampire123"
+
+		// Mock query for active vampire cards
+		createdAt := time.Now().Add(-12 * time.Hour) // Less than 24 hours ago, so it's active
+		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
+			WithArgs(guildID, cards.VampireCardID, sqlmock.AnyArg()).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "created_at", "updated_at", "deleted_at", "user_id", "guild_id", "card_id", "target_bet_id", "target_user_id", "bet_amount"}).
+				AddRow(1, createdAt, createdAt, nil, vampireHolderID, guildID, cards.VampireCardID, nil, nil, 0.0))
+
+		// Mock query for vampire holder user
+		mock.ExpectQuery("SELECT \\* FROM `users`").
+			WithArgs(vampireHolderID, 1).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "discord_id", "guild_id", "points"}).
+				AddRow(vampireHolderID, vampireHolderDiscordID, guildID, 500.0))
+
+		// Mock update for vampire holder points (even though it's 0, it still executes)
+		mock.ExpectBegin()
+		mock.ExpectExec("UPDATE `users` SET `points`=").
+			WithArgs(sqlmock.AnyArg(), vampireHolderID).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectCommit()
+
+		winnerDiscordIDs := make(map[string]float64)
+		// No winners when totalWinningPayouts = 0
+		totalVampirePayout, winners, applied, err := ApplyVampireIfApplicable(db, guildID, totalWinningPayouts, winnerDiscordIDs)
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if !applied {
+			t.Error("Expected vampire to be applied (even if payout is 0)")
+		}
+		if totalVampirePayout != expectedVampirePayout {
+			t.Errorf("Expected total vampire payout %.2f, got %.2f", expectedVampirePayout, totalVampirePayout)
+		}
+		if len(winners) != 1 {
+			t.Errorf("Expected 1 winner (even if payout is 0), got %d", len(winners))
+		}
+		if len(winners) > 0 && winners[0].Payout != expectedVampirePayout {
+			t.Errorf("Expected winner payout %.2f, got %.2f", expectedVampirePayout, winners[0].Payout)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+
+	t.Run("Vampire card holder is also a winner (should be excluded)", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		guildID := "guild1"
+		totalWinningPayouts := 1000.0
+
+		vampireHolderID := uint(2)
+		vampireHolderDiscordID := "vampire123"
+
+		// Mock query for active vampire cards
+		createdAt := time.Now().Add(-12 * time.Hour) // Less than 24 hours ago, so it's active
+		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
+			WithArgs(guildID, cards.VampireCardID, sqlmock.AnyArg()).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "created_at", "updated_at", "deleted_at", "user_id", "guild_id", "card_id", "target_bet_id", "target_user_id", "bet_amount"}).
+				AddRow(1, createdAt, createdAt, nil, vampireHolderID, guildID, cards.VampireCardID, nil, nil, 0.0))
+
+		// Mock query for vampire holder user
+		mock.ExpectQuery("SELECT \\* FROM `users`").
+			WithArgs(vampireHolderID, 1).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "discord_id", "guild_id", "points"}).
+				AddRow(vampireHolderID, vampireHolderDiscordID, guildID, 500.0))
+
+		// Note: No update should be executed because the vampire holder is a winner
+
+		winnerDiscordIDs := make(map[string]float64)
+		winnerDiscordIDs[vampireHolderDiscordID] = 1000.0 // Vampire holder won $1000
+		totalVampirePayout, winners, applied, err := ApplyVampireIfApplicable(db, guildID, totalWinningPayouts, winnerDiscordIDs)
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if !applied {
+			t.Error("Expected vampire to be applied (even if holder is excluded)")
+		}
+		if totalVampirePayout != 0 {
+			t.Errorf("Expected total vampire payout 0 (holder excluded), got %.2f", totalVampirePayout)
+		}
+		if len(winners) != 0 {
+			t.Errorf("Expected no winners (holder excluded), got %d", len(winners))
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+
+	t.Run("DB Error", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		guildID := "guild1"
+		totalWinningPayouts := 1000.0
+
+		// Mock query error
+		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
+			WithArgs(guildID, cards.VampireCardID, sqlmock.AnyArg()).
+			WillReturnError(errors.New("db error"))
+
+		winnerDiscordIDs := make(map[string]float64)
+		_, _, applied, err := ApplyVampireIfApplicable(db, guildID, totalWinningPayouts, winnerDiscordIDs)
+
+		if err == nil {
+			t.Error("Expected error")
+		}
+		if applied {
+			t.Error("Expected vampire NOT to be applied")
 		}
 		if err := mock.ExpectationsWereMet(); err != nil {
 			t.Errorf("Unmet expectations: %v", err)

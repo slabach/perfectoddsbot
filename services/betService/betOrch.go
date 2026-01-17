@@ -136,7 +136,9 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 	db.Where("bet_id = ?", bet.ID).Find(&entries)
 
 	totalPayout := 0.0
+	totalWinningPayouts := 0.0
 	lostPoolAmount := 0.0
+	winnerDiscordIDs := make(map[string]float64) // Track DiscordID -> total payout amount
 	for _, entry := range entries {
 		var user models.User
 		db.First(&user, "id = ?", entry.UserID)
@@ -202,6 +204,8 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 			user.TotalPointsWon += modifiedPayout
 			db.Save(&user)
 			totalPayout += modifiedPayout
+			totalWinningPayouts += modifiedPayout
+			winnerDiscordIDs[user.DiscordID] += modifiedPayout // Accumulate payout for this winner
 
 			if modifiedPayout > 0 {
 				username := common.GetUsernameWithDB(db, s, user.GuildID, user.DiscordID)
@@ -269,6 +273,8 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 
 				db.Save(&user)
 				totalPayout += modifiedPayout + hedgeRefund
+				totalWinningPayouts += modifiedPayout + hedgeRefund
+				winnerDiscordIDs[user.DiscordID] += modifiedPayout + hedgeRefund // Accumulate payout for this winner
 
 				username := common.GetUsernameWithDB(db, s, user.GuildID, user.DiscordID)
 
@@ -330,6 +336,24 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 
 			db.Save(&user)
 			lostPoolAmount += float64(entry.Amount)
+		}
+	}
+
+	// Apply Vampire card if there were any winning payouts
+	if totalWinningPayouts > 0 {
+		vampirePayout, vampireWinners, vampireApplied, err := cardService.ApplyVampireIfApplicable(db, bet.GuildID, totalWinningPayouts, winnerDiscordIDs)
+		if err != nil {
+			common.SendError(s, i, fmt.Errorf("error checking Vampire: %v", err), db)
+			return
+		}
+		if vampireApplied && vampirePayout > 0 {
+			totalPayout += vampirePayout
+			if len(vampireWinners) > 0 {
+				for _, winner := range vampireWinners {
+					username := common.GetUsernameWithDB(db, s, bet.GuildID, winner.DiscordID)
+					winnersList += fmt.Sprintf("%s - Won $%.1f (Vampire)\n", username, winner.Payout)
+				}
+			}
 		}
 	}
 

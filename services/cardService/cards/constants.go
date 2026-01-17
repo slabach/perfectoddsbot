@@ -44,6 +44,7 @@ const (
 	EmotionalHedgeCardID   = 62
 	GrandLarcenyCardID     = 31
 	AntiAntiBetCardID      = 68
+	VampireCardID          = 44
 
 	RoyaltyGuildID = "761721066959667220"
 )

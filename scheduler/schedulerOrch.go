@@ -83,9 +83,15 @@ func SetupCron(s *discordgo.Session, db *gorm.DB) {
 		}
 	})
 
-	_, err = cronService.AddFunc("0 0 0 */1 * *", func() {
+	_, err = cronService.AddFunc("0 0 */1 * * *", func() {
 		// Runs every day to collect Loan Shark debts
 		err := scheduler_jobs.CheckLoanShark(s, db)
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		// // Runs every hour to expire Vampire cards after 24 hours
+		err = scheduler_jobs.CheckVampire(s, db)
 		if err != nil {
 			fmt.Println(err)
 		}

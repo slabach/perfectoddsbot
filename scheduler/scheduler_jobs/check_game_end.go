@@ -35,7 +35,6 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 		return result.Error
 	}
 
-	// check the count of each first. if there are no CFB bets, we dont need to get CFB games (and vice versa)
 	cbbCount := 0
 	cfbCount := 0
 	for _, cBet := range dbBetList {
@@ -107,7 +106,6 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 					}
 
 					if entriesResult.RowsAffected == 0 {
-						// No bet entries, but still need to update parlays
 						if winningOption > 0 {
 							updateErr := betService.UpdateParlaysOnBetResolution(s, db, bet.ID, winningOption, scoreDiff)
 							if updateErr != nil {
@@ -118,29 +116,21 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 						bet.Active = false
 						db.Save(&bet)
 					} else {
-						// Process bet entries
 						for _, entry := range betEntries {
 							var won bool
 							if bet.Spread == nil {
-								// Moneyline bet: winner is determined by actual game result
-								// Option 1 is home team, Option 2 is away team
 								if entry.Option == 1 {
-									// Home team wins if home score > away score
 									won = scoreDiff > 0
 								} else {
-									// Away team wins if away score > home score
 									won = scoreDiff < 0
 								}
 							} else {
-								// ATS bet: use spread-based calculation
-								// Check if entry.Spread is nil (legacy entries) and fall back to bet.Spread
 								var spread float64
 								if entry.Spread != nil {
 									spread = *entry.Spread
 								} else if bet.Spread != nil {
 									spread = *bet.Spread
 								} else {
-									// Safe default (shouldn't happen in this branch, but defensive)
 									spread = 0.0
 								}
 								won = common.CalculateBetEntryWin(entry.Option, scoreDiff, spread)
@@ -167,24 +157,19 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 					var betEntries []models.BetEntry
 					entriesResult := db.Where("bet_id = ?", bet.ID).Find(&betEntries)
 
-					// Robustly match Option 1 to the correct competitor by name
-					// instead of assuming Option 1 is always the "home" team from the API.
 					op1Name := common.GetSchoolName(bet.Option1)
 					var score1, score2 int
 					var matched bool
 
 					for _, comp := range obj.Competitions[0].Competitors {
-						// Check if this competitor matches Option 1's name
 						if comp.Team.ShortDisplayName == op1Name {
 							score1, _ = strconv.Atoi(comp.Score)
 							matched = true
 						} else {
-							// If it's not Option 1, it's Option 2
 							score2, _ = strconv.Atoi(comp.Score)
 						}
 					}
 
-					// Fallback to legacy logic if name matching fails (e.g. name change)
 					if !matched {
 						homeTeam := external.ESPN_Competitor{}
 						awayTeam := external.ESPN_Competitor{}
@@ -197,24 +182,20 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 								awayTeam = comp
 							}
 						}
-						score1, _ = strconv.Atoi(homeTeam.Score) // Assume Option 1 is Home
-						score2, _ = strconv.Atoi(awayTeam.Score) // Assume Option 2 is Away
+						score1, _ = strconv.Atoi(homeTeam.Score)
+						score2, _ = strconv.Atoi(awayTeam.Score)
 					}
 
-					// scoreDiff is now relative to Option 1: (Option1Score - Option2Score)
 					scoreDiff := score1 - score2
 
-					// Determine winning option even if there are no bet entries (for parlay updates)
 					winningOption := 0
 					if bet.Spread == nil {
-						// Moneyline bet: winner is determined by actual game result
 						if scoreDiff > 0 {
-							winningOption = 1 // Option 1 wins
+							winningOption = 1
 						} else if scoreDiff < 0 {
-							winningOption = 2 // Option 2 wins
+							winningOption = 2
 						}
 					} else {
-						// ATS bet: determine winner based on spread
 						if common.CalculateBetEntryWin(1, scoreDiff, *bet.Spread) {
 							winningOption = 1
 						} else {
@@ -223,7 +204,6 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 					}
 
 					if entriesResult.RowsAffected == 0 {
-						// No bet entries, but still need to update parlays
 						if winningOption > 0 {
 							updateErr := betService.UpdateParlaysOnBetResolution(s, db, bet.ID, winningOption, scoreDiff)
 							if updateErr != nil {
@@ -236,27 +216,21 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 						continue
 					}
 
-					// Process bet entries
 					for _, entry := range betEntries {
 						var won bool
 						if bet.Spread == nil {
-							// Moneyline bet: winner is determined by actual game result
-							// Option 1 wins if score1 > score2, Option 2 wins if score2 > score1
 							if entry.Option == 1 {
 								won = scoreDiff > 0
 							} else {
 								won = scoreDiff < 0
 							}
 						} else {
-							// ATS bet: use spread-based calculation
-							// Check if entry.Spread is nil (legacy entries) and fall back to bet.Spread
 							var spread float64
 							if entry.Spread != nil {
 								spread = *entry.Spread
 							} else if bet.Spread != nil {
 								spread = *bet.Spread
 							} else {
-								// Safe default (shouldn't happen in this branch, but defensive)
 								spread = 0.0
 							}
 							won = common.CalculateBetEntryWin(entry.Option, scoreDiff, spread)
@@ -292,7 +266,8 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 	db.Where("bet_id = ?", bet.ID).Find(&entries)
 
 	totalPayout := 0.0
-	lostPoolAmount := 0.0
+	totalWinningPayouts := 0.0
+	winnerDiscordIDs := make(map[string]float64) // Track DiscordID -> total payout amount
 	for _, entry := range entries {
 		var user models.User
 		db.First(&user, "id = ?", entry.UserID)
@@ -326,18 +301,15 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 		if entry.AutoCloseWin {
 			payout := common.CalculatePayout(entry.Amount, entry.Option, bet)
 
-			// Check for Uno Reverse (Win -> Loss)
 			unoApplied, isWinAfterUno, err := cardService.ApplyUnoReverseIfApplicable(db, user, bet.ID, true)
 			if err != nil {
 				log.Printf("Error checking Uno Reverse: %v", err)
 			}
 
 			if unoApplied && !isWinAfterUno {
-				// Flipped to LOSS
 				user.TotalBetsLost++
 				user.TotalPointsLost += float64(entry.Amount)
 				db.Save(&user)
-				lostPoolAmount += float64(entry.Amount)
 
 				if spreadDisplay != "" {
 					loserList += fmt.Sprintf("%s - Bet: %s %s - **Lost $%d** (Uno Reverse!)\n", username, betOption, spreadDisplay, entry.Amount)
@@ -392,13 +364,12 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 
 			if hedgeApplied && hedgeRefund > 0 {
 				user.Points += hedgeRefund
-				// Subtract refund from pool (since we are paying it out)
-				// We'll accumulate negative pool delta
-				lostPoolAmount -= hedgeRefund
 			}
 
 			db.Save(&user)
 			totalPayout += modifiedPayout + hedgeRefund
+			totalWinningPayouts += modifiedPayout + hedgeRefund
+			winnerDiscordIDs[user.DiscordID] += modifiedPayout + hedgeRefund // Accumulate payout for this winner
 
 			if modifiedPayout > 0 {
 				doubleDownMsg := ""
@@ -464,13 +435,12 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 
 				if hedgeApplied && hedgeRefund > 0 {
 					user.Points += hedgeRefund
-					// Subtract refund from pool (since we are paying it out)
-					// We'll accumulate negative pool delta
-					lostPoolAmount -= hedgeRefund
 				}
 
 				db.Save(&user)
 				totalPayout += modifiedPayout + hedgeRefund
+				totalWinningPayouts += modifiedPayout + hedgeRefund
+				winnerDiscordIDs[user.DiscordID] += modifiedPayout + hedgeRefund // Accumulate payout for this winner
 
 				if modifiedPayout > 0 {
 					doubleDownMsg := ""
@@ -509,18 +479,15 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 				}
 			}
 
-			// Define card consumer closure
 			consumer := func(db *gorm.DB, user models.User, cardID int) error {
 				return cardService.PlayCardFromInventory(s, db, user, cardID)
 			}
 
-			// Check for Emotional Hedge
 			hedgeRefund, hedgeApplied, err := cardService.ApplyEmotionalHedgeIfApplicable(db, consumer, user, bet, entry.Option, float64(entry.Amount), scoreDiff)
 			if err != nil {
 				log.Printf("Error checking Emotional Hedge: %v", err)
 			}
 
-			// Check for Bet Insurance (refund on loss)
 			insuranceRefund, insuranceApplied, err := cardService.ApplyBetInsuranceIfApplicable(db, consumer, user, float64(entry.Amount), false)
 			if err != nil {
 				log.Printf("Error checking Bet Insurance (Loss): %v", err)
@@ -531,20 +498,13 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 
 			if hedgeApplied && hedgeRefund > 0 {
 				user.Points += hedgeRefund
-				// We effectively subtract the refund from the amount lost to pool
-				// entry.Amount is added to lostPoolAmount below.
-				// So we subtract hedgeRefund from it.
-				lostPoolAmount -= hedgeRefund
 			}
 
 			if insuranceApplied && insuranceRefund > 0 {
 				user.Points += insuranceRefund
-				// Subtract refund from pool loss
-				lostPoolAmount -= insuranceRefund
 			}
 
 			db.Save(&user)
-			lostPoolAmount += float64(entry.Amount)
 
 			hedgeMsg := ""
 			if hedgeApplied && hedgeRefund > 0 {
@@ -568,20 +528,28 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 		}
 	}
 
-	// Add lost bet amounts to guild pool (atomic update to prevent race conditions)
-	if lostPoolAmount > 0 {
-		db.Model(&models.Guild{}).Where("id = ?", guild.ID).UpdateColumn("pool", gorm.Expr("pool + ?", lostPoolAmount))
+	if totalWinningPayouts > 0 {
+		vampirePayout, vampireWinners, vampireApplied, err := cardService.ApplyVampireIfApplicable(db, bet.GuildID, totalWinningPayouts, winnerDiscordIDs)
+		if err != nil {
+			log.Printf("Error checking Vampire: %v", err)
+		} else if vampireApplied && vampirePayout > 0 {
+			totalPayout += vampirePayout
+			if len(vampireWinners) > 0 {
+				for _, winner := range vampireWinners {
+					cardHolderUsername := common.GetUsernameWithDB(db, s, bet.GuildID, winner.DiscordID)
+					winnersList += fmt.Sprintf("%s - **Won $%.1f** (Vampire)\n", cardHolderUsername, winner.Payout)
+				}
+			}
+		}
 	}
 
 	bet.Active = false
 	db.Save(&bet)
 	db.Model(&bet).UpdateColumn("paid", true).UpdateColumn("active", false)
 
-	// Update parlays using the provided winning option and score difference
 	if winningOption > 0 {
 		updateErr := betService.UpdateParlaysOnBetResolution(s, db, bet.ID, winningOption, scoreDiff)
 		if updateErr != nil {
-			// Log error but don't fail the bet resolution
 			log.Printf("Error updating parlays for bet %d: %v\n", bet.ID, updateErr)
 		}
 	}

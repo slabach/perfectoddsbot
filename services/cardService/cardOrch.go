@@ -701,6 +701,64 @@ func ApplyAntiAntiBetIfApplicable(db *gorm.DB, bettorUser models.User, isWin boo
 	return totalPayout, winners, losers, applied, nil
 }
 
+type VampireWinner struct {
+	DiscordID string
+	Payout    float64
+}
+
+func ApplyVampireIfApplicable(db *gorm.DB, guildID string, totalWinningPayouts float64, winnerDiscordIDs map[string]float64) (totalVampirePayout float64, winners []VampireWinner, applied bool, err error) {
+	twentyFourHoursAgo := time.Now().Add(-24 * time.Hour)
+	var vampireCards []models.UserInventory
+	err = db.Where("guild_id = ? AND card_id = ? AND created_at >= ?", guildID, cards.VampireCardID, twentyFourHoursAgo).
+		Find(&vampireCards).Error
+
+	if err != nil {
+		return 0, nil, false, err
+	}
+
+	if len(vampireCards) == 0 {
+		return 0, nil, false, nil
+	}
+
+	totalVampirePayout = 0.0
+	applied = true
+	winners = []VampireWinner{}
+
+	for _, card := range vampireCards {
+		var vampireHolder models.User
+		if err := db.First(&vampireHolder, card.UserID).Error; err != nil {
+			continue
+		}
+
+		vampireHolderWinnings := 0.0
+		if winnerDiscordIDs != nil {
+			vampireHolderWinnings = winnerDiscordIDs[vampireHolder.DiscordID]
+		}
+		totalOtherWinnings := totalWinningPayouts - vampireHolderWinnings
+
+		if totalOtherWinnings < 0 {
+			continue
+		}
+		if totalWinningPayouts > 0 && totalOtherWinnings == 0 {
+			continue
+		}
+
+		vampirePayout := totalOtherWinnings * 0.01
+
+		if err := db.Model(&vampireHolder).UpdateColumn("points", gorm.Expr("points + ?", vampirePayout)).Error; err != nil {
+			return totalVampirePayout, winners, applied, err
+		}
+
+		totalVampirePayout += vampirePayout
+		winners = append(winners, VampireWinner{
+			DiscordID: vampireHolder.DiscordID,
+			Payout:    vampirePayout,
+		})
+	}
+
+	return totalVampirePayout, winners, applied, nil
+}
+
 func ApplyDoubleDownIfAvailable(db *gorm.DB, consumer CardConsumer, user models.User, originalPayout float64) (float64, bool, error) {
 	var count int64
 	err := db.Model(&models.UserInventory{}).

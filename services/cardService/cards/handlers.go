@@ -1512,3 +1512,11 @@ func handleAntiAntiBet(s *discordgo.Session, db *gorm.DB, userID string, guildID
 		SelectionType:     "user",
 	}, nil
 }
+
+func handleVampire(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	return &models.CardResult{
+		Message:     "You've drawn The Vampire! For the next 24 hours, you'll earn 1% of every bet won by other players.",
+		PointsDelta: 0,
+		PoolDelta:   0,
+	}, nil
+}
