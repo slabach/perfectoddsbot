@@ -1262,7 +1262,7 @@ func TestApplyGamblerIfAvailable(t *testing.T) {
 				t.Errorf("Expected user ID %d, got %d", user.ID, u.ID)
 			}
 			if cardID != cards.GamblerCardID {
-				t.Errorf("Expected card ID 68, got %d", cardID)
+				t.Errorf("Expected card ID 72, got %d", cardID)
 			}
 			consumed = true
 			return nil

@@ -8,7 +8,7 @@ func registerEpicCards(deck *[]models.Card) {
 			ID:                   38,
 			Name:                 "The Blue Shell",
 			Description:          "The player in 1st place loses 500 points to the Pool.",
-			Rarity:               "Rare",
+			Rarity:               "Epic",
 			Weight:               W_Epic,
 			Handler:              handleBlueShell,
 			RoyaltyDiscordUserID: &[]string{"698712210515558432"}[0],
@@ -51,7 +51,7 @@ func registerEpicCards(deck *[]models.Card) {
 			Description:          "You lose 15% of your points.",
 			Rarity:               "Epic",
 			Weight:               W_Epic,
-			Handler:              handleJackpot,
+			Handler:              handleGuillotine,
 			RoyaltyDiscordUserID: &[]string{"130863485969104896"}[0],
 		},
 		{

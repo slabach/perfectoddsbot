@@ -1674,8 +1674,6 @@ func handleDivineIntervention(s *discordgo.Session, db *gorm.DB, userID string, 
 	}
 
 	user.Points = averagePoints
-
-	user.Points = averagePoints
 	if err := db.Save(&user).Error; err != nil {
 		return nil, err
 	}
