@@ -30,7 +30,7 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 
 	var dbBetList []models.Bet
 
-	result := db.Where("paid = 0 AND active = 0 AND (cfbd_id IS NOT NULL OR espn_id IS NOT NULL)").Find(&dbBetList)
+	result := db.Where("paid = 0 AND active = 0 AND (cfbd_id IS NOT NULL OR espn_id IS NOT NULL) AND deleted_at IS NULL").Find(&dbBetList)
 	if result.Error != nil {
 		return result.Error
 	}
@@ -346,6 +346,16 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 				hasDoubleDown = false
 			}
 
+			// Store payout before applying Gambler to check if it was doubled
+			payoutAfterDoubleDown := modifiedPayout
+
+			// Check for Gambler card and apply 50/50 chance to double if available
+			modifiedPayout, hasGambler, err := cardService.ApplyGamblerIfAvailable(db, consumer, user, modifiedPayout, true)
+			if err != nil {
+				log.Printf("Error checking Gambler for auto-resolved bet: %v", err)
+				hasGambler = false
+			}
+
 			// Check for Emotional Hedge
 			hedgeRefund, hedgeApplied, err := cardService.ApplyEmotionalHedgeIfApplicable(db, consumer, user, bet, entry.Option, float64(entry.Amount), scoreDiff)
 			if err != nil {
@@ -376,6 +386,14 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 				if hasDoubleDown {
 					doubleDownMsg = " (Double Down: 2x payout!)"
 				}
+				gamblerMsg := ""
+				if hasGambler {
+					if modifiedPayout > payoutAfterDoubleDown {
+						gamblerMsg = " (The Gambler: 2x payout!)"
+					} else {
+						gamblerMsg = " (The Gambler: consumed, no double)"
+					}
+				}
 				hedgeMsg := ""
 				if hedgeApplied && hedgeRefund > 0 {
 					hedgeMsg = fmt.Sprintf(" (Emotional Hedge: Refunding $%.1f)", hedgeRefund)
@@ -388,9 +406,9 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 				}
 
 				if spreadDisplay != "" {
-					winnersList += fmt.Sprintf("%s - Bet: %s %s - **Won $%.1f**%s%s%s\n", username, betOption, spreadDisplay, modifiedPayout, doubleDownMsg, hedgeMsg, insuranceMsg)
+					winnersList += fmt.Sprintf("%s - Bet: %s %s - **Won $%.1f**%s%s%s%s\n", username, betOption, spreadDisplay, modifiedPayout, doubleDownMsg, gamblerMsg, hedgeMsg, insuranceMsg)
 				} else {
-					winnersList += fmt.Sprintf("%s - Bet: %s - **Won $%.1f**%s%s%s\n", username, betOption, modifiedPayout, doubleDownMsg, hedgeMsg, insuranceMsg)
+					winnersList += fmt.Sprintf("%s - Bet: %s - **Won $%.1f**%s%s%s%s\n", username, betOption, modifiedPayout, doubleDownMsg, gamblerMsg, hedgeMsg, insuranceMsg)
 				}
 			}
 		} else {
@@ -415,6 +433,16 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 					log.Printf("Error checking Double Down for auto-resolved bet (Uno Reverse): %v", err)
 					modifiedPayout = payout
 					hasDoubleDown = false
+				}
+
+				// Store payout before applying Gambler to check if it was doubled
+				payoutAfterDoubleDown := modifiedPayout
+
+				// Check for Gambler card and apply 50/50 chance to double if available
+				modifiedPayout, hasGambler, err := cardService.ApplyGamblerIfAvailable(db, consumer, user, modifiedPayout, true)
+				if err != nil {
+					log.Printf("Error checking Gambler for auto-resolved bet (Uno Reverse): %v", err)
+					hasGambler = false
 				}
 
 				// Check for Emotional Hedge
@@ -447,6 +475,14 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 					if hasDoubleDown {
 						doubleDownMsg = " (Double Down: 2x payout!)"
 					}
+					gamblerMsg := ""
+					if hasGambler {
+						if modifiedPayout > payoutAfterDoubleDown {
+							gamblerMsg = " (The Gambler: 2x payout!)"
+						} else {
+							gamblerMsg = " (The Gambler: consumed, no double)"
+						}
+					}
 					hedgeMsg := ""
 					if hedgeApplied && hedgeRefund > 0 {
 						hedgeMsg = fmt.Sprintf(" (Emotional Hedge: Refunding $%.1f)", hedgeRefund)
@@ -459,9 +495,9 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 					}
 
 					if spreadDisplay != "" {
-						winnersList += fmt.Sprintf("%s - Bet: %s %s - **Won $%.1f** (Uno Reverse!)%s%s%s\n", username, betOption, spreadDisplay, modifiedPayout, doubleDownMsg, hedgeMsg, insuranceMsg)
+						winnersList += fmt.Sprintf("%s - Bet: %s %s - **Won $%.1f** (Uno Reverse!)%s%s%s%s\n", username, betOption, spreadDisplay, modifiedPayout, doubleDownMsg, gamblerMsg, hedgeMsg, insuranceMsg)
 					} else {
-						winnersList += fmt.Sprintf("%s - Bet: %s - **Won $%.1f** (Uno Reverse!)%s%s%s\n", username, betOption, modifiedPayout, doubleDownMsg, hedgeMsg, insuranceMsg)
+						winnersList += fmt.Sprintf("%s - Bet: %s - **Won $%.1f** (Uno Reverse!)%s%s%s%s\n", username, betOption, modifiedPayout, doubleDownMsg, gamblerMsg, hedgeMsg, insuranceMsg)
 					}
 				}
 				continue
@@ -493,8 +529,24 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 				log.Printf("Error checking Bet Insurance (Loss): %v", err)
 			}
 
+			// Check for Gambler card and apply 50/50 chance to double loss if available
+			lossAmount := float64(entry.Amount)
+			modifiedLoss, hasGambler, err := cardService.ApplyGamblerIfAvailable(db, consumer, user, -lossAmount, false)
+			if err != nil {
+				log.Printf("Error checking Gambler (Loss): %v", err)
+				hasGambler = false
+			}
+
+			// If gambler doubled the loss, modifiedLoss will be double the negative loss
+			// So we need to convert back and add extra to pool
+			actualLoss := lossAmount
+			if hasGambler && modifiedLoss < -lossAmount {
+				// Loss was doubled (modifiedLoss is more negative)
+				actualLoss = -modifiedLoss
+			}
+
 			user.TotalBetsLost++
-			user.TotalPointsLost += float64(entry.Amount)
+			user.TotalPointsLost += actualLoss
 
 			if hedgeApplied && hedgeRefund > 0 {
 				user.Points += hedgeRefund
@@ -520,10 +572,19 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 				insuranceMsg = " (Bet Insurance: consumed)"
 			}
 
+			gamblerMsg := ""
+			if hasGambler {
+				if actualLoss > lossAmount {
+					gamblerMsg = " (The Gambler: 2x loss!)"
+				} else {
+					gamblerMsg = " (The Gambler: consumed, no double)"
+				}
+			}
+
 			if spreadDisplay != "" {
-				loserList += fmt.Sprintf("%s - Bet: %s %s - **Lost $%d**%s%s\n", username, betOption, spreadDisplay, entry.Amount, hedgeMsg, insuranceMsg)
+				loserList += fmt.Sprintf("%s - Bet: %s %s - **Lost $%.0f**%s%s%s\n", username, betOption, spreadDisplay, actualLoss, hedgeMsg, insuranceMsg, gamblerMsg)
 			} else {
-				loserList += fmt.Sprintf("%s - Bet: %s - **Lost $%d**%s%s\n", username, betOption, entry.Amount, hedgeMsg, insuranceMsg)
+				loserList += fmt.Sprintf("%s - Bet: %s - **Lost $%.0f**%s%s%s\n", username, betOption, actualLoss, hedgeMsg, insuranceMsg, gamblerMsg)
 			}
 		}
 	}

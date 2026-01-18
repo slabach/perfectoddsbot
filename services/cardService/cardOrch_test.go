@@ -1235,3 +1235,179 @@ func TestApplyVampireIfApplicable(t *testing.T) {
 		}
 	})
 }
+
+func TestApplyGamblerIfAvailable(t *testing.T) {
+	t.Run("User has card and wins (card consumed, payout may be doubled)", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		user := models.User{ID: 1, GuildID: "guild1"}
+		originalPayout := 100.0
+
+		// Expect check for card
+		mock.ExpectQuery("SELECT count\\(\\*\\) FROM `user_inventories`").
+			WithArgs(user.ID, user.GuildID, cards.GamblerCardID).
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+
+		// Mock consumer
+		consumed := false
+		consumer := func(db *gorm.DB, u models.User, cardID int) error {
+			if u.ID != user.ID {
+				t.Errorf("Expected user ID %d, got %d", user.ID, u.ID)
+			}
+			if cardID != cards.GamblerCardID {
+				t.Errorf("Expected card ID 68, got %d", cardID)
+			}
+			consumed = true
+			return nil
+		}
+
+		payout, applied, err := ApplyGamblerIfAvailable(db, consumer, user, originalPayout, true)
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if !applied {
+			t.Error("Expected card to be applied")
+		}
+		if !consumed {
+			t.Error("Expected consumer to be called")
+		}
+		// Payout may be original or doubled (50/50), but should always be consumed
+		if payout != originalPayout && payout != originalPayout*2 {
+			t.Errorf("Expected payout to be %.2f or %.2f, got %.2f", originalPayout, originalPayout*2, payout)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+
+	t.Run("User has card and loses (card consumed, loss may be doubled)", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		user := models.User{ID: 1, GuildID: "guild1"}
+		originalLoss := -100.0 // Negative for loss
+
+		// Expect check for card
+		mock.ExpectQuery("SELECT count\\(\\*\\) FROM `user_inventories`").
+			WithArgs(user.ID, user.GuildID, cards.GamblerCardID).
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+
+		// Mock consumer
+		consumed := false
+		consumer := func(db *gorm.DB, u models.User, cardID int) error {
+			consumed = true
+			return nil
+		}
+
+		loss, applied, err := ApplyGamblerIfAvailable(db, consumer, user, originalLoss, false)
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if !applied {
+			t.Error("Expected card to be applied")
+		}
+		if !consumed {
+			t.Error("Expected consumer to be called")
+		}
+		// Loss may be original or doubled (50/50), but should always be consumed
+		if loss != originalLoss && loss != originalLoss*2 {
+			t.Errorf("Expected loss to be %.2f or %.2f, got %.2f", originalLoss, originalLoss*2, loss)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+
+	t.Run("User does not have card", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		user := models.User{ID: 1, GuildID: "guild1"}
+		originalPayout := 100.0
+
+		// Expect check for card - return 0
+		mock.ExpectQuery("SELECT count\\(\\*\\) FROM `user_inventories`").
+			WithArgs(user.ID, user.GuildID, cards.GamblerCardID).
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+
+		consumer := func(db *gorm.DB, u models.User, cardID int) error {
+			t.Error("Consumer should not be called")
+			return nil
+		}
+
+		payout, applied, err := ApplyGamblerIfAvailable(db, consumer, user, originalPayout, true)
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if applied {
+			t.Error("Expected card NOT to be applied")
+		}
+		if payout != originalPayout {
+			t.Errorf("Expected payout %.2f, got %.2f", originalPayout, payout)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+
+	t.Run("DB Error", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		user := models.User{ID: 1, GuildID: "guild1"}
+		originalPayout := 100.0
+
+		// Expect check for card - return error
+		mock.ExpectQuery("SELECT count\\(\\*\\) FROM `user_inventories`").
+			WithArgs(user.ID, user.GuildID, cards.GamblerCardID).
+			WillReturnError(errors.New("db error"))
+
+		consumer := func(db *gorm.DB, u models.User, cardID int) error {
+			t.Error("Consumer should not be called")
+			return nil
+		}
+
+		payout, applied, err := ApplyGamblerIfAvailable(db, consumer, user, originalPayout, true)
+
+		if err == nil {
+			t.Error("Expected error")
+		}
+		if applied {
+			t.Error("Expected card NOT to be applied")
+		}
+		if payout != originalPayout {
+			t.Errorf("Expected payout %.2f, got %.2f", originalPayout, payout)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+}

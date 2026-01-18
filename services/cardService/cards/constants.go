@@ -45,6 +45,9 @@ const (
 	GrandLarcenyCardID     = 31
 	AntiAntiBetCardID      = 68
 	VampireCardID          = 44
+	HostileTakeoverCardID  = 48
+	StopTheStealCardID     = 70
+	GamblerCardID          = 72
 
 	RoyaltyGuildID = "761721066959667220"
 )

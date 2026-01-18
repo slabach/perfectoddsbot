@@ -2,10 +2,12 @@ package cardService
 
 import (
 	"fmt"
+	"math/rand"
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/cardService/cards"
 	"perfectOddsBot/services/common"
 	"perfectOddsBot/services/guildService"
+	"strings"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -212,7 +214,8 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		return
 	}
 
-	if card.AddToInventory {
+	// Add card to inventory if AddToInventory flag is set OR if it's UserPlayable
+	if card.AddToInventory || card.UserPlayable {
 		if err := addCardToInventory(tx, user.ID, guildID, card.ID); err != nil {
 			tx.Rollback()
 			common.SendError(s, i, fmt.Errorf("error adding card to inventory: %v", err), db)
@@ -229,7 +232,12 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 
 	if cardResult.RequiresSelection {
 		if cardResult.SelectionType == "user" {
-			showUserSelectMenu(s, i, card.ID, card.Name, card.Description, userID, guildID, db)
+			// Hostile Takeover requires filtered user selection (within 500 points)
+			if card.ID == cards.HostileTakeoverCardID {
+				showFilteredUserSelectMenu(s, i, card.ID, card.Name, card.Description, userID, guildID, db, 500.0)
+			} else {
+				showUserSelectMenu(s, i, card.ID, card.Name, card.Description, userID, guildID, db)
+			}
 
 			if err := tx.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
 				tx.Rollback()
@@ -285,6 +293,38 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 			tx.Commit()
 			return
 		}
+	}
+
+	// Check if card has Options (for choice cards like The Gambler)
+	if len(card.Options) > 0 {
+		showCardOptionsMenu(s, i, card.ID, card.Name, card.Description, userID, guildID, db, card.Options)
+
+		// Update user points from cardResult if needed
+		if err := tx.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
+			tx.Rollback()
+			common.SendError(s, i, err, db)
+			return
+		}
+
+		user.Points += cardResult.PointsDelta
+		if user.Points < 0 {
+			user.Points = 0
+		}
+		guild.Pool += cardResult.PoolDelta
+
+		if err := tx.Save(&user).Error; err != nil {
+			tx.Rollback()
+			common.SendError(s, i, err, db)
+			return
+		}
+		if err := tx.Save(&guild).Error; err != nil {
+			tx.Rollback()
+			common.SendError(s, i, err, db)
+			return
+		}
+
+		tx.Commit()
+		return
 	}
 
 	if err := tx.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
@@ -426,6 +466,100 @@ func showUserSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, ca
 	}
 }
 
+func showFilteredUserSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, cardID int, cardName string, cardDescription string, userID string, guildID string, db *gorm.DB, maxPointDifference float64) {
+	var drawer models.User
+	if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&drawer).Error; err != nil {
+		common.SendError(s, i, err, db)
+		return
+	}
+
+	var allUsers []models.User
+	if err := db.Where("guild_id = ? AND discord_id != ?", guildID, userID).Find(&allUsers).Error; err != nil {
+		common.SendError(s, i, err, db)
+		return
+	}
+
+	var eligibleUsers []models.User
+	for _, u := range allUsers {
+		pointDiff := drawer.Points - u.Points
+		if pointDiff < 0 {
+			pointDiff = -pointDiff
+		}
+		if pointDiff <= maxPointDifference {
+			eligibleUsers = append(eligibleUsers, u)
+		}
+	}
+
+	if len(eligibleUsers) == 0 {
+		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: fmt.Sprintf("🎴 You drew **%s**!\n%s\n\nNo users found within %.0f points of you (you have %.1f points). Hostile Takeover fizzles out.", cardName, cardDescription, maxPointDifference, drawer.Points),
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
+
+	var selectOptions []discordgo.SelectMenuOption
+	for _, u := range eligibleUsers {
+		username := u.Username
+		displayName := ""
+		if username == nil || *username == "" {
+			displayName = fmt.Sprintf("User %s", u.DiscordID)
+		} else {
+			displayName = *username
+		}
+
+		// Truncate if too long (Discord limit is 100 chars for label, 100 for description)
+		if len(displayName) > 100 {
+			displayName = displayName[:97] + "..."
+		}
+
+		description := fmt.Sprintf("%.1f points", u.Points)
+		if len(description) > 100 {
+			description = description[:97] + "..."
+		}
+
+		selectOptions = append(selectOptions, discordgo.SelectMenuOption{
+			Label:       displayName,
+			Value:       u.DiscordID,
+			Description: description,
+			Emoji:       nil,
+			Default:     false,
+		})
+	}
+
+	minValues := 1
+	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: fmt.Sprintf("🎴 You drew **%s**!\n%s\n\nSelect a user within %.0f points of you (you have %.1f points):", cardName, cardDescription, maxPointDifference, drawer.Points),
+			Components: []discordgo.MessageComponent{
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{
+						discordgo.SelectMenu{
+							MenuType:    discordgo.StringSelectMenu,
+							CustomID:    fmt.Sprintf("card_%d_select_%s_%s", cardID, userID, guildID),
+							Placeholder: "Choose a user...",
+							MinValues:   &minValues,
+							MaxValues:   1,
+							Options:     selectOptions,
+						},
+					},
+				},
+			},
+			Flags: discordgo.MessageFlagsEphemeral,
+		},
+	})
+	if err != nil {
+		common.SendError(s, i, err, db)
+	}
+}
+
 func showBetSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, cardID int, cardName string, cardDescription string, userID string, guildID string, db *gorm.DB) {
 	var results []struct {
 		BetID       uint
@@ -485,6 +619,65 @@ func showBetSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, car
 							MinValues:   &minValues,
 							MaxValues:   1,
 							Options:     options,
+						},
+					},
+				},
+			},
+			Flags: discordgo.MessageFlagsEphemeral,
+		},
+	})
+	if err != nil {
+		common.SendError(s, i, err, db)
+	}
+}
+
+func showCardOptionsMenu(s *discordgo.Session, i *discordgo.InteractionCreate, cardID int, cardName string, cardDescription string, userID string, guildID string, db *gorm.DB, options []models.CardOption) {
+	var selectOptions []discordgo.SelectMenuOption
+	for _, opt := range options {
+		label := opt.Name
+		description := opt.Description
+
+		// Truncate if too long (Discord limit is 100 chars for label, 100 for description)
+		if len(label) > 100 {
+			label = label[:97] + "..."
+		}
+		if len(description) > 100 {
+			description = description[:97] + "..."
+		}
+
+		selectOptions = append(selectOptions, discordgo.SelectMenuOption{
+			Label:       label,
+			Value:       fmt.Sprintf("%d", opt.ID),
+			Description: description,
+			Emoji:       nil,
+			Default:     false,
+		})
+	}
+
+	// Build options list string for display in message
+	var optionsList strings.Builder
+	for i, opt := range options {
+		if i > 0 {
+			optionsList.WriteString("\n")
+		}
+		optionsList.WriteString(fmt.Sprintf("**%s**: %s", opt.Name, opt.Description))
+	}
+
+	minValues := 1
+	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: fmt.Sprintf("🎴 You drew **%s**!\n%s\n\n%s\n\nSelect an option:", cardName, cardDescription, optionsList.String()),
+			Components: []discordgo.MessageComponent{
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{
+						discordgo.SelectMenu{
+							MenuType:    discordgo.StringSelectMenu,
+							CustomID:    fmt.Sprintf("card_%d_option_%s_%s", cardID, userID, guildID),
+							Placeholder: "Choose an option...",
+							MinValues:   &minValues,
+							MaxValues:   1,
+							Options:     selectOptions,
 						},
 					},
 				},
@@ -865,6 +1058,32 @@ func ApplyBetInsuranceIfApplicable(db *gorm.DB, consumer CardConsumer, user mode
 	return 0, false, nil
 }
 
+func ApplyGamblerIfAvailable(db *gorm.DB, consumer CardConsumer, user models.User, originalPayout float64, isWin bool) (float64, bool, error) {
+	var count int64
+	err := db.Model(&models.UserInventory{}).
+		Where("user_id = ? AND guild_id = ? AND card_id = ?", user.ID, user.GuildID, cards.GamblerCardID).
+		Count(&count).Error
+
+	if err != nil {
+		return originalPayout, false, err
+	}
+
+	if count > 0 {
+		// Consume the card regardless of whether doubling occurs
+		if err := consumer(db, user, cards.GamblerCardID); err != nil {
+			return originalPayout, false, err
+		}
+
+		if rand.Intn(2) == 0 {
+			return originalPayout * 2.0, true, nil
+		}
+
+		return originalPayout, true, nil
+	}
+
+	return originalPayout, false, nil
+}
+
 func processRoyaltyPayment(tx *gorm.DB, card *models.Card, royaltyGuildID string) error {
 	if card.RoyaltyDiscordUserID == nil {
 		return nil
@@ -1054,5 +1273,127 @@ func MyInventory(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.
 	if err != nil {
 		common.SendError(s, i, err, db)
 		return
+	}
+}
+
+func PlayCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
+	userID := i.Member.User.ID
+	guildID := i.GuildID
+
+	guild, err := guildService.GetGuildInfo(s, db, guildID, i.ChannelID)
+	if err != nil {
+		common.SendError(s, i, fmt.Errorf("error getting guild info: %v", err), db)
+		return
+	}
+
+	var user models.User
+	result := db.Where(models.User{DiscordID: userID, GuildID: guildID}).Attrs(models.User{Points: guild.StartingPoints}).FirstOrCreate(&user)
+	if result.Error != nil {
+		common.SendError(s, i, fmt.Errorf("error fetching user: %v", result.Error), db)
+		return
+	}
+
+	showPlayableCardSelectMenu(s, i, db, userID, guildID, user.ID)
+}
+
+func showPlayableCardSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, userID string, guildID string, userDBID uint) {
+	inventory, err := getUserInventory(db, userDBID, guildID)
+	if err != nil {
+		common.SendError(s, i, fmt.Errorf("error fetching inventory: %v", err), db)
+		return
+	}
+
+	// Build a map of cardID -> count for inventory
+	inventoryMap := make(map[int]int)
+	for _, item := range inventory {
+		inventoryMap[item.CardID]++
+	}
+
+	// Find all UserPlayable cards in inventory
+	var playableCards []struct {
+		Card  *models.Card
+		Count int
+	}
+
+	for cardID, count := range inventoryMap {
+		card := GetCardByID(cardID)
+		if card != nil && card.UserPlayable {
+			playableCards = append(playableCards, struct {
+				Card  *models.Card
+				Count int
+			}{Card: card, Count: count})
+		}
+	}
+
+	if len(playableCards) == 0 {
+		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "You don't have any playable cards in your inventory. Draw some cards to get started!",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
+
+	// Limit to 25 options (Discord select menu limit)
+	maxOptions := 25
+	if len(playableCards) > maxOptions {
+		playableCards = playableCards[:maxOptions]
+	}
+
+	var selectOptions []discordgo.SelectMenuOption
+	for _, pc := range playableCards {
+		label := pc.Card.Name
+		if pc.Count > 1 {
+			label = fmt.Sprintf("%s (x%d)", pc.Card.Name, pc.Count)
+		}
+
+		// Truncate if too long (Discord limit is 100 chars for label, 100 for description)
+		if len(label) > 100 {
+			label = label[:97] + "..."
+		}
+
+		description := pc.Card.Description
+		if len(description) > 100 {
+			description = description[:97] + "..."
+		}
+
+		selectOptions = append(selectOptions, discordgo.SelectMenuOption{
+			Label:       label,
+			Value:       fmt.Sprintf("%d", pc.Card.ID),
+			Description: description,
+			Emoji:       nil,
+			Default:     false,
+		})
+	}
+
+	minValues := 1
+	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: "Select a card to play from your inventory:",
+			Components: []discordgo.MessageComponent{
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{
+						discordgo.SelectMenu{
+							MenuType:    discordgo.StringSelectMenu,
+							CustomID:    fmt.Sprintf("playcard_select_%s_%s", userID, guildID),
+							Placeholder: "Choose a card to play...",
+							MinValues:   &minValues,
+							MaxValues:   1,
+							Options:     selectOptions,
+						},
+					},
+				},
+			},
+			Flags: discordgo.MessageFlagsEphemeral,
+		},
+	})
+	if err != nil {
+		common.SendError(s, i, err, db)
 	}
 }

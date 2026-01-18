@@ -12,6 +12,10 @@ import (
 )
 
 func PlayCardFromInventory(s *discordgo.Session, db *gorm.DB, user models.User, cardID int) error {
+	return PlayCardFromInventoryWithMessage(s, db, user, cardID, "")
+}
+
+func PlayCardFromInventoryWithMessage(s *discordgo.Session, db *gorm.DB, user models.User, cardID int, customMessage string) error {
 	card := GetCardByID(cardID)
 	if card == nil {
 		return fmt.Errorf("card definition not found for ID %d", cardID)
@@ -29,10 +33,14 @@ func PlayCardFromInventory(s *discordgo.Session, db *gorm.DB, user models.User, 
 	}); err != nil {
 		return err
 	}
-	return NotifyCardPlayed(s, db, user, card)
+	return NotifyCardPlayedWithMessage(s, db, user, card, customMessage)
 }
 
 func NotifyCardPlayed(s *discordgo.Session, db *gorm.DB, user models.User, card *models.Card) error {
+	return NotifyCardPlayedWithMessage(s, db, user, card, "")
+}
+
+func NotifyCardPlayedWithMessage(s *discordgo.Session, db *gorm.DB, user models.User, card *models.Card, customMessage string) error {
 	guild, err := guildService.GetGuildInfo(s, db, user.GuildID, "")
 	if err != nil {
 		return fmt.Errorf("error getting guild info: %v", err)
@@ -58,18 +66,25 @@ func NotifyCardPlayed(s *discordgo.Session, db *gorm.DB, user models.User, card 
 	}
 
 	description := fmt.Sprintf("<@%s> played **%s**", user.DiscordID, card.Name)
+	if customMessage != "" {
+		description = customMessage
+	}
 
 	embed := &discordgo.MessageEmbed{
 		Title:       "🎴 Card Played!",
 		Description: description,
 		Color:       color,
-		Fields: []*discordgo.MessageEmbedField{
+	}
+
+	// Only add Effect field if no custom message (since custom message usually contains the effect info)
+	if customMessage == "" {
+		embed.Fields = []*discordgo.MessageEmbedField{
 			{
 				Name:   "Effect",
 				Value:  card.Description,
 				Inline: false,
 			},
-		},
+		}
 	}
 
 	_, err = s.ChannelMessageSendEmbed(guild.BetChannelID, embed)

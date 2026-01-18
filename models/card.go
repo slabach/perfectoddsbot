@@ -18,6 +18,7 @@ type Card struct {
 	RoyaltyDiscordUserID *string
 	RequiredSubscription bool
 	Options              []CardOption
+	UserPlayable         bool
 }
 
 type CardOption struct {

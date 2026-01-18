@@ -69,6 +69,19 @@ func handleGrail(s *discordgo.Session, db *gorm.DB, userID string, guildID strin
 	}, nil
 }
 
+func handleJackpot(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	guild, err := guildService.GetGuildInfo(s, db, guildID, "")
+	if err != nil {
+		return nil, err
+	}
+
+	return &models.CardResult{
+		Message:     ":rotating_light: You discovered the JACKPOT! You won 100% of the pool! :rotating_light:",
+		PointsDelta: guild.Pool,
+		PoolDelta:   -guild.Pool,
+	}, nil
+}
+
 func handlePettyTheft(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
 	return &models.CardResult{
 		Message:           "Petty Theft requires you to select a target!",
@@ -1112,7 +1125,7 @@ func handleUnoReverse(s *discordgo.Session, db *gorm.DB, userID string, guildID 
 	var count int64
 	err := db.Table("bet_entries").
 		Joins("JOIN bets ON bets.id = bet_entries.bet_id").
-		Where("bet_entries.user_id = ? AND bets.active = ?", user.ID, true).
+		Where("bet_entries.user_id = ? AND bets.paid = ? and bet_entries.deleted_at is null", user.ID, false).
 		Count(&count).Error
 
 	if err != nil {
@@ -1516,6 +1529,287 @@ func handleAntiAntiBet(s *discordgo.Session, db *gorm.DB, userID string, guildID
 func handleVampire(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
 	return &models.CardResult{
 		Message:     "You've drawn The Vampire! For the next 24 hours, you'll earn 1% of every bet won by other players.",
+		PointsDelta: 0,
+		PoolDelta:   0,
+	}, nil
+}
+
+func handleHostileTakeover(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	return &models.CardResult{
+		Message:           "Hostile Takeover requires you to select a target user within 500 points of you!",
+		PointsDelta:       0,
+		PoolDelta:         0,
+		RequiresSelection: true,
+		SelectionType:     "user",
+	}, nil
+}
+
+func handleBlueShell(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	var allUsers []models.User
+	if err := db.Where("guild_id = ?", guildID).Order("points DESC").Find(&allUsers).Error; err != nil {
+		return nil, err
+	}
+
+	if len(allUsers) == 0 {
+		return &models.CardResult{
+			Message:     "No players found in the server. The Blue Shell breaks against the wall.",
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	firstPlaceUser := allUsers[0]
+
+	if firstPlaceUser.DiscordID == userID {
+		return &models.CardResult{
+			Message:     "You're in 1st place! The Blue Shell targets you, but you're already at the top. Blue Shell breaks against the wall.",
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	blocked, err := checkAndConsumeShield(db, firstPlaceUser.ID, guildID)
+	if err != nil {
+		return nil, err
+	}
+
+	if blocked {
+		firstPlaceUsername := firstPlaceUser.Username
+		displayName := ""
+		if firstPlaceUsername == nil || *firstPlaceUsername == "" {
+			displayName = fmt.Sprintf("<@%s>", firstPlaceUser.DiscordID)
+		} else {
+			displayName = *firstPlaceUsername
+		}
+
+		return &models.CardResult{
+			Message:     fmt.Sprintf("The Blue Shell was thrown at %s, but their Shield blocked it!", displayName),
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	deductAmount := 500.0
+	if firstPlaceUser.Points < deductAmount {
+		deductAmount = firstPlaceUser.Points
+	}
+
+	if deductAmount > 0 {
+		firstPlaceUser.Points -= deductAmount
+		if firstPlaceUser.Points < 0 {
+			firstPlaceUser.Points = 0
+		}
+		if err := db.Save(&firstPlaceUser).Error; err != nil {
+			return nil, err
+		}
+	}
+
+	firstPlaceUsername := firstPlaceUser.Username
+	displayName := ""
+	if firstPlaceUsername == nil || *firstPlaceUsername == "" {
+		displayName = fmt.Sprintf("<@%s>", firstPlaceUser.DiscordID)
+	} else {
+		displayName = *firstPlaceUsername
+	}
+
+	return &models.CardResult{
+		Message:     fmt.Sprintf("The Blue Shell hit %s! They lost %.0f points to the Pool.", displayName, deductAmount),
+		PointsDelta: 0,
+		PoolDelta:   deductAmount,
+	}, nil
+}
+
+func handleNuke(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	var allUsers []models.User
+	if err := db.Where("guild_id = ?", guildID).Find(&allUsers).Error; err != nil {
+		return nil, err
+	}
+
+	if len(allUsers) == 0 {
+		return &models.CardResult{
+			Message:     "No players found in the server. The Nuke fizzles out.",
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	for _, user := range allUsers {
+		user.Points -= user.Points * 0.1
+		if err := db.Save(&user).Error; err != nil {
+			return nil, err
+		}
+	}
+
+	return &models.CardResult{
+		Message:     "You've drawn The Nuke! Everyone (including you) loses 10% of their points to the Pool.",
+		PointsDelta: 0,
+		PoolDelta:   0,
+	}, nil
+}
+
+func handleDivineIntervention(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	var allUsers []models.User
+	if err := db.Where("guild_id = ?", guildID).Find(&allUsers).Error; err != nil {
+		return nil, err
+	}
+
+	if len(allUsers) == 0 {
+		return &models.CardResult{
+			Message:     "No players found in the server. Divine Intervention fizzles out.",
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	averagePoints := 0.0
+	for _, user := range allUsers {
+		averagePoints += user.Points
+	}
+	averagePoints /= float64(len(allUsers))
+
+	var user models.User
+	db.First(&user, "discord_id = ? AND guild_id = ?", userID, guildID)
+	if user.ID == 0 {
+		return nil, fmt.Errorf("user not found")
+	}
+
+	user.Points = averagePoints
+
+	user.Points = averagePoints
+	if err := db.Save(&user).Error; err != nil {
+		return nil, err
+	}
+
+	return &models.CardResult{
+		Message:     fmt.Sprintf("Your points balance is set to exactly the average of all players (%.2f).", averagePoints),
+		PointsDelta: 0,
+		PoolDelta:   0,
+	}, nil
+}
+
+func handleWhale(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	return &models.CardResult{
+		Message:     "You've drawn The Whale! You gained 750 points immediately.",
+		PointsDelta: 750,
+		PoolDelta:   0,
+	}, nil
+}
+
+func handleGuillotine(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	var user models.User
+	db.First(&user, "discord_id = ? AND guild_id = ?", userID, guildID)
+	if user.ID == 0 {
+		return nil, fmt.Errorf("user not found")
+	}
+
+	return &models.CardResult{
+		Message:     "You've drawn The Guillotine! You lost 15% of your points.",
+		PointsDelta: -(user.Points * 0.15),
+		PoolDelta:   0,
+	}, nil
+}
+
+func handleRobbingTheHood(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	var allUsers []models.User
+	if err := db.Where("guild_id = ?", guildID).Order("points ASC").Find(&allUsers).Error; err != nil {
+		return nil, err
+	}
+
+	if len(allUsers) == 0 {
+		return &models.CardResult{
+			Message:     "No players found in the server. Robbing the Hood fizzles out.",
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	poorestUser := allUsers[0]
+
+	if poorestUser.DiscordID == userID {
+		return &models.CardResult{
+			Message:     "You're the poorest player! Robbing the Hood fizzles out.",
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	return &models.CardResult{
+		Message:           "You've drawn Robbing the Hood! You stole 50% of the poorest player's points and gave it to yourself.",
+		PointsDelta:       poorestUser.Points * 0.5,
+		PoolDelta:         0,
+		TargetUserID:      &poorestUser.DiscordID,
+		TargetPointsDelta: -(poorestUser.Points * 0.5),
+	}, nil
+}
+
+func handleStopTheSteal(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	// This card is UserPlayable and should be played manually via /play-card
+	// If drawn normally, add it to inventory
+	return &models.CardResult{
+		Message:     "You drew STOP THE STEAL! Use /play-card to play this card and cancel any of your active bets.",
+		PointsDelta: 0,
+		PoolDelta:   0,
+	}, nil
+}
+
+func handleSnipSnap(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	var user models.User
+	if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
+		return nil, err
+	}
+
+	var entries []models.BetEntry
+	if err := db.Preload("Bet").
+		Joins("JOIN bets ON bets.id = bet_entries.bet_id").
+		Where("bet_entries.user_id = ? AND bets.paid = ? AND bet_entries.deleted_at IS NULL", user.ID, false).
+		Find(&entries).Error; err != nil {
+		return nil, err
+	}
+
+	if len(entries) == 0 {
+		return &models.CardResult{
+			Message:     "You have no active bets to flip. The card fizzles out.",
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	// Pick random entry
+	randomIndex := rand.Intn(len(entries))
+	entryToFlip := entries[randomIndex]
+
+	// Flip option
+	oldOption := entryToFlip.Option
+	newOption := 0
+	if oldOption == 1 {
+		newOption = 2
+	} else {
+		newOption = 1
+	}
+
+	entryToFlip.Option = newOption
+	if err := db.Save(&entryToFlip).Error; err != nil {
+		return nil, err
+	}
+
+	betName := entryToFlip.Bet.Description
+	newOptionName := ""
+	if newOption == 1 {
+		newOptionName = entryToFlip.Bet.Option1
+	} else {
+		newOptionName = entryToFlip.Bet.Option2
+	}
+
+	return &models.CardResult{
+		Message:     fmt.Sprintf("Snip Snap Snip Snap! Your bet on **%s** has been flipped! You are now betting on **%s**.", betName, newOptionName),
+		PointsDelta: 0,
+		PoolDelta:   0,
+	}, nil
+}
+
+func handleGambler(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	return &models.CardResult{
+		Message:     "You drew The Gambler! You must choose your fate...",
 		PointsDelta: 0,
 		PoolDelta:   0,
 	}, nil
