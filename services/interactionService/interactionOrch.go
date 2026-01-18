@@ -147,6 +147,46 @@ func HandleComponentInteraction(s *discordgo.Session, i *discordgo.InteractionCr
 		}
 		return
 	}
+
+	if strings.HasPrefix(customID, "card_") && strings.Contains(customID, "_selectbet_") {
+		err := HandleCardBetSelection(s, i, db)
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
+
+	if strings.HasPrefix(customID, "card_") && strings.Contains(customID, "_select_") {
+		err := HandleCardUserSelection(s, i, db)
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
+
+	if strings.HasPrefix(customID, "card_") && strings.Contains(customID, "_option_") {
+		err := HandleCardOptionSelection(s, i, db)
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
+
+	if strings.HasPrefix(customID, "playcard_select_") {
+		err := HandlePlayCardSelection(s, i, db)
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
+
+	if strings.HasPrefix(customID, "playcard_bet_") {
+		err := HandlePlayCardBetSelection(s, i, db)
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
 }
 
 func HandleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {

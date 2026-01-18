@@ -7,6 +7,7 @@ import (
 	"math"
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/common"
+	"time"
 )
 
 func PlaceBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, customID string) error {
@@ -27,6 +28,18 @@ func PlaceBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB,
 	// Update username from interaction member
 	username := common.GetUsernameFromUser(i.Member.User)
 	common.UpdateUserUsername(db, &user, username)
+
+	// Check for bet lockout
+	if user.BetLockoutUntil != nil && user.BetLockoutUntil.After(time.Now()) {
+		timeLeft := time.Until(*user.BetLockoutUntil).Round(time.Minute)
+		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: fmt.Sprintf("❄️ You are frozen from betting! You can bet again in %s.", timeLeft),
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+	}
 
 	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseModal,

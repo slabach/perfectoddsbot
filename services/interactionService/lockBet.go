@@ -3,17 +3,17 @@ package interactionService
 import (
 	"errors"
 	"fmt"
-	"github.com/bwmarrin/discordgo"
-	"gorm.io/gorm"
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/common"
 	"perfectOddsBot/services/messageService"
 	"strconv"
 	"strings"
+
+	"github.com/bwmarrin/discordgo"
+	"gorm.io/gorm"
 )
 
 func LockBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, customID string) error {
-	// Handle locking a bet
 	betID, err := strconv.Atoi(strings.TrimPrefix(customID, "lock_bet_"))
 	if err != nil {
 		return errors.New(fmt.Sprintf("Error parsing bet ID: %v", err))

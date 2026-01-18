@@ -413,4 +413,3 @@ func HandleCFBBetTypeSelection(s *discordgo.Session, i *discordgo.InteractionCre
 
 	return nil
 }
-
