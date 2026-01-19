@@ -1242,12 +1242,89 @@ func MyInventory(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.
 		cardCounts[item.CardID]++
 	}
 
+	// Calculate timer and next draw cost (needed even if inventory is empty)
+	now := time.Now()
+	resetPeriod := time.Duration(guild.CardDrawCooldownMinutes) * time.Minute
+
+	var countdownText string
+	if user.FirstCardDrawCycle != nil {
+		resetTime := user.FirstCardDrawCycle.Add(resetPeriod)
+		if now.Before(resetTime) {
+			timeRemaining := resetTime.Sub(now)
+			hours := int(timeRemaining.Hours())
+			minutes := int(timeRemaining.Minutes()) % 60
+			seconds := int(timeRemaining.Seconds()) % 60
+			if hours > 0 {
+				countdownText = fmt.Sprintf("%dh %dm %ds", hours, minutes, seconds)
+			} else if minutes > 0 {
+				countdownText = fmt.Sprintf("%dm %ds", minutes, seconds)
+			} else {
+				countdownText = fmt.Sprintf("%ds", seconds)
+			}
+		} else {
+			countdownText = "Next Draw Resets"
+		}
+	} else {
+		countdownText = "No draws yet"
+	}
+
+	var nextDrawCount int
+	if user.FirstCardDrawCycle != nil {
+		resetTime := user.FirstCardDrawCycle.Add(resetPeriod)
+		if now.After(resetTime) || now.Equal(resetTime) {
+			nextDrawCount = 0
+		} else {
+			nextDrawCount = user.CardDrawCount
+		}
+	} else {
+		nextDrawCount = 0
+	}
+
+	var nextDrawCost float64
+	switch nextDrawCount {
+	case 0:
+		nextDrawCost = guild.CardDrawCost
+	case 1:
+		nextDrawCost = guild.CardDrawCost * 10
+	default:
+		nextDrawCost = guild.CardDrawCost * 100
+	}
+
+	hasLuckyHorseshoe := cardCounts[cards.LuckyHorseshoeCardID] > 0
+	if hasLuckyHorseshoe {
+		nextDrawCost = nextDrawCost * 0.5
+	}
+
+	hasUnluckyCat := cardCounts[cards.UnluckyCatCardID] > 0
+	if hasUnluckyCat {
+		nextDrawCost = nextDrawCost * 2.0
+	}
+
+	// If inventory is empty, show embed with timer info only
 	if len(cardCounts) == 0 {
-		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		embed := &discordgo.MessageEmbed{
+			Title:       "🎴 Your Inventory",
+			Description: "Your inventory is empty. Draw some cards to add them to your hand!",
+			Color:       0x3498DB,
+			Fields: []*discordgo.MessageEmbedField{
+				{
+					Name:   "⏱️ Timer Reset",
+					Value:  countdownText,
+					Inline: true,
+				},
+				{
+					Name:   "💰 Next Draw Cost",
+					Value:  fmt.Sprintf("%.0f points", nextDrawCost),
+					Inline: true,
+				},
+			},
+		}
+
+		err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
-				Content: "Your inventory is empty. Draw some cards to add them to your hand!",
-				Flags:   discordgo.MessageFlagsEphemeral,
+				Embeds: []*discordgo.MessageEmbed{embed},
+				Flags:  discordgo.MessageFlagsEphemeral,
 			},
 		})
 		if err != nil {
@@ -1332,70 +1409,7 @@ func MyInventory(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.
 		Text: fmt.Sprintf("Total cards: %d", totalCards),
 	}
 
-	now := time.Now()
-	resetPeriod := time.Duration(guild.CardDrawCooldownMinutes) * time.Minute
-
-	var countdownText string
-	if user.FirstCardDrawCycle != nil {
-		resetTime := user.FirstCardDrawCycle.Add(resetPeriod)
-		if now.Before(resetTime) {
-			timeRemaining := resetTime.Sub(now)
-			hours := int(timeRemaining.Hours())
-			minutes := int(timeRemaining.Minutes()) % 60
-			seconds := int(timeRemaining.Seconds()) % 60
-			if hours > 0 {
-				countdownText = fmt.Sprintf("%dh %dm %ds", hours, minutes, seconds)
-			} else if minutes > 0 {
-				countdownText = fmt.Sprintf("%dm %ds", minutes, seconds)
-			} else {
-				countdownText = fmt.Sprintf("%ds", seconds)
-			}
-		} else {
-			countdownText = "Next Draw Resets"
-		}
-	} else {
-		countdownText = "No draws yet"
-	}
-
-	var nextDrawCount int
-	if user.FirstCardDrawCycle != nil {
-		resetTime := user.FirstCardDrawCycle.Add(resetPeriod)
-		if now.After(resetTime) || now.Equal(resetTime) {
-			nextDrawCount = 0
-		} else {
-			nextDrawCount = user.CardDrawCount
-		}
-	} else {
-		nextDrawCount = 0
-	}
-
-	var nextDrawCost float64
-	switch nextDrawCount {
-	case 0:
-		nextDrawCost = guild.CardDrawCost
-	case 1:
-		nextDrawCost = guild.CardDrawCost * 10
-	default:
-		nextDrawCost = guild.CardDrawCost * 100
-	}
-
-	// if nextDrawCount == 0 {
-	// 	donorID, err := hasGenerousDonationInInventory(db, guildID)
-	// 	if err == nil && donorID != 0 && donorID != user.ID {
-	// 		nextDrawCost = 0
-	// 	}
-	// }
-
-	hasLuckyHorseshoe := cardCounts[cards.LuckyHorseshoeCardID] > 0
-	if hasLuckyHorseshoe {
-		nextDrawCost = nextDrawCost * 0.5
-	}
-
-	hasUnluckyCat := cardCounts[cards.UnluckyCatCardID] > 0
-	if hasUnluckyCat {
-		nextDrawCost = nextDrawCost * 2.0
-	}
-
+	// Add timer and cost fields (already calculated above)
 	embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
 		Name:   "⏱️ Timer Reset",
 		Value:  countdownText,
