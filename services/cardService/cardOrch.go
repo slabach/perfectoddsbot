@@ -607,7 +607,16 @@ func showBetSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, car
 	}
 
 	if len(results) == 0 {
-		common.SendError(s, i, fmt.Errorf("no active bets found"), db)
+		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: fmt.Sprintf("🎴 You drew **%s**!\n%s\n\nYou have no active bets to use this card on! The card fizzles out.", cardName, cardDescription),
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
 		return
 	}
 
