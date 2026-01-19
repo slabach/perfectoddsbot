@@ -64,7 +64,7 @@ func handleGrail(s *discordgo.Session, db *gorm.DB, userID string, guildID strin
 	poolWin := guild.Pool * 0.25
 
 	return &models.CardResult{
-		Message:     "You discovered the Holy Grail! You won 50% of the pool!",
+		Message:     "You discovered the Holy Grail! You won 25% of the pool!",
 		PointsDelta: poolWin,
 		PoolDelta:   -poolWin,
 	}, nil
@@ -79,7 +79,7 @@ func handleJackpot(s *discordgo.Session, db *gorm.DB, userID string, guildID str
 	poolWin := guild.Pool * 0.5
 
 	return &models.CardResult{
-		Message:     ":rotating_light: You discovered the JACKPOT! You won 100% of the pool! :rotating_light:",
+		Message:     ":rotating_light: You discovered the JACKPOT! You won 50% of the pool! :rotating_light:",
 		PointsDelta: poolWin,
 		PoolDelta:   -poolWin,
 	}, nil

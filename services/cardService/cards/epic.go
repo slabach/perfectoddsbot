@@ -117,7 +117,7 @@ func registerEpicCards(deck *[]models.Card) {
 		{
 			ID:          74,
 			Name:        "Lehman Brothers Insider",
-			Description: "You penetrated the the banks internal systems and brought them down from the inside. The pool loses 20% of its total points.",
+			Description: "You penetrated the banks internal systems and brought them down from the inside. The pool loses 20% of its total points.",
 			Rarity:      "Epic",
 			Weight:      W_Epic,
 			Handler:     handleLehmanBrothersInsider,
