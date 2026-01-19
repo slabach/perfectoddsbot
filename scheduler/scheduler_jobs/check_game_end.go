@@ -6,6 +6,7 @@ import (
 	"perfectOddsBot/models"
 	"perfectOddsBot/models/external"
 	"perfectOddsBot/services/betService"
+	cardService "perfectOddsBot/services/cardService"
 	"perfectOddsBot/services/common"
 	"perfectOddsBot/services/extService"
 	"perfectOddsBot/services/guildService"
@@ -29,12 +30,11 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 
 	var dbBetList []models.Bet
 
-	result := db.Where("paid = 0 AND active = 0 AND (cfbd_id IS NOT NULL OR espn_id IS NOT NULL)").Find(&dbBetList)
+	result := db.Where("paid = 0 AND active = 0 AND (cfbd_id IS NOT NULL OR espn_id IS NOT NULL) AND deleted_at IS NULL").Find(&dbBetList)
 	if result.Error != nil {
 		return result.Error
 	}
 
-	// check the count of each first. if there are no CFB bets, we dont need to get CFB games (and vice versa)
 	cbbCount := 0
 	cfbCount := 0
 	for _, cBet := range dbBetList {
@@ -84,7 +84,6 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 					var betEntries []models.BetEntry
 					entriesResult := db.Where("bet_id = ?", bet.ID).Find(&betEntries)
 
-					// Determine winning option even if there are no bet entries (for parlay updates)
 					winningOption := 0
 					if bet.Spread == nil {
 						// Moneyline bet: winner is determined by actual game result
@@ -106,7 +105,6 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 					}
 
 					if entriesResult.RowsAffected == 0 {
-						// No bet entries, but still need to update parlays
 						if winningOption > 0 {
 							updateErr := betService.UpdateParlaysOnBetResolution(s, db, bet.ID, winningOption, scoreDiff)
 							if updateErr != nil {
@@ -117,29 +115,21 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 						bet.Active = false
 						db.Save(&bet)
 					} else {
-						// Process bet entries
 						for _, entry := range betEntries {
 							var won bool
 							if bet.Spread == nil {
-								// Moneyline bet: winner is determined by actual game result
-								// Option 1 is home team, Option 2 is away team
 								if entry.Option == 1 {
-									// Home team wins if home score > away score
 									won = scoreDiff > 0
 								} else {
-									// Away team wins if away score > home score
 									won = scoreDiff < 0
 								}
 							} else {
-								// ATS bet: use spread-based calculation
-								// Check if entry.Spread is nil (legacy entries) and fall back to bet.Spread
 								var spread float64
 								if entry.Spread != nil {
 									spread = *entry.Spread
 								} else if bet.Spread != nil {
 									spread = *bet.Spread
 								} else {
-									// Safe default (shouldn't happen in this branch, but defensive)
 									spread = 0.0
 								}
 								won = common.CalculateBetEntryWin(entry.Option, scoreDiff, spread)
@@ -166,24 +156,19 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 					var betEntries []models.BetEntry
 					entriesResult := db.Where("bet_id = ?", bet.ID).Find(&betEntries)
 
-					// Robustly match Option 1 to the correct competitor by name
-					// instead of assuming Option 1 is always the "home" team from the API.
 					op1Name := common.GetSchoolName(bet.Option1)
 					var score1, score2 int
 					var matched bool
 
 					for _, comp := range obj.Competitions[0].Competitors {
-						// Check if this competitor matches Option 1's name
 						if comp.Team.ShortDisplayName == op1Name {
 							score1, _ = strconv.Atoi(comp.Score)
 							matched = true
 						} else {
-							// If it's not Option 1, it's Option 2
 							score2, _ = strconv.Atoi(comp.Score)
 						}
 					}
 
-					// Fallback to legacy logic if name matching fails (e.g. name change)
 					if !matched {
 						homeTeam := external.ESPN_Competitor{}
 						awayTeam := external.ESPN_Competitor{}
@@ -196,24 +181,20 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 								awayTeam = comp
 							}
 						}
-						score1, _ = strconv.Atoi(homeTeam.Score) // Assume Option 1 is Home
-						score2, _ = strconv.Atoi(awayTeam.Score) // Assume Option 2 is Away
+						score1, _ = strconv.Atoi(homeTeam.Score)
+						score2, _ = strconv.Atoi(awayTeam.Score)
 					}
 
-					// scoreDiff is now relative to Option 1: (Option1Score - Option2Score)
 					scoreDiff := score1 - score2
 
-					// Determine winning option even if there are no bet entries (for parlay updates)
 					winningOption := 0
 					if bet.Spread == nil {
-						// Moneyline bet: winner is determined by actual game result
 						if scoreDiff > 0 {
-							winningOption = 1 // Option 1 wins
+							winningOption = 1
 						} else if scoreDiff < 0 {
-							winningOption = 2 // Option 2 wins
+							winningOption = 2
 						}
 					} else {
-						// ATS bet: determine winner based on spread
 						if common.CalculateBetEntryWin(1, scoreDiff, *bet.Spread) {
 							winningOption = 1
 						} else {
@@ -222,7 +203,6 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 					}
 
 					if entriesResult.RowsAffected == 0 {
-						// No bet entries, but still need to update parlays
 						if winningOption > 0 {
 							updateErr := betService.UpdateParlaysOnBetResolution(s, db, bet.ID, winningOption, scoreDiff)
 							if updateErr != nil {
@@ -235,27 +215,21 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 						continue
 					}
 
-					// Process bet entries
 					for _, entry := range betEntries {
 						var won bool
 						if bet.Spread == nil {
-							// Moneyline bet: winner is determined by actual game result
-							// Option 1 wins if score1 > score2, Option 2 wins if score2 > score1
 							if entry.Option == 1 {
 								won = scoreDiff > 0
 							} else {
 								won = scoreDiff < 0
 							}
 						} else {
-							// ATS bet: use spread-based calculation
-							// Check if entry.Spread is nil (legacy entries) and fall back to bet.Spread
 							var spread float64
 							if entry.Spread != nil {
 								spread = *entry.Spread
 							} else if bet.Spread != nil {
 								spread = *bet.Spread
 							} else {
-								// Safe default (shouldn't happen in this branch, but defensive)
 								spread = 0.0
 							}
 							won = common.CalculateBetEntryWin(entry.Option, scoreDiff, spread)
@@ -291,7 +265,9 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 	db.Where("bet_id = ?", bet.ID).Find(&entries)
 
 	totalPayout := 0.0
+	totalWinningPayouts := 0.0
 	lostPoolAmount := 0.0
+	winnerDiscordIDs := make(map[string]float64)
 	for _, entry := range entries {
 		var user models.User
 		db.First(&user, "id = ?", entry.UserID)
@@ -303,10 +279,8 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 		betOption := common.GetSchoolName(bet.Option1)
 		var spreadDisplay string
 		if bet.Spread == nil {
-			// Moneyline bet: no spread to display
 			spreadDisplay = ""
 		} else {
-			// Check if entry.Spread is nil (legacy entries) and fall back to bet.Spread
 			var spread float64
 			if entry.Spread != nil {
 				spread = *entry.Spread
@@ -324,33 +298,310 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 
 		if entry.AutoCloseWin {
 			payout := common.CalculatePayout(entry.Amount, entry.Option, bet)
-			user.Points += payout
-			user.TotalBetsWon++
-			user.TotalPointsWon += payout
-			db.Save(&user)
-			totalPayout += payout
 
-			if payout > 0 {
+			unoApplied, isWinAfterUno, err := cardService.ApplyUnoReverseIfApplicable(db, user, bet.ID, true)
+			if err != nil {
+				log.Printf("Error checking Uno Reverse: %v", err)
+			}
+
+			if unoApplied && !isWinAfterUno {
+				user.TotalBetsLost++
+				user.TotalPointsLost += float64(entry.Amount)
+				db.Save(&user)
+				lostPoolAmount += float64(entry.Amount)
+
 				if spreadDisplay != "" {
-					winnersList += fmt.Sprintf("%s - Bet: %s %s - **Won $%.1f**\n", username, betOption, spreadDisplay, payout)
+					loserList += fmt.Sprintf("%s - Bet: %s %s - **Lost $%d** (Uno Reverse!)\n", username, betOption, spreadDisplay, entry.Amount)
 				} else {
-					winnersList += fmt.Sprintf("%s - Bet: %s - **Won $%.1f**\n", username, betOption, payout)
+					loserList += fmt.Sprintf("%s - Bet: %s - **Lost $%d** (Uno Reverse!)\n", username, betOption, entry.Amount)
+				}
+				continue
+			}
+
+			_, _, antiAntiBetLosers, antiAntiBetApplied, err := cardService.ApplyAntiAntiBetIfApplicable(db, user, true)
+			if err != nil {
+				log.Printf("Error checking Anti-Anti-Bet (Win): %v", err)
+			}
+			if antiAntiBetApplied {
+				if len(antiAntiBetLosers) > 0 {
+					for _, loser := range antiAntiBetLosers {
+						cardHolderUsername := common.GetUsernameWithDB(db, s, user.GuildID, loser.DiscordID)
+						loserList += fmt.Sprintf("%s - **Lost $%.1f** (Anti-Anti-Bet!)\n", cardHolderUsername, loser.Payout)
+					}
+				}
+			}
+
+			consumer := func(db *gorm.DB, user models.User, cardID int) error {
+				return cardService.PlayCardFromInventory(s, db, user, cardID)
+			}
+
+			modifiedPayout, hasDoubleDown, err := cardService.ApplyDoubleDownIfAvailable(db, consumer, user, payout)
+			if err != nil {
+				log.Printf("Error checking Double Down for auto-resolved bet: %v", err)
+				modifiedPayout = payout
+				hasDoubleDown = false
+			}
+
+			payoutAfterDoubleDown := modifiedPayout
+
+			modifiedPayout, hasGambler, err := cardService.ApplyGamblerIfAvailable(db, consumer, user, modifiedPayout, true)
+			if err != nil {
+				log.Printf("Error checking Gambler for auto-resolved bet: %v", err)
+				hasGambler = false
+			}
+
+			hedgeRefund, hedgeApplied, err := cardService.ApplyEmotionalHedgeIfApplicable(db, consumer, user, bet, entry.Option, float64(entry.Amount), scoreDiff)
+			if err != nil {
+				log.Printf("Error checking Emotional Hedge: %v", err)
+			}
+
+			_, insuranceApplied, err := cardService.ApplyBetInsuranceIfApplicable(db, consumer, user, 0, true)
+			if err != nil {
+				log.Printf("Error checking Bet Insurance (Win): %v", err)
+			}
+
+			user.Points += modifiedPayout
+			user.TotalBetsWon++
+			user.TotalPointsWon += modifiedPayout
+
+			if hedgeApplied && hedgeRefund > 0 {
+				user.Points += hedgeRefund
+			}
+
+			db.Save(&user)
+			totalPayout += modifiedPayout + hedgeRefund
+			totalWinningPayouts += modifiedPayout + hedgeRefund
+			winnerDiscordIDs[user.DiscordID] += modifiedPayout + hedgeRefund
+
+			if modifiedPayout > 0 {
+				doubleDownMsg := ""
+				if hasDoubleDown {
+					doubleDownMsg = " (Double Down: 2x payout!)"
+				}
+				gamblerMsg := ""
+				if hasGambler {
+					if modifiedPayout > payoutAfterDoubleDown {
+						gamblerMsg = " (The Gambler: 2x payout!)"
+					} else {
+						gamblerMsg = " (The Gambler: consumed, no double)"
+					}
+				}
+				hedgeMsg := ""
+				if hedgeApplied && hedgeRefund > 0 {
+					hedgeMsg = fmt.Sprintf(" (Emotional Hedge: Refunding $%.1f)", hedgeRefund)
+				} else if hedgeApplied {
+					hedgeMsg = " (Emotional Hedge: consumed)"
+				}
+				insuranceMsg := ""
+				if insuranceApplied {
+					insuranceMsg = " (Bet Insurance: consumed)"
+				}
+
+				if spreadDisplay != "" {
+					winnersList += fmt.Sprintf("%s - Bet: %s %s - **Won $%.1f**%s%s%s%s\n", username, betOption, spreadDisplay, modifiedPayout, doubleDownMsg, gamblerMsg, hedgeMsg, insuranceMsg)
+				} else {
+					winnersList += fmt.Sprintf("%s - Bet: %s - **Won $%.1f**%s%s%s%s\n", username, betOption, modifiedPayout, doubleDownMsg, gamblerMsg, hedgeMsg, insuranceMsg)
 				}
 			}
 		} else {
+			unoApplied, isWinAfterUno, err := cardService.ApplyUnoReverseIfApplicable(db, user, bet.ID, false)
+			if err != nil {
+				log.Printf("Error checking Uno Reverse: %v", err)
+			}
+
+			if unoApplied && isWinAfterUno {
+				payout := common.CalculatePayout(entry.Amount, entry.Option, bet)
+
+				consumer := func(db *gorm.DB, user models.User, cardID int) error {
+					return cardService.PlayCardFromInventory(s, db, user, cardID)
+				}
+
+				modifiedPayout, hasDoubleDown, err := cardService.ApplyDoubleDownIfAvailable(db, consumer, user, payout)
+				if err != nil {
+					log.Printf("Error checking Double Down for auto-resolved bet (Uno Reverse): %v", err)
+					modifiedPayout = payout
+					hasDoubleDown = false
+				}
+
+				payoutAfterDoubleDown := modifiedPayout
+
+				modifiedPayout, hasGambler, err := cardService.ApplyGamblerIfAvailable(db, consumer, user, modifiedPayout, true)
+				if err != nil {
+					log.Printf("Error checking Gambler for auto-resolved bet (Uno Reverse): %v", err)
+					hasGambler = false
+				}
+
+				hedgeRefund, hedgeApplied, err := cardService.ApplyEmotionalHedgeIfApplicable(db, consumer, user, bet, entry.Option, float64(entry.Amount), scoreDiff)
+				if err != nil {
+					log.Printf("Error checking Emotional Hedge (Uno Reverse): %v", err)
+				}
+
+				_, insuranceApplied, err := cardService.ApplyBetInsuranceIfApplicable(db, consumer, user, 0, true)
+				if err != nil {
+					log.Printf("Error checking Bet Insurance (Win/Uno Reverse): %v", err)
+				}
+
+				user.Points += modifiedPayout
+				user.TotalBetsWon++
+				user.TotalPointsWon += modifiedPayout
+
+				if hedgeApplied && hedgeRefund > 0 {
+					user.Points += hedgeRefund
+				}
+
+				db.Save(&user)
+				totalPayout += modifiedPayout + hedgeRefund
+				totalWinningPayouts += modifiedPayout + hedgeRefund
+				winnerDiscordIDs[user.DiscordID] += modifiedPayout + hedgeRefund
+
+				if modifiedPayout > 0 {
+					doubleDownMsg := ""
+					if hasDoubleDown {
+						doubleDownMsg = " (Double Down: 2x payout!)"
+					}
+					gamblerMsg := ""
+					if hasGambler {
+						if modifiedPayout > payoutAfterDoubleDown {
+							gamblerMsg = " (The Gambler: 2x payout!)"
+						} else {
+							gamblerMsg = " (The Gambler: consumed, no double)"
+						}
+					}
+					hedgeMsg := ""
+					if hedgeApplied && hedgeRefund > 0 {
+						hedgeMsg = fmt.Sprintf(" (Emotional Hedge: Refunding $%.1f)", hedgeRefund)
+					} else if hedgeApplied {
+						hedgeMsg = " (Emotional Hedge: consumed)"
+					}
+					insuranceMsg := ""
+					if insuranceApplied {
+						insuranceMsg = " (Bet Insurance: consumed)"
+					}
+
+					if spreadDisplay != "" {
+						winnersList += fmt.Sprintf("%s - Bet: %s %s - **Won $%.1f** (Uno Reverse!)%s%s%s%s\n", username, betOption, spreadDisplay, modifiedPayout, doubleDownMsg, gamblerMsg, hedgeMsg, insuranceMsg)
+					} else {
+						winnersList += fmt.Sprintf("%s - Bet: %s - **Won $%.1f** (Uno Reverse!)%s%s%s%s\n", username, betOption, modifiedPayout, doubleDownMsg, gamblerMsg, hedgeMsg, insuranceMsg)
+					}
+				}
+				continue
+			}
+
+			antiAntiBetPayout, antiAntiBetWinners, _, antiAntiBetApplied, err := cardService.ApplyAntiAntiBetIfApplicable(db, user, false)
+			if err != nil {
+				log.Printf("Error checking Anti-Anti-Bet (Loss): %v", err)
+			}
+			if antiAntiBetApplied && antiAntiBetPayout > 0 {
+				totalPayout += antiAntiBetPayout
+				for _, winner := range antiAntiBetWinners {
+					cardHolderUsername := common.GetUsernameWithDB(db, s, user.GuildID, winner.DiscordID)
+					winnersList += fmt.Sprintf("%s - **Won $%.1f** (Anti-Anti-Bet!)\n", cardHolderUsername, winner.Payout)
+				}
+			}
+
+			consumer := func(db *gorm.DB, user models.User, cardID int) error {
+				return cardService.PlayCardFromInventory(s, db, user, cardID)
+			}
+
+			jailRefund, jailApplied, err := cardService.ApplyGetOutOfJailIfApplicable(db, consumer, user, float64(entry.Amount))
+			if err != nil {
+				log.Printf("Error checking Get Out of Jail Free: %v", err)
+			}
+
+			if jailApplied && jailRefund > 0 {
+				user.Points += jailRefund
+				db.Save(&user)
+				if spreadDisplay != "" {
+					loserList += fmt.Sprintf("%s - Bet: %s %s - **Lost $%.0f** (Get Out of Jail Free: Full refund!)\n", username, betOption, spreadDisplay, float64(entry.Amount))
+				} else {
+					loserList += fmt.Sprintf("%s - Bet: %s - **Lost $%.0f** (Get Out of Jail Free: Full refund!)\n", username, betOption, float64(entry.Amount))
+				}
+				continue
+			}
+
+			hedgeRefund, hedgeApplied, err := cardService.ApplyEmotionalHedgeIfApplicable(db, consumer, user, bet, entry.Option, float64(entry.Amount), scoreDiff)
+			if err != nil {
+				log.Printf("Error checking Emotional Hedge: %v", err)
+			}
+
+			insuranceRefund, insuranceApplied, err := cardService.ApplyBetInsuranceIfApplicable(db, consumer, user, float64(entry.Amount), false)
+			if err != nil {
+				log.Printf("Error checking Bet Insurance (Loss): %v", err)
+			}
+
+			lossAmount := float64(entry.Amount)
+			modifiedLoss, hasGambler, err := cardService.ApplyGamblerIfAvailable(db, consumer, user, -lossAmount, false)
+			if err != nil {
+				log.Printf("Error checking Gambler (Loss): %v", err)
+				hasGambler = false
+			}
+
+			actualLoss := lossAmount
+			if hasGambler && modifiedLoss < -lossAmount {
+				actualLoss = -modifiedLoss
+			}
+
 			user.TotalBetsLost++
-			user.TotalPointsLost += float64(entry.Amount)
+			user.TotalPointsLost += actualLoss
+
+			if hedgeApplied && hedgeRefund > 0 {
+				user.Points += hedgeRefund
+			}
+
+			if insuranceApplied && insuranceRefund > 0 {
+				user.Points += insuranceRefund
+				lostPoolAmount -= insuranceRefund
+			}
+
 			db.Save(&user)
-			lostPoolAmount += float64(entry.Amount)
+			lostPoolAmount += actualLoss
+
+			hedgeMsg := ""
+			if hedgeApplied && hedgeRefund > 0 {
+				hedgeMsg = fmt.Sprintf(" (Emotional Hedge: Refunding $%.1f)", hedgeRefund)
+			} else if hedgeApplied {
+				hedgeMsg = " (Emotional Hedge: consumed)"
+			}
+
+			insuranceMsg := ""
+			if insuranceApplied && insuranceRefund > 0 {
+				insuranceMsg = fmt.Sprintf(" (Bet Insurance: Refunding $%.1f)", insuranceRefund)
+			} else if insuranceApplied {
+				insuranceMsg = " (Bet Insurance: consumed)"
+			}
+
+			gamblerMsg := ""
+			if hasGambler {
+				if actualLoss > lossAmount {
+					gamblerMsg = " (The Gambler: 2x loss!)"
+				} else {
+					gamblerMsg = " (The Gambler: consumed, no double)"
+				}
+			}
+
 			if spreadDisplay != "" {
-				loserList += fmt.Sprintf("%s - Bet: %s %s - **Lost $%d**\n", username, betOption, spreadDisplay, entry.Amount)
+				loserList += fmt.Sprintf("%s - Bet: %s %s - **Lost $%.0f**%s%s%s\n", username, betOption, spreadDisplay, actualLoss, hedgeMsg, insuranceMsg, gamblerMsg)
 			} else {
-				loserList += fmt.Sprintf("%s - Bet: %s - **Lost $%d**\n", username, betOption, entry.Amount)
+				loserList += fmt.Sprintf("%s - Bet: %s - **Lost $%.0f**%s%s%s\n", username, betOption, actualLoss, hedgeMsg, insuranceMsg, gamblerMsg)
 			}
 		}
 	}
 
-	// Add lost bet amounts to guild pool (atomic update to prevent race conditions)
+	if totalWinningPayouts > 0 {
+		vampirePayout, vampireWinners, vampireApplied, err := cardService.ApplyVampireIfApplicable(db, bet.GuildID, totalWinningPayouts, winnerDiscordIDs)
+		if err != nil {
+			log.Printf("Error checking Vampire: %v", err)
+		} else if vampireApplied && vampirePayout > 0 {
+			totalPayout += vampirePayout
+			if len(vampireWinners) > 0 {
+				for _, winner := range vampireWinners {
+					cardHolderUsername := common.GetUsernameWithDB(db, s, bet.GuildID, winner.DiscordID)
+					winnersList += fmt.Sprintf("%s - **Won $%.1f** (Vampire)\n", cardHolderUsername, winner.Payout)
+				}
+			}
+		}
+	}
+
 	if lostPoolAmount > 0 {
 		db.Model(&models.Guild{}).Where("id = ?", guild.ID).UpdateColumn("pool", gorm.Expr("pool + ?", lostPoolAmount))
 	}
@@ -359,11 +610,9 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 	db.Save(&bet)
 	db.Model(&bet).UpdateColumn("paid", true).UpdateColumn("active", false)
 
-	// Update parlays using the provided winning option and score difference
 	if winningOption > 0 {
 		updateErr := betService.UpdateParlaysOnBetResolution(s, db, bet.ID, winningOption, scoreDiff)
 		if updateErr != nil {
-			// Log error but don't fail the bet resolution
 			log.Printf("Error updating parlays for bet %d: %v\n", bet.ID, updateErr)
 		}
 	}

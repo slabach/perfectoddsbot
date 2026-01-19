@@ -1,6 +1,7 @@
 package guildService
 
 import (
+	"fmt"
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/common"
 	"strconv"
@@ -18,7 +19,17 @@ func GetGuildInfo(s *discordgo.Session, db *gorm.DB, guildID string, channelId s
 		if err != nil {
 			return nil, err
 		}
-		newGuild := &models.Guild{GuildID: guildID, BetChannelID: channelId, GuildName: guildInfo.Name, PointsPerMessage: 0.5, StartingPoints: 1000, Pool: 0}
+		newGuild := &models.Guild{
+			GuildID:                 guildID,
+			BetChannelID:            channelId,
+			GuildName:               guildInfo.Name,
+			PointsPerMessage:        0.5,
+			StartingPoints:          1000,
+			Pool:                    0,
+			CardDrawCost:            10,
+			CardDrawCooldownMinutes: 60,
+			CardDrawingEnabled:      true,
+		}
 		newGuildResult := db.Create(newGuild)
 		if newGuildResult.Error != nil {
 			return nil, newGuildResult.Error
@@ -83,8 +94,6 @@ func SetPointsPerMessage(s *discordgo.Session, i *discordgo.InteractionCreate, d
 		common.SendError(s, i, err, db)
 		return
 	}
-
-	return
 }
 
 func SetStartingPoints(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
@@ -130,8 +139,6 @@ func SetStartingPoints(s *discordgo.Session, i *discordgo.InteractionCreate, db 
 		common.SendError(s, i, err, db)
 		return
 	}
-
-	return
 }
 
 func SetBettingChannel(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
@@ -184,5 +191,49 @@ func SubscribeToTeam(s *discordgo.Session, i *discordgo.InteractionCreate, db *g
 			common.SendError(s, i, err, db)
 			return
 		}
+	}
+}
+
+func ToggleCardDrawing(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
+	if !common.IsAdmin(s, i) {
+		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "You are not authorized to use this command.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		if err != nil {
+			common.SendError(s, i, err, db)
+			return
+		}
+		return
+	}
+
+	guild, err := GetGuildInfo(s, db, i.GuildID, i.ChannelID)
+	if err != nil {
+		common.SendError(s, i, err, db)
+		return
+	}
+
+	// Toggle the setting
+	guild.CardDrawingEnabled = !guild.CardDrawingEnabled
+	db.Save(&guild)
+
+	status := "enabled"
+	if !guild.CardDrawingEnabled {
+		status = "disabled"
+	}
+
+	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: fmt.Sprintf("Card drawing has been %s for this server.", status),
+			Flags:   discordgo.MessageFlagsEphemeral,
+		},
+	})
+	if err != nil {
+		common.SendError(s, i, err, db)
+		return
 	}
 }

@@ -105,6 +105,11 @@ func CalculatePayout(amount int, option int, bet models.Bet) float64 {
 	return float64(amount + (amount*100)/-odds)
 }
 
+// CalculateSimplePayout calculates payout at even odds (+100), returning 2x the original amount
+func CalculateSimplePayout(amount float64) float64 {
+	return amount * 2.0
+}
+
 // CalculateParlayOddsMultiplier calculates the combined odds multiplier for a parlay
 // Takes a slice of odds (as integers in American format) and returns the multiplier
 func CalculateParlayOddsMultiplier(oddsList []int) float64 {

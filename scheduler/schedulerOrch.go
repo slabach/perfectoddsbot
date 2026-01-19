@@ -2,11 +2,12 @@ package scheduler
 
 import (
 	"fmt"
+	"perfectOddsBot/models"
+	"perfectOddsBot/scheduler/scheduler_jobs"
+
 	"github.com/bwmarrin/discordgo"
 	"github.com/robfig/cron/v3"
 	"gorm.io/gorm"
-	"perfectOddsBot/models"
-	"perfectOddsBot/scheduler/scheduler_jobs"
 )
 
 func SetupCron(s *discordgo.Session, db *gorm.DB) {
@@ -77,6 +78,20 @@ func SetupCron(s *discordgo.Session, db *gorm.DB) {
 	_, err = cronService.AddFunc("0 0 */1 * 1-5 *", func() {
 		// // Every hour, January through May
 		err := scheduler_jobs.CheckSubscribedCBBTeam(s, db)
+		if err != nil {
+			fmt.Println(err)
+		}
+	})
+
+	_, err = cronService.AddFunc("0 0 */1 * * *", func() {
+		// Runs every hour to collect Loan Shark debts
+		err := scheduler_jobs.CheckLoanShark(s, db)
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		// // Runs every hour to expire Vampire cards after 24 hours
+		err = scheduler_jobs.CheckVampire(s, db)
 		if err != nil {
 			fmt.Println(err)
 		}

@@ -5,3 +5,5 @@
 /.idea/vcs.xml
 /.idea/*
 perfectOddsBot
+/.cache
+/.gocache
