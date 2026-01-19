@@ -63,7 +63,7 @@ func registerCommonCards(deck *[]models.Card) {
 		{
 			ID:          10,
 			Name:        "Hole in Pocket",
-			Description: "Lose 50 points to the Pool.",
+			Description: "Lose 5% of your total points to the Pool.",
 			Rarity:      "Common",
 			Weight:      W_Common,
 			Handler:     handleHoleInPocket,
@@ -71,7 +71,7 @@ func registerCommonCards(deck *[]models.Card) {
 		{
 			ID:          11,
 			Name:        "Piggy Bank",
-			Description: "Gain 50 points from the void.",
+			Description: "Gain 5% of your total points from the void.",
 			Rarity:      "Common",
 			Weight:      W_Common,
 			Handler:     handlePiggyBank,
@@ -208,6 +208,5 @@ func registerCommonCards(deck *[]models.Card) {
 		},
 	}
 
-	// Add to deck
 	*deck = append(*deck, commonCards...)
 }

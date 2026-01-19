@@ -16,7 +16,6 @@ import (
 )
 
 func IsAdmin(s *discordgo.Session, i *discordgo.InteractionCreate) bool {
-	// Use member data from the interaction - no privileged intent needed
 	if i.Member == nil {
 		return false
 	}
@@ -105,13 +104,10 @@ func CalculatePayout(amount int, option int, bet models.Bet) float64 {
 	return float64(amount + (amount*100)/-odds)
 }
 
-// CalculateSimplePayout calculates payout at even odds (+100), returning 2x the original amount
 func CalculateSimplePayout(amount float64) float64 {
 	return amount * 2.0
 }
 
-// CalculateParlayOddsMultiplier calculates the combined odds multiplier for a parlay
-// Takes a slice of odds (as integers in American format) and returns the multiplier
 func CalculateParlayOddsMultiplier(oddsList []int) float64 {
 	if len(oddsList) == 0 {
 		return 1.0
@@ -120,10 +116,8 @@ func CalculateParlayOddsMultiplier(oddsList []int) float64 {
 	multiplier := 1.0
 	for _, odds := range oddsList {
 		if odds > 0 {
-			// Positive odds: multiplier = (odds/100) + 1
 			multiplier *= (float64(odds) / 100.0) + 1.0
 		} else {
-			// Negative odds: multiplier = (100/abs(odds)) + 1
 			multiplier *= (100.0 / float64(-odds)) + 1.0
 		}
 	}
@@ -131,12 +125,10 @@ func CalculateParlayOddsMultiplier(oddsList []int) float64 {
 	return multiplier
 }
 
-// CalculateParlayPayout calculates the payout for a parlay given the amount and odds multiplier
 func CalculateParlayPayout(amount int, oddsMultiplier float64) float64 {
 	return float64(amount) * oddsMultiplier
 }
 
-// GetOddsFromBet returns the odds for a specific option in a bet
 func GetOddsFromBet(bet models.Bet, option int) int {
 	if option == 1 {
 		return bet.Odds1
@@ -144,7 +136,6 @@ func GetOddsFromBet(bet models.Bet, option int) int {
 	return bet.Odds2
 }
 
-// GetUsernameFromUser extracts username from a discordgo.User object
 func GetUsernameFromUser(user *discordgo.User) string {
 	if user == nil {
 		return "Unknown User"
@@ -159,7 +150,6 @@ func GetUsernameFromUser(user *discordgo.User) string {
 	return username
 }
 
-// UpdateUserUsername updates the username field in the database if it's different
 func UpdateUserUsername(db *gorm.DB, user *models.User, username string) {
 	if user.Username == nil || *user.Username != username {
 		user.Username = &username
@@ -168,8 +158,6 @@ func UpdateUserUsername(db *gorm.DB, user *models.User, username string) {
 }
 
 func GetUsername(s *discordgo.Session, guildId string, userId string) string {
-	// This function is deprecated - use GetUsernameWithDB instead
-	// Try to get from guild member if available in state (without members intent, this may be empty)
 	if guild, err := s.State.Guild(guildId); err == nil && guild != nil {
 		for _, member := range guild.Members {
 			if member.User != nil && member.User.ID == userId {
@@ -180,9 +168,7 @@ func GetUsername(s *discordgo.Session, guildId string, userId string) string {
 	return "Unknown User"
 }
 
-// GetUsernameWithDB gets username from database first, then falls back to state cache
 func GetUsernameWithDB(db *gorm.DB, s *discordgo.Session, guildId string, userId string) string {
-	// First try to get from database (most reliable)
 	var user models.User
 	if err := db.Where("discord_id = ? AND guild_id = ?", userId, guildId).First(&user).Error; err == nil {
 		if user.Username != nil && *user.Username != "" {
@@ -190,7 +176,6 @@ func GetUsernameWithDB(db *gorm.DB, s *discordgo.Session, guildId string, userId
 		}
 	}
 
-	// Fallback to state cache (limited without members intent)
 	if guild, err := s.State.Guild(guildId); err == nil && guild != nil {
 		for _, member := range guild.Members {
 			if member.User != nil && member.User.ID == userId {
@@ -310,7 +295,6 @@ func Contains[T comparable](s []T, e T) bool {
 func PickLine(lines []external.CFBD_Line) (*external.CFBD_Line, error) {
 	preferredProviders := []string{"ESPN Bet", "Draft Kings", "DraftKings", "Bovada"}
 
-	// First pass: prefer lines with both spread and moneyline data
 	for _, provider := range preferredProviders {
 		for _, line := range lines {
 			if line.Provider == provider && line.Spread != nil && line.HomeMoneyline != nil && line.AwayMoneyline != nil {
@@ -319,7 +303,6 @@ func PickLine(lines []external.CFBD_Line) (*external.CFBD_Line, error) {
 		}
 	}
 
-	// Second pass: any line from preferred provider with spread
 	for _, provider := range preferredProviders {
 		for _, line := range lines {
 			if line.Provider == provider && line.Spread != nil {
@@ -334,7 +317,6 @@ func PickLine(lines []external.CFBD_Line) (*external.CFBD_Line, error) {
 func PickESPNLine(lines external.ESPN_Lines) (*external.ESPN_Line, error) {
 	preferredProviders := []string{"ESPN BET", "Draft Kings", "DraftKings", "Bovada"}
 
-	// First pass: prefer lines with both spread and moneyline data
 	for _, provider := range preferredProviders {
 		for _, line := range lines.Items {
 			if line.Provider.Name == provider && line.HomeTeamOdds.MoneyLine != 0 && line.AwayTeamOdds.MoneyLine != 0 {
@@ -343,7 +325,6 @@ func PickESPNLine(lines external.ESPN_Lines) (*external.ESPN_Line, error) {
 		}
 	}
 
-	// Second pass: any line from preferred provider
 	for _, provider := range preferredProviders {
 		for _, line := range lines.Items {
 			if line.Provider.Name == provider {
@@ -359,9 +340,7 @@ func GetSchoolName(s string) string {
 	parts := strings.Fields(s)
 	if len(parts) > 1 {
 		last := parts[len(parts)-1]
-		// Check if last starts with + or - and is a number
 		if strings.HasPrefix(last, "+") || strings.HasPrefix(last, "-") {
-			// Try parsing
 			_, err := strconv.ParseFloat(last, 64)
 			if err == nil {
 				return strings.TrimSuffix(s, " "+last)
@@ -382,13 +361,8 @@ func GetSchoolName(s string) string {
 // Returns true if the bet entry wins, false otherwise.
 func CalculateBetEntryWin(option int, scoreDiff int, spread float64) bool {
 	if option == 1 {
-		// Option 1: homeTeam + spread wins if (homeScore + spread) > awayScore
-		// i.e., if scoreDiff > -spread
 		return float64(scoreDiff) > -spread
 	} else {
-		// Option 2: awayTeam - spread wins if (awayScore - spread) > homeScore
-		// i.e., if (awayScore - homeScore) > spread
-		// i.e., if -scoreDiff > spread
 		return float64(-scoreDiff) > spread
 	}
 }

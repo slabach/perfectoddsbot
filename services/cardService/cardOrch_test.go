@@ -40,12 +40,10 @@ func TestApplyDoubleDownIfAvailable(t *testing.T) {
 		user := models.User{ID: 1, GuildID: "guild1"}
 		originalPayout := 100.0
 
-		// Expect check for card
 		mock.ExpectQuery("SELECT count\\(\\*\\) FROM `user_inventories`").
 			WithArgs(user.ID, user.GuildID, cards.DoubleDownCardID).
 			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 
-		// Mock consumer
 		consumed := false
 		consumer := func(db *gorm.DB, u models.User, cardID int) error {
 			if u.ID != user.ID {
@@ -90,7 +88,6 @@ func TestApplyDoubleDownIfAvailable(t *testing.T) {
 		user := models.User{ID: 1, GuildID: "guild1"}
 		originalPayout := 100.0
 
-		// Expect check for card - return 0
 		mock.ExpectQuery("SELECT count\\(\\*\\) FROM `user_inventories`").
 			WithArgs(user.ID, user.GuildID, cards.DoubleDownCardID).
 			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
@@ -129,7 +126,6 @@ func TestApplyDoubleDownIfAvailable(t *testing.T) {
 		user := models.User{ID: 1, GuildID: "guild1"}
 		originalPayout := 100.0
 
-		// Expect check for card - return error
 		mock.ExpectQuery("SELECT count\\(\\*\\) FROM `user_inventories`").
 			WithArgs(user.ID, user.GuildID, cards.DoubleDownCardID).
 			WillReturnError(errors.New("db error"))
@@ -171,21 +167,17 @@ func TestApplyEmotionalHedgeIfApplicable(t *testing.T) {
 		bet := models.Bet{Option1: "Team A", Option2: "Team B", GuildID: "guild1"}
 		subscribedTeam := "Team A"
 
-		// 1. Check user has card
 		mock.ExpectQuery("SELECT count\\(\\*\\) FROM `user_inventories`").
 			WithArgs(user.ID, user.GuildID, cards.EmotionalHedgeCardID).
 			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 
-		// 2. Check guild subscription
 		mock.ExpectQuery("SELECT \\* FROM `guilds`").
 			WithArgs(user.GuildID, 1).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "guild_id", "subscribed_team"}).
 				AddRow(1, "guild1", subscribedTeam))
 
-		// User picks Team A (Option 1)
 		userPick := 1
 		betAmount := 100.0
-		// Team A lost: Option 1 (Team A) score < Option 2 (Team B) score -> scoreDiff < 0
 		scoreDiff := -10
 
 		consumed := false
@@ -235,10 +227,8 @@ func TestApplyEmotionalHedgeIfApplicable(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{"id", "guild_id", "subscribed_team"}).
 				AddRow(1, "guild1", subscribedTeam))
 
-		// User picks Team A
 		userPick := 1
 		betAmount := 100.0
-		// Team A won: scoreDiff > 0
 		scoreDiff := 10
 
 		consumed := false
@@ -288,7 +278,6 @@ func TestApplyEmotionalHedgeIfApplicable(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{"id", "guild_id", "subscribed_team"}).
 				AddRow(1, "guild1", subscribedTeam))
 
-		// User picks Team B (Option 2)
 		userPick := 2
 		betAmount := 100.0
 		scoreDiff := -10
@@ -327,7 +316,6 @@ func TestApplyEmotionalHedgeIfApplicable(t *testing.T) {
 		user := models.User{ID: 1, GuildID: "guild1"}
 		bet := models.Bet{Option1: "Team A", Option2: "Team B", GuildID: "guild1"}
 
-		// Expect check for card - return 0
 		mock.ExpectQuery("SELECT count\\(\\*\\) FROM `user_inventories`").
 			WithArgs(user.ID, user.GuildID, cards.EmotionalHedgeCardID).
 			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
@@ -368,10 +356,8 @@ func TestApplyEmotionalHedgeIfApplicable(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{"id", "guild_id", "subscribed_team"}).
 				AddRow(1, "guild1", subscribedTeam))
 
-		// User picks Team A
 		userPick := 1
 		betAmount := 100.0
-		// scoreDiff = 0 means we can't determine the actual game result (e.g., manually resolved bet)
 		scoreDiff := 0
 
 		consumed := false
@@ -414,12 +400,10 @@ func TestApplyBetInsuranceIfApplicable(t *testing.T) {
 		user := models.User{ID: 1, GuildID: "guild1"}
 		betAmount := 100.0
 
-		// Expect check for card
 		mock.ExpectQuery("SELECT count\\(\\*\\) FROM `user_inventories`").
 			WithArgs(user.ID, user.GuildID, cards.BetInsuranceCardID).
 			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 
-		// Mock consumer
 		consumed := false
 		consumer := func(db *gorm.DB, u models.User, cardID int) error {
 			if u.ID != user.ID {
@@ -464,7 +448,6 @@ func TestApplyBetInsuranceIfApplicable(t *testing.T) {
 		user := models.User{ID: 1, GuildID: "guild1"}
 		betAmount := 100.0
 
-		// Expect check for card
 		mock.ExpectQuery("SELECT count\\(\\*\\) FROM `user_inventories`").
 			WithArgs(user.ID, user.GuildID, cards.BetInsuranceCardID).
 			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
@@ -507,7 +490,6 @@ func TestApplyBetInsuranceIfApplicable(t *testing.T) {
 		user := models.User{ID: 1, GuildID: "guild1"}
 		betAmount := 100.0
 
-		// Expect check for card - return 0
 		mock.ExpectQuery("SELECT count\\(\\*\\) FROM `user_inventories`").
 			WithArgs(user.ID, user.GuildID, cards.BetInsuranceCardID).
 			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
@@ -546,7 +528,6 @@ func TestApplyBetInsuranceIfApplicable(t *testing.T) {
 		user := models.User{ID: 1, GuildID: "guild1"}
 		betAmount := 100.0
 
-		// Expect check for card - return error
 		mock.ExpectQuery("SELECT count\\(\\*\\) FROM `user_inventories`").
 			WithArgs(user.ID, user.GuildID, cards.BetInsuranceCardID).
 			WillReturnError(errors.New("db error"))
@@ -666,7 +647,7 @@ func TestApplyUnoReverseIfApplicable(t *testing.T) {
 
 		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
 			WithArgs(user.ID, user.GuildID, cards.UnoReverseCardID, betID, 1).
-			WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "guild_id", "card_id", "target_bet_id"})) // Empty result
+			WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "guild_id", "card_id", "target_bet_id"}))
 
 		applied, newIsWin, err := ApplyUnoReverseIfApplicable(db, user, betID, true)
 
@@ -792,7 +773,7 @@ func TestApplyAntiAntiBetIfApplicable(t *testing.T) {
 		if !applied {
 			t.Error("Expected card to be applied")
 		}
-		expectedPayout := betAmount * 2.0 // Even odds (+100)
+		expectedPayout := betAmount * 2.0
 		if payout != expectedPayout {
 			t.Errorf("Expected payout %.2f, got %.2f", expectedPayout, payout)
 		}
@@ -976,25 +957,22 @@ func TestApplyVampireIfApplicable(t *testing.T) {
 
 		guildID := "guild1"
 		totalWinningPayouts := 1000.0
-		expectedVampirePayout := 10.0 // 1% of 1000
+		expectedVampirePayout := 10.0
 
 		vampireHolderID := uint(2)
 		vampireHolderDiscordID := "vampire123"
 
-		// Mock query for active vampire cards (created_at >= 24 hours ago)
-		createdAt := time.Now().Add(-12 * time.Hour) // Less than 24 hours ago, so it's active
+		createdAt := time.Now().Add(-12 * time.Hour)
 		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
 			WithArgs(guildID, cards.VampireCardID, sqlmock.AnyArg()).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "created_at", "updated_at", "deleted_at", "user_id", "guild_id", "card_id", "target_bet_id", "target_user_id", "bet_amount"}).
 				AddRow(1, createdAt, createdAt, nil, vampireHolderID, guildID, cards.VampireCardID, nil, nil, 0.0))
 
-		// Mock query for vampire holder user
 		mock.ExpectQuery("SELECT \\* FROM `users`").
 			WithArgs(vampireHolderID, 1).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "discord_id", "guild_id", "points"}).
 				AddRow(vampireHolderID, vampireHolderDiscordID, guildID, 500.0))
 
-		// Mock update for vampire holder points
 		mock.ExpectBegin()
 		mock.ExpectExec("UPDATE `users` SET `points`=").
 			WithArgs(sqlmock.AnyArg(), vampireHolderID).
@@ -1002,7 +980,7 @@ func TestApplyVampireIfApplicable(t *testing.T) {
 		mock.ExpectCommit()
 
 		winnerDiscordIDs := make(map[string]float64)
-		winnerDiscordIDs["winner123"] = 500.0 // Other winner with $500 payout, not the vampire holder
+		winnerDiscordIDs["winner123"] = 500.0
 		totalVampirePayout, winners, applied, err := ApplyVampireIfApplicable(db, guildID, totalWinningPayouts, winnerDiscordIDs)
 
 		if err != nil {
@@ -1040,42 +1018,37 @@ func TestApplyVampireIfApplicable(t *testing.T) {
 
 		guildID := "guild1"
 		totalWinningPayouts := 350.0
-		expectedVampirePayout := 3.5 // 1% of 350
+		expectedVampirePayout := 3.5
 
 		vampireHolder1ID := uint(2)
 		vampireHolder1DiscordID := "vampire123"
 		vampireHolder2ID := uint(3)
 		vampireHolder2DiscordID := "vampire456"
 
-		// Mock query for active vampire cards
-		createdAt1 := time.Now().Add(-12 * time.Hour) // Less than 24 hours ago, so it's active
-		createdAt2 := time.Now().Add(-12 * time.Hour) // Less than 24 hours ago, so it's active
+		createdAt1 := time.Now().Add(-12 * time.Hour)
+		createdAt2 := time.Now().Add(-12 * time.Hour)
 		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
 			WithArgs(guildID, cards.VampireCardID, sqlmock.AnyArg()).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "created_at", "updated_at", "deleted_at", "user_id", "guild_id", "card_id", "target_bet_id", "target_user_id", "bet_amount"}).
 				AddRow(1, createdAt1, createdAt1, nil, vampireHolder1ID, guildID, cards.VampireCardID, nil, nil, 0.0).
 				AddRow(2, createdAt2, createdAt2, nil, vampireHolder2ID, guildID, cards.VampireCardID, nil, nil, 0.0))
 
-		// Mock query for first vampire holder
 		mock.ExpectQuery("SELECT \\* FROM `users`").
 			WithArgs(vampireHolder1ID, 1).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "discord_id", "guild_id", "points"}).
 				AddRow(vampireHolder1ID, vampireHolder1DiscordID, guildID, 500.0))
 
-		// Mock update for first vampire holder
 		mock.ExpectBegin()
 		mock.ExpectExec("UPDATE `users` SET `points`=").
 			WithArgs(sqlmock.AnyArg(), vampireHolder1ID).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 		mock.ExpectCommit()
 
-		// Mock query for second vampire holder
 		mock.ExpectQuery("SELECT \\* FROM `users`").
 			WithArgs(vampireHolder2ID, 1).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "discord_id", "guild_id", "points"}).
 				AddRow(vampireHolder2ID, vampireHolder2DiscordID, guildID, 600.0))
 
-		// Mock update for second vampire holder
 		mock.ExpectBegin()
 		mock.ExpectExec("UPDATE `users` SET `points`=").
 			WithArgs(sqlmock.AnyArg(), vampireHolder2ID).
@@ -1083,7 +1056,7 @@ func TestApplyVampireIfApplicable(t *testing.T) {
 		mock.ExpectCommit()
 
 		winnerDiscordIDs := make(map[string]float64)
-		winnerDiscordIDs["winner123"] = 500.0 // Other winner with $500 payout, not the vampire holder
+		winnerDiscordIDs["winner123"] = 500.0
 		totalVampirePayout, winners, applied, err := ApplyVampireIfApplicable(db, guildID, totalWinningPayouts, winnerDiscordIDs)
 
 		if err != nil {
@@ -1092,7 +1065,7 @@ func TestApplyVampireIfApplicable(t *testing.T) {
 		if !applied {
 			t.Error("Expected vampire to be applied")
 		}
-		expectedTotalPayout := expectedVampirePayout * 2 // Two vampires
+		expectedTotalPayout := expectedVampirePayout * 2
 		if totalVampirePayout != expectedTotalPayout {
 			t.Errorf("Expected total vampire payout %.2f, got %.2f", expectedTotalPayout, totalVampirePayout)
 		}
@@ -1123,13 +1096,12 @@ func TestApplyVampireIfApplicable(t *testing.T) {
 		guildID := "guild1"
 		totalWinningPayouts := 1000.0
 
-		// Mock query returning no rows
 		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
 			WithArgs(guildID, cards.VampireCardID, sqlmock.AnyArg()).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "created_at", "updated_at", "deleted_at", "user_id", "guild_id", "card_id", "target_bet_id", "target_user_id", "bet_amount"}))
 
 		winnerDiscordIDs := make(map[string]float64)
-		winnerDiscordIDs["winner123"] = 500.0 // Other winner with $500 payout, not the vampire holder
+		winnerDiscordIDs["winner123"] = 500.0
 		totalVampirePayout, winners, applied, err := ApplyVampireIfApplicable(db, guildID, totalWinningPayouts, winnerDiscordIDs)
 
 		if err != nil {
@@ -1161,25 +1133,22 @@ func TestApplyVampireIfApplicable(t *testing.T) {
 
 		guildID := "guild1"
 		totalWinningPayouts := 0.0
-		expectedVampirePayout := 0.0 // 1% of 0
+		expectedVampirePayout := 0.0
 
 		vampireHolderID := uint(2)
 		vampireHolderDiscordID := "vampire123"
 
-		// Mock query for active vampire cards
-		createdAt := time.Now().Add(-12 * time.Hour) // Less than 24 hours ago, so it's active
+		createdAt := time.Now().Add(-12 * time.Hour)
 		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
 			WithArgs(guildID, cards.VampireCardID, sqlmock.AnyArg()).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "created_at", "updated_at", "deleted_at", "user_id", "guild_id", "card_id", "target_bet_id", "target_user_id", "bet_amount"}).
 				AddRow(1, createdAt, createdAt, nil, vampireHolderID, guildID, cards.VampireCardID, nil, nil, 0.0))
 
-		// Mock query for vampire holder user
 		mock.ExpectQuery("SELECT \\* FROM `users`").
 			WithArgs(vampireHolderID, 1).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "discord_id", "guild_id", "points"}).
 				AddRow(vampireHolderID, vampireHolderDiscordID, guildID, 500.0))
 
-		// Mock update for vampire holder points (even though it's 0, it still executes)
 		mock.ExpectBegin()
 		mock.ExpectExec("UPDATE `users` SET `points`=").
 			WithArgs(sqlmock.AnyArg(), vampireHolderID).
@@ -1187,7 +1156,6 @@ func TestApplyVampireIfApplicable(t *testing.T) {
 		mock.ExpectCommit()
 
 		winnerDiscordIDs := make(map[string]float64)
-		// No winners when totalWinningPayouts = 0
 		totalVampirePayout, winners, applied, err := ApplyVampireIfApplicable(db, guildID, totalWinningPayouts, winnerDiscordIDs)
 
 		if err != nil {
@@ -1226,23 +1194,19 @@ func TestApplyVampireIfApplicable(t *testing.T) {
 		vampireHolderID := uint(2)
 		vampireHolderDiscordID := "vampire123"
 
-		// Mock query for active vampire cards
-		createdAt := time.Now().Add(-12 * time.Hour) // Less than 24 hours ago, so it's active
+		createdAt := time.Now().Add(-12 * time.Hour)
 		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
 			WithArgs(guildID, cards.VampireCardID, sqlmock.AnyArg()).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "created_at", "updated_at", "deleted_at", "user_id", "guild_id", "card_id", "target_bet_id", "target_user_id", "bet_amount"}).
 				AddRow(1, createdAt, createdAt, nil, vampireHolderID, guildID, cards.VampireCardID, nil, nil, 0.0))
 
-		// Mock query for vampire holder user
 		mock.ExpectQuery("SELECT \\* FROM `users`").
 			WithArgs(vampireHolderID, 1).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "discord_id", "guild_id", "points"}).
 				AddRow(vampireHolderID, vampireHolderDiscordID, guildID, 500.0))
 
-		// Note: No update should be executed because the vampire holder is a winner
-
 		winnerDiscordIDs := make(map[string]float64)
-		winnerDiscordIDs[vampireHolderDiscordID] = 1000.0 // Vampire holder won $1000
+		winnerDiscordIDs[vampireHolderDiscordID] = 1000.0
 		totalVampirePayout, winners, applied, err := ApplyVampireIfApplicable(db, guildID, totalWinningPayouts, winnerDiscordIDs)
 
 		if err != nil {
@@ -1275,7 +1239,6 @@ func TestApplyVampireIfApplicable(t *testing.T) {
 		guildID := "guild1"
 		totalWinningPayouts := 1000.0
 
-		// Mock query error
 		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
 			WithArgs(guildID, cards.VampireCardID, sqlmock.AnyArg()).
 			WillReturnError(errors.New("db error"))
@@ -1309,12 +1272,10 @@ func TestApplyGamblerIfAvailable(t *testing.T) {
 		user := models.User{ID: 1, GuildID: "guild1"}
 		originalPayout := 100.0
 
-		// Expect check for card
 		mock.ExpectQuery("SELECT count\\(\\*\\) FROM `user_inventories`").
 			WithArgs(user.ID, user.GuildID, cards.GamblerCardID).
 			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 
-		// Mock consumer
 		consumed := false
 		consumer := func(db *gorm.DB, u models.User, cardID int) error {
 			if u.ID != user.ID {
@@ -1338,7 +1299,6 @@ func TestApplyGamblerIfAvailable(t *testing.T) {
 		if !consumed {
 			t.Error("Expected consumer to be called")
 		}
-		// Payout may be original or doubled (50/50), but should always be consumed
 		if payout != originalPayout && payout != originalPayout*2 {
 			t.Errorf("Expected payout to be %.2f or %.2f, got %.2f", originalPayout, originalPayout*2, payout)
 		}
@@ -1358,14 +1318,12 @@ func TestApplyGamblerIfAvailable(t *testing.T) {
 		}()
 
 		user := models.User{ID: 1, GuildID: "guild1"}
-		originalLoss := -100.0 // Negative for loss
+		originalLoss := -100.0
 
-		// Expect check for card
 		mock.ExpectQuery("SELECT count\\(\\*\\) FROM `user_inventories`").
 			WithArgs(user.ID, user.GuildID, cards.GamblerCardID).
 			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 
-		// Mock consumer
 		consumed := false
 		consumer := func(db *gorm.DB, u models.User, cardID int) error {
 			consumed = true
@@ -1383,7 +1341,6 @@ func TestApplyGamblerIfAvailable(t *testing.T) {
 		if !consumed {
 			t.Error("Expected consumer to be called")
 		}
-		// Loss may be original or doubled (50/50), but should always be consumed
 		if loss != originalLoss && loss != originalLoss*2 {
 			t.Errorf("Expected loss to be %.2f or %.2f, got %.2f", originalLoss, originalLoss*2, loss)
 		}
@@ -1405,7 +1362,6 @@ func TestApplyGamblerIfAvailable(t *testing.T) {
 		user := models.User{ID: 1, GuildID: "guild1"}
 		originalPayout := 100.0
 
-		// Expect check for card - return 0
 		mock.ExpectQuery("SELECT count\\(\\*\\) FROM `user_inventories`").
 			WithArgs(user.ID, user.GuildID, cards.GamblerCardID).
 			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
@@ -1444,7 +1400,6 @@ func TestApplyGamblerIfAvailable(t *testing.T) {
 		user := models.User{ID: 1, GuildID: "guild1"}
 		originalPayout := 100.0
 
-		// Expect check for card - return error
 		mock.ExpectQuery("SELECT count\\(\\*\\) FROM `user_inventories`").
 			WithArgs(user.ID, user.GuildID, cards.GamblerCardID).
 			WillReturnError(errors.New("db error"))

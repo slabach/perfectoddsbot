@@ -9,8 +9,8 @@ type Parlay struct {
 	User          User `gorm:"foreignKey:UserID"`
 	GuildID       string
 	Amount        int
-	TotalOdds     float64 // Combined odds multiplier
-	Status        string  // "pending", "won", "lost", "partial" (if any bet lost before all resolved)
+	TotalOdds     float64
+	Status        string
 	ParlayEntries []ParlayEntry
 }
 
@@ -20,9 +20,9 @@ type ParlayEntry struct {
 	ParlayID       uint
 	Parlay         Parlay `gorm:"foreignKey:ParlayID"`
 	BetID          uint
-	Bet            Bet   `gorm:"foreignKey:BetID"`
-	SelectedOption int   // 1 or 2, which option the user selected for this bet
-	Spread         *float64 // Spread at the time the parlay entry was created (nil for moneyline bets)
-	Resolved       bool  `gorm:"default:false"` // Whether this individual bet has been resolved
-	Won            *bool // true if won, false if lost, nil if not resolved yet
+	Bet            Bet `gorm:"foreignKey:BetID"`
+	SelectedOption int
+	Spread         *float64
+	Resolved       bool `gorm:"default:false"`
+	Won            *bool
 }

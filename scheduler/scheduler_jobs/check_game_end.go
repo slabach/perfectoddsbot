@@ -86,16 +86,13 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 
 					winningOption := 0
 					if bet.Spread == nil {
-						// Moneyline bet: winner is determined by actual game result
 						// Option 1 is home team, Option 2 is away team
 						if scoreDiff > 0 {
-							winningOption = 1 // Home team wins
+							winningOption = 1
 						} else if scoreDiff < 0 {
-							winningOption = 2 // Away team wins
+							winningOption = 2
 						}
 					} else {
-						// ATS bet: determine winner based on spread
-						// For ATS, we need to check which option would win
 						// Option 1 is home team + spread, Option 2 is away team - spread
 						if common.CalculateBetEntryWin(1, scoreDiff, *bet.Spread) {
 							winningOption = 1

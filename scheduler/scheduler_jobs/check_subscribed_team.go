@@ -36,7 +36,6 @@ func CheckSubscribedCFBTeam(s *discordgo.Session, db *gorm.DB) (err error) {
 
 	for _, guild := range guildList {
 		for _, game := range cfbdList {
-			// Skip if game is already complete (has scores)
 			if game.HomeScore != nil && game.AwayScore != nil {
 				continue
 			}
@@ -74,7 +73,6 @@ func CheckSubscribedCBBTeam(s *discordgo.Session, db *gorm.DB) (err error) {
 
 	for _, guild := range guildList {
 		for _, game := range espnList {
-			// Skip if game is already complete (status is final)
 			if game.Status.Type.Name == "STATUS_FINAL" {
 				continue
 			}

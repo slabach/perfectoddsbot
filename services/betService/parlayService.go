@@ -14,12 +14,11 @@ import (
 	"gorm.io/gorm"
 )
 
-// ParlaySelection stores the current state of a parlay being created
 type ParlaySelection struct {
 	BetIDs          []uint
-	SelectedOptions map[uint]int // betID -> option (1 or 2)
-	MessageID       string       // ID of the create parlay message
-	ChannelID       string       // Channel ID of the create parlay message
+	SelectedOptions map[uint]int
+	MessageID       string
+	ChannelID       string
 }
 
 var (
@@ -27,7 +26,6 @@ var (
 	parlaySelectionsMu  sync.RWMutex
 )
 
-// GetParlaySelection retrieves parlay selection for a given session ID
 func GetParlaySelection(sessionID string) (*ParlaySelection, bool) {
 	parlaySelectionsMu.RLock()
 	defer parlaySelectionsMu.RUnlock()
@@ -35,21 +33,18 @@ func GetParlaySelection(sessionID string) (*ParlaySelection, bool) {
 	return selection, exists
 }
 
-// StoreParlaySelection stores parlay selection for a given session ID
 func StoreParlaySelection(sessionID string, selection *ParlaySelection) {
 	parlaySelectionsMu.Lock()
 	defer parlaySelectionsMu.Unlock()
 	parlaySelectionsMap[sessionID] = selection
 }
 
-// CleanupParlaySelection removes parlay selection for a given session ID
 func CleanupParlaySelection(sessionID string) {
 	parlaySelectionsMu.Lock()
 	defer parlaySelectionsMu.Unlock()
 	delete(parlaySelectionsMap, sessionID)
 }
 
-// createProgressBar creates a visual progress bar using emoji
 func createProgressBar(selected, total int) string {
 	if total == 0 {
 		return "▱▱▱▱▱▱▱▱▱▱ 0%"
@@ -72,11 +67,9 @@ func createProgressBar(selected, total int) string {
 	return fmt.Sprintf("%s %d%% (%d/%d)", bar, percentage, selected, total)
 }
 
-// CreateParlaySelector shows available open bets that can be added to a parlay
 func CreateParlaySelector(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
 	var openBets []models.Bet
 
-	// Get all active, unpaid bets in the guild
 	result := db.Where("active = ? AND paid = ? AND guild_id = ?", true, false, i.GuildID).Find(&openBets)
 	if result.Error != nil {
 		common.SendError(s, i, result.Error, db)
@@ -116,16 +109,12 @@ func CreateParlaySelector(s *discordgo.Session, i *discordgo.InteractionCreate, 
 		})
 	}
 
-	// Generate unique session ID from interaction ID
 	sessionID := i.Interaction.ID
 
-	// Store the session data temporarily (we'll use a simple map for now, but in production you might want Redis)
-	// For now, we'll use the interaction ID as part of the custom ID
-
-	minValues := 2 // Minimum 2 bets for a parlay
+	minValues := 2
 	maxValues := len(openBets)
 	if maxValues > 10 {
-		maxValues = 10 // Discord limit is 25, but we'll limit to 10 for usability
+		maxValues = 10
 	}
 
 	content := fmt.Sprintf("Select **2-%d** bets to include in your parlay (you'll choose options for each bet next):", maxValues)
@@ -165,7 +154,6 @@ func CreateParlaySelector(s *discordgo.Session, i *discordgo.InteractionCreate, 
 	}
 }
 
-// HandleParlayBetSelection handles when user selects which bets to include in parlay
 func HandleParlayBetSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, customID string) error {
 	sessionID := strings.TrimPrefix(customID, "parlay_select_bets_")
 	selectedBetIDs := i.MessageComponentData().Values
@@ -184,7 +172,6 @@ func HandleParlayBetSelection(s *discordgo.Session, i *discordgo.InteractionCrea
 		return nil
 	}
 
-	// Fetch the selected bets
 	var bets []models.Bet
 	var betIDs []uint
 	for _, idStr := range selectedBetIDs {
@@ -210,17 +197,14 @@ func HandleParlayBetSelection(s *discordgo.Session, i *discordgo.InteractionCrea
 		return nil
 	}
 
-	// Store the selection in memory
 	selection := &ParlaySelection{
 		BetIDs:          betIDs,
 		SelectedOptions: make(map[uint]int),
 	}
 	StoreParlaySelection(sessionID, selection)
 
-	// Create embed showing bets and their options
 	var fields []*discordgo.MessageEmbedField
 	for idx, bet := range bets {
-		// Use compact inline format
 		fieldName := fmt.Sprintf("Bet %d", idx+1)
 		if len(bet.Description) > 60 {
 			fieldValue := fmt.Sprintf("**%s**\n1️⃣ %s (%s) | 2️⃣ %s (%s)",
@@ -245,7 +229,6 @@ func HandleParlayBetSelection(s *discordgo.Session, i *discordgo.InteractionCrea
 		}
 	}
 
-	// Progress indicator
 	progressBar := createProgressBar(0, len(bets))
 	description := fmt.Sprintf("%s\n\n📋 Select an option for each of the **%d** bets below:", progressBar, len(bets))
 
@@ -253,18 +236,16 @@ func HandleParlayBetSelection(s *discordgo.Session, i *discordgo.InteractionCrea
 		Title:       "🎯 Create Parlay",
 		Description: description,
 		Fields:      fields,
-		Color:       0x5865F2, // Discord blurple
+		Color:       0x5865F2,
 		Footer: &discordgo.MessageEmbedFooter{
 			Text: "Click the buttons below to select your picks • All selections must be made before submitting",
 		},
 	}
 
-	// Create buttons for each bet to select option
 	var actionRows []discordgo.MessageComponent
 	var currentRowComponents []discordgo.MessageComponent
 
 	for idx, bet := range bets {
-		// Start a new row if current row has 5 components (2 buttons per bet = 2.5 bets per row, so use 2)
 		if len(currentRowComponents) >= 4 {
 			actionRows = append(actionRows, discordgo.ActionsRow{Components: currentRowComponents})
 			currentRowComponents = []discordgo.MessageComponent{}
@@ -272,7 +253,6 @@ func HandleParlayBetSelection(s *discordgo.Session, i *discordgo.InteractionCrea
 
 		betIDStr := strconv.Itoa(int(bet.ID))
 
-		// Truncate option names for button labels - more compact
 		label1 := bet.Option1
 		if len(label1) > 70 {
 			label1 = label1[:67] + "..."
@@ -282,7 +262,6 @@ func HandleParlayBetSelection(s *discordgo.Session, i *discordgo.InteractionCrea
 			label2 = label2[:67] + "..."
 		}
 
-		// Use emoji prefix for better visual distinction
 		currentRowComponents = append(currentRowComponents,
 			discordgo.Button{
 				Label:    fmt.Sprintf("%d️⃣ %s", idx+1, label1),
@@ -297,19 +276,17 @@ func HandleParlayBetSelection(s *discordgo.Session, i *discordgo.InteractionCrea
 		)
 	}
 
-	// Add remaining buttons
 	if len(currentRowComponents) > 0 {
 		actionRows = append(actionRows, discordgo.ActionsRow{Components: currentRowComponents})
 	}
 
-	// Add submit and cancel buttons
 	actionRows = append(actionRows, discordgo.ActionsRow{
 		Components: []discordgo.MessageComponent{
 			discordgo.Button{
 				Label:    "Submit Parlay",
 				CustomID: fmt.Sprintf("parlay_submit_%s", sessionID),
 				Style:    discordgo.SuccessButton,
-				Disabled: true, // Disabled until all options are selected
+				Disabled: true,
 			},
 			discordgo.Button{
 				Label:    "Cancel",
@@ -334,9 +311,7 @@ func HandleParlayBetSelection(s *discordgo.Session, i *discordgo.InteractionCrea
 	return nil
 }
 
-// HandleParlayOptionSelection handles when user selects an option for a specific bet in the parlay
 func HandleParlayOptionSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, customID string) error {
-	// Parse custom ID: parlay_option_{sessionID}_{betID}_{option}
 	parts := strings.Split(customID, "_")
 	if len(parts) != 5 {
 		return fmt.Errorf("invalid parlay option custom ID format")
@@ -356,7 +331,6 @@ func HandleParlayOptionSelection(s *discordgo.Session, i *discordgo.InteractionC
 		return fmt.Errorf("invalid option value")
 	}
 
-	// Get the selection from memory
 	selection, exists := GetParlaySelection(sessionID)
 	if !exists {
 		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -372,20 +346,16 @@ func HandleParlayOptionSelection(s *discordgo.Session, i *discordgo.InteractionC
 		return nil
 	}
 
-	// Store message ID and channel ID if not already stored (from button click)
 	if selection.MessageID == "" && i.Message != nil {
 		selection.MessageID = i.Message.ID
 		selection.ChannelID = i.ChannelID
 	}
 
-	// Update the selection
 	selection.SelectedOptions[uint(betID)] = option
 	StoreParlaySelection(sessionID, selection)
 
-	// Check if all options are selected
 	allSelected := len(selection.SelectedOptions) == len(selection.BetIDs)
 
-	// Get the bet to show which option was selected
 	var bet models.Bet
 	db.First(&bet, betID)
 
@@ -394,12 +364,10 @@ func HandleParlayOptionSelection(s *discordgo.Session, i *discordgo.InteractionC
 		optionName = bet.Option2
 	}
 
-	// Update the message to show progress
 	var betFields []*discordgo.MessageEmbedField
 	var actionRows []discordgo.MessageComponent
 	var currentRowComponents []discordgo.MessageComponent
 
-	// Fetch all bets
 	var bets []models.Bet
 	db.Where("id IN ?", selection.BetIDs).Find(&bets)
 
@@ -419,7 +387,6 @@ func HandleParlayOptionSelection(s *discordgo.Session, i *discordgo.InteractionC
 				odds = bet.Odds2
 			}
 
-			// Compact format with selected option highlighted
 			if len(bet.Description) > 60 {
 				fieldValue = fmt.Sprintf("**%s**\n✅ **%s** (%s)\n⚪ %s (%s)",
 					bet.Description[:57]+"...",
@@ -444,7 +411,6 @@ func HandleParlayOptionSelection(s *discordgo.Session, i *discordgo.InteractionC
 				}
 			}
 		} else {
-			// Unselected format
 			if len(bet.Description) > 60 {
 				fieldValue = fmt.Sprintf("**%s**\n1️⃣ %s (%s)\n2️⃣ %s (%s)",
 					bet.Description[:57]+"...",
@@ -464,7 +430,6 @@ func HandleParlayOptionSelection(s *discordgo.Session, i *discordgo.InteractionC
 			Inline: true,
 		})
 
-		// Create buttons
 		if len(currentRowComponents) >= 4 {
 			actionRows = append(actionRows, discordgo.ActionsRow{Components: currentRowComponents})
 			currentRowComponents = []discordgo.MessageComponent{}
@@ -506,7 +471,6 @@ func HandleParlayOptionSelection(s *discordgo.Session, i *discordgo.InteractionC
 		actionRows = append(actionRows, discordgo.ActionsRow{Components: currentRowComponents})
 	}
 
-	// Add submit and cancel buttons
 	actionRows = append(actionRows, discordgo.ActionsRow{
 		Components: []discordgo.MessageComponent{
 			discordgo.Button{
@@ -523,18 +487,17 @@ func HandleParlayOptionSelection(s *discordgo.Session, i *discordgo.InteractionC
 		},
 	})
 
-	// Create progress bar and description
 	progressBar := createProgressBar(len(selection.SelectedOptions), len(selection.BetIDs))
 
 	var description string
 	var embedColor int
 	if allSelected {
 		description = fmt.Sprintf("%s\n\n✅ **All selections complete!** Ready to submit your parlay.\n\nLast selection: **%s**", progressBar, optionName)
-		embedColor = 0x57F287 // Discord green
+		embedColor = 0x57F287
 	} else {
 		description = fmt.Sprintf("%s\n\n📝 **Selected:** %s (Bet #%d)\n\n⏳ Continue selecting options for the remaining bets...",
 			progressBar, optionName, betID)
-		embedColor = 0x5865F2 // Discord blurple
+		embedColor = 0x5865F2
 	}
 
 	embed := &discordgo.MessageEmbed{
@@ -562,11 +525,9 @@ func HandleParlayOptionSelection(s *discordgo.Session, i *discordgo.InteractionC
 	return nil
 }
 
-// HandleParlaySubmit handles submitting the parlay and asking for bet amount
 func HandleParlaySubmit(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, customID string) error {
 	sessionID := strings.TrimPrefix(customID, "parlay_submit_")
 
-	// Get the selection
 	selection, exists := GetParlaySelection(sessionID)
 	if !exists {
 		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -582,14 +543,12 @@ func HandleParlaySubmit(s *discordgo.Session, i *discordgo.InteractionCreate, db
 		return nil
 	}
 
-	// Store message ID and channel ID from the button click
 	if i.Message != nil {
 		selection.MessageID = i.Message.ID
 		selection.ChannelID = i.ChannelID
 		StoreParlaySelection(sessionID, selection)
 	}
 
-	// Verify all options are selected
 	if len(selection.SelectedOptions) != len(selection.BetIDs) {
 		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -604,18 +563,15 @@ func HandleParlaySubmit(s *discordgo.Session, i *discordgo.InteractionCreate, db
 		return nil
 	}
 
-	// Get user and check points
 	var user models.User
 	result := db.FirstOrCreate(&user, models.User{DiscordID: i.Member.User.ID, GuildID: i.GuildID})
 	if result.Error != nil {
 		return result.Error
 	}
 
-	// Fetch bets to calculate odds
 	var bets []models.Bet
 	db.Where("id IN ?", selection.BetIDs).Find(&bets)
 
-	// Calculate combined odds
 	var oddsList []int
 	for _, bet := range bets {
 		option := selection.SelectedOptions[bet.ID]
@@ -626,8 +582,6 @@ func HandleParlaySubmit(s *discordgo.Session, i *discordgo.InteractionCreate, db
 	oddsMultiplier := common.CalculateParlayOddsMultiplier(oddsList)
 	totalOddsStr := fmt.Sprintf("%.2fx", oddsMultiplier)
 
-	// Show modal for bet amount (summary removed since it was editable)
-	// Combined odds included in title for reference
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseModal,
 		Data: &discordgo.InteractionResponseData{
@@ -652,11 +606,9 @@ func HandleParlaySubmit(s *discordgo.Session, i *discordgo.InteractionCreate, db
 	return err
 }
 
-// HandleParlayAmount handles the modal submission with parlay amount
 func HandleParlayAmount(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, customID string) error {
 	sessionID := strings.TrimPrefix(customID, "parlay_amount_")
 
-	// Get the selection
 	selection, exists := GetParlaySelection(sessionID)
 	if !exists {
 		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -672,7 +624,6 @@ func HandleParlayAmount(s *discordgo.Session, i *discordgo.InteractionCreate, db
 		return nil
 	}
 
-	// Get amount from modal
 	amountStr := i.ModalSubmitData().Components[0].(*discordgo.ActionsRow).Components[0].(*discordgo.TextInput).Value
 	amount, err := strconv.Atoi(amountStr)
 	if err != nil || amount <= 0 {
@@ -689,14 +640,12 @@ func HandleParlayAmount(s *discordgo.Session, i *discordgo.InteractionCreate, db
 		return nil
 	}
 
-	// Get user
 	var user models.User
 	result := db.FirstOrCreate(&user, models.User{DiscordID: i.Member.User.ID, GuildID: i.GuildID})
 	if result.Error != nil {
 		return result.Error
 	}
 
-	// Check if user has enough points
 	if user.Points < float64(amount) {
 		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -711,7 +660,6 @@ func HandleParlayAmount(s *discordgo.Session, i *discordgo.InteractionCreate, db
 		return nil
 	}
 
-	// Verify bets are still active
 	var bets []models.Bet
 	result = db.Where("id IN ? AND active = ? AND paid = ? AND guild_id = ?", selection.BetIDs, true, false, i.GuildID).Find(&bets)
 	if result.Error != nil || len(bets) != len(selection.BetIDs) {
@@ -729,7 +677,6 @@ func HandleParlayAmount(s *discordgo.Session, i *discordgo.InteractionCreate, db
 		return nil
 	}
 
-	// Calculate combined odds
 	var oddsList []int
 	for _, bet := range bets {
 		option := selection.SelectedOptions[bet.ID]
@@ -739,7 +686,6 @@ func HandleParlayAmount(s *discordgo.Session, i *discordgo.InteractionCreate, db
 
 	oddsMultiplier := common.CalculateParlayOddsMultiplier(oddsList)
 
-	// Create parlay
 	parlay := models.Parlay{
 		UserID:        user.ID,
 		GuildID:       i.GuildID,
@@ -754,28 +700,24 @@ func HandleParlayAmount(s *discordgo.Session, i *discordgo.InteractionCreate, db
 		return result.Error
 	}
 
-	// Create parlay entries
 	for _, bet := range bets {
 		option := selection.SelectedOptions[bet.ID]
 		parlayEntry := models.ParlayEntry{
 			ParlayID:       parlay.ID,
 			BetID:          bet.ID,
 			SelectedOption: option,
-			Spread:         bet.Spread, // Store the spread at the time the parlay entry is created
+			Spread:         bet.Spread,
 			Resolved:       false,
 			Won:            nil,
 		}
 		db.Create(&parlayEntry)
 	}
 
-	// Deduct points from user
 	user.Points -= float64(amount)
 	db.Save(&user)
 
-	// Calculate potential payout
 	potentialPayout := common.CalculateParlayPayout(amount, oddsMultiplier)
 
-	// Build summary message
 	var summary strings.Builder
 	summary.WriteString("**Parlay Created Successfully!**\n\n")
 	for idx, bet := range bets {
@@ -797,10 +739,7 @@ func HandleParlayAmount(s *discordgo.Session, i *discordgo.InteractionCreate, db
 		Color:       0x00ff00,
 	}
 
-	// Try to update the original create parlay message if we have the message ID
-	// Use deferred response so we can try to edit the original message
 	if selection.MessageID != "" && selection.ChannelID != "" {
-		// Defer the response to allow time for editing
 		err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
@@ -808,29 +747,22 @@ func HandleParlayAmount(s *discordgo.Session, i *discordgo.InteractionCreate, db
 			},
 		})
 		if err == nil {
-			// Try to edit the original message to replace it with success message
-			// Note: This will fail silently for ephemeral messages, but we try anyway
 			_, editErr := s.ChannelMessageEditComplex(&discordgo.MessageEdit{
 				ID:         selection.MessageID,
 				Channel:    selection.ChannelID,
 				Embeds:     &[]*discordgo.MessageEmbed{successEmbed},
 				Components: &[]discordgo.MessageComponent{},
 			})
-			// If editing worked (unlikely for ephemeral), we don't need a follow-up
-			// If editing failed (expected for ephemeral), send follow-up with success
 			if editErr != nil {
-				// Editing failed (likely ephemeral message), send success as follow-up
 				_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
 					Embeds: []*discordgo.MessageEmbed{successEmbed},
 				})
 			} else {
-				// Editing succeeded, send minimal confirmation
 				_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
 					Content: "✅ Parlay created successfully!",
 				})
 			}
 		} else {
-			// Defer failed, just send normal response
 			err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
@@ -840,7 +772,6 @@ func HandleParlayAmount(s *discordgo.Session, i *discordgo.InteractionCreate, db
 			})
 		}
 	} else {
-		// No message ID stored, send success as new message
 		err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
@@ -850,7 +781,6 @@ func HandleParlayAmount(s *discordgo.Session, i *discordgo.InteractionCreate, db
 		})
 	}
 
-	// Clean up session after responding
 	CleanupParlaySelection(sessionID)
 
 	if err != nil {
@@ -860,7 +790,6 @@ func HandleParlayAmount(s *discordgo.Session, i *discordgo.InteractionCreate, db
 	return nil
 }
 
-// HandleParlayCancel handles cancelling parlay creation
 func HandleParlayCancel(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, customID string) error {
 	sessionID := strings.TrimPrefix(customID, "parlay_cancel_")
 	CleanupParlaySelection(sessionID)
@@ -877,32 +806,26 @@ func HandleParlayCancel(s *discordgo.Session, i *discordgo.InteractionCreate, db
 	return err
 }
 
-// UpdateParlaysOnBetResolution updates all parlays that include this bet when it resolves
 func UpdateParlaysOnBetResolution(s *discordgo.Session, db *gorm.DB, betID uint, winningOption int, scoreDiff int) error {
-	// Find all parlay entries for this bet that are not yet resolved
 	var parlayEntries []models.ParlayEntry
 	result := db.Where("bet_id = ? AND resolved = ?", betID, false).Find(&parlayEntries)
 	if result.Error != nil {
 		return result.Error
 	}
 
-	// Get the bet to check if it has a spread
 	var bet models.Bet
 	if err := db.First(&bet, betID).Error; err != nil {
 		return err
 	}
 
 	for _, entry := range parlayEntries {
-		// Get the parlay with previous status to detect when it becomes fully resolved
 		var parlay models.Parlay
 		db.Preload("ParlayEntries").Preload("ParlayEntries.Bet").First(&parlay, entry.ParlayID)
 		previousStatus := parlay.Status
 
-		// Check if any other entries are unresolved
 		allResolved := true
 		hasLoss := false
 		for _, pe := range parlay.ParlayEntries {
-			// Skip the current entry as we are processing it now
 			if pe.ID == entry.ID {
 				continue
 			}
@@ -915,63 +838,47 @@ func UpdateParlaysOnBetResolution(s *discordgo.Session, db *gorm.DB, betID uint,
 			}
 		}
 		if hasLoss {
-			// Mark entry as resolved regardless of the winning option since we already know the parlay is lost
 			entry.Resolved = true
 			db.Save(&entry)
 			continue
 		}
 
-		// Determine if this parlay entry won
 		var won bool
 		if bet.Spread == nil {
-			// Moneyline bet
 			if scoreDiff == 0 {
-				// Tie game: both options lose
 				won = false
 			} else {
-				// Simple option comparison
 				won = entry.SelectedOption == winningOption
 			}
 		} else {
-			// ATS bet
 			if scoreDiff == 0 {
-				// Manually resolved bet (no scoreDiff available): use simple option comparison
-				// Note: This may not be accurate if parlay entries have different spreads,
-				// but we can't calculate properly without the actual score difference
 				won = entry.SelectedOption == winningOption
 			} else {
-				// Auto-resolved bet: use the parlay entry's spread (or fallback to bet spread for legacy entries)
 				var entrySpread float64
 				if entry.Spread != nil {
 					entrySpread = *entry.Spread
 				} else {
-					// Fallback for legacy parlay entries that don't have spread stored
 					entrySpread = *bet.Spread
 				}
 				won = common.CalculateBetEntryWin(entry.SelectedOption, scoreDiff, entrySpread)
 			}
 		}
-		// Mark entry as resolved
 		entry.Resolved = true
 
 		entry.Won = &won
 		db.Save(&entry)
 
-		// If this entry lost, mark parlay as lost immediately
 		if !won {
 			parlay.Status = "lost"
 			db.Save(&parlay)
 
-			// Update user stats, guild pool, and send notification if parlay just became lost
 			if previousStatus != "lost" && previousStatus != "won" {
-				// Update user stats - they already lost the bet amount when placing the parlay
 				var user models.User
 				db.First(&user, parlay.UserID)
 				user.TotalBetsLost++
 				user.TotalPointsLost += float64(parlay.Amount)
 				db.Save(&user)
 
-				// Add lost parlay amount to guild pool (atomic update to prevent race conditions)
 				guild, guildErr := guildService.GetGuildInfo(s, db, parlay.GuildID, "")
 				if guildErr == nil {
 					db.Model(&models.Guild{}).Where("id = ?", guild.ID).UpdateColumn("pool", gorm.Expr("pool + ?", float64(parlay.Amount)))
@@ -979,13 +886,7 @@ func UpdateParlaysOnBetResolution(s *discordgo.Session, db *gorm.DB, betID uint,
 				SendParlayResolutionNotification(s, db, parlay, false)
 			}
 		} else if allResolved {
-			// All bets resolved - this entry won, and all other entries have also resolved
-			// Since we didn't enter the !won branch above, this entry won
-			// If hasLoss is true, it means a previous entry lost, but the parlay was already marked as lost
-			// when that entry lost, so we don't need to do anything here
-			// Only handle the case where all entries won
 			if !hasLoss {
-				// All bets won! Calculate and pay out parlay
 				parlay.Status = "won"
 				db.Save(&parlay)
 
@@ -997,14 +898,11 @@ func UpdateParlaysOnBetResolution(s *discordgo.Session, db *gorm.DB, betID uint,
 				user.TotalPointsWon += payout
 				db.Save(&user)
 
-				// Send notification if parlay just became fully resolved
 				if previousStatus != "lost" && previousStatus != "won" {
 					SendParlayResolutionNotification(s, db, parlay, true)
 				}
 			}
-			// If hasLoss is true, the parlay was already marked as lost and notification sent when that entry lost
 		} else {
-			// Some bets still pending
 			parlay.Status = "partial"
 			db.Save(&parlay)
 		}
@@ -1013,30 +911,25 @@ func UpdateParlaysOnBetResolution(s *discordgo.Session, db *gorm.DB, betID uint,
 	return nil
 }
 
-// SendParlayResolutionNotification sends a message to the guild betting channel when a parlay is fully resolved
 func SendParlayResolutionNotification(s *discordgo.Session, db *gorm.DB, parlay models.Parlay, won bool) {
-	// Get guild info to find betting channel
 	guild, err := guildService.GetGuildInfo(s, db, parlay.GuildID, "")
 	if err != nil || guild.BetChannelID == "" {
-		// If no betting channel set, skip notification
 		return
 	}
 
-	// Get user who placed the parlay
 	var user models.User
 	db.First(&user, parlay.UserID)
 	if user.ID == 0 {
 		return
 	}
 
-	// Build embed message
 	var title string
 	var color int
 	var description strings.Builder
 
 	if won {
 		title = "🎉 Parlay Hit!"
-		color = 0x57F287 // Discord green
+		color = 0x57F287
 		payout := common.CalculateParlayPayout(parlay.Amount, parlay.TotalOdds)
 		description.WriteString(fmt.Sprintf("<@%s> Your parlay has been **won**!\n\n", user.DiscordID))
 		description.WriteString(fmt.Sprintf("**Amount Wagered:** %d points\n", parlay.Amount))
@@ -1044,7 +937,7 @@ func SendParlayResolutionNotification(s *discordgo.Session, db *gorm.DB, parlay 
 		description.WriteString(fmt.Sprintf("**Payout:** %.1f points\n", payout))
 	} else {
 		title = "💔 Parlay Lost"
-		color = 0xED4245 // Discord red
+		color = 0xED4245
 		description.WriteString(fmt.Sprintf("<@%s> Your parlay has been **lost**.\n\n", user.DiscordID))
 		description.WriteString(fmt.Sprintf("**Amount Wagered:** %d points\n", parlay.Amount))
 		description.WriteString(fmt.Sprintf("**Combined Odds:** %.2fx\n", parlay.TotalOdds))
@@ -1077,12 +970,10 @@ func SendParlayResolutionNotification(s *discordgo.Session, db *gorm.DB, parlay 
 		Embeds: []*discordgo.MessageEmbed{embed},
 	})
 	if err != nil {
-		// Log error but don't fail - notification is not critical
 		fmt.Printf("Error sending parlay resolution notification: %v\n", err)
 	}
 }
 
-// MyParlays shows the user's active parlays
 func MyParlays(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
 	var user models.User
 	result := db.FirstOrCreate(&user, models.User{DiscordID: i.Member.User.ID, GuildID: i.GuildID})
@@ -1105,7 +996,7 @@ func MyParlays(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 		embed := &discordgo.MessageEmbed{
 			Title:       "🎯 Your Active Parlays",
 			Description: "You have no active parlays.",
-			Color:       0x5865F2, // Discord blurple
+			Color:       0x5865F2,
 		}
 		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -1120,16 +1011,13 @@ func MyParlays(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 		return
 	}
 
-	// Create embeds for each parlay
 	var embeds []*discordgo.MessageEmbed
 
 	for parlayIdx, parlay := range parlays {
 		potentialPayout := common.CalculateParlayPayout(parlay.Amount, parlay.TotalOdds)
 
-		// Build description with parlay summary
 		description := fmt.Sprintf("**Amount:** %d points\n**Odds:** %.2fx\n**Potential Payout:** %.1f points", parlay.Amount, parlay.TotalOdds, potentialPayout)
 
-		// Create fields for each leg
 		var fields []*discordgo.MessageEmbedField
 		for entryIdx, entry := range parlay.ParlayEntries {
 			optionName := entry.Bet.Option1
@@ -1158,7 +1046,7 @@ func MyParlays(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 			Title:       fmt.Sprintf("🎯 Parlay #%d", parlayIdx+1),
 			Description: description,
 			Fields:      fields,
-			Color:       0x5865F2, // Discord blurple
+			Color:       0x5865F2,
 		}
 
 		embeds = append(embeds, embed)

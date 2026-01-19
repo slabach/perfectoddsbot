@@ -4,7 +4,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// UserInventory represents a card in a user's inventory
 type UserInventory struct {
 	gorm.Model
 	ID           uint   `gorm:"primaryKey"`

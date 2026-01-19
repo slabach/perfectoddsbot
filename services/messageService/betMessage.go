@@ -81,7 +81,6 @@ func GetResolveButton(betId uint) discordgo.Button {
 	}
 }
 
-// BuildBetResolutionEmbed creates a consistent embed for bet resolution messages.
 func BuildBetResolutionEmbed(betDescription string, subtitle string, totalPayout float64, winners string, losers string) *discordgo.MessageEmbed {
 	if winners == "" {
 		winners = "_No winners_"
@@ -93,7 +92,7 @@ func BuildBetResolutionEmbed(betDescription string, subtitle string, totalPayout
 	return &discordgo.MessageEmbed{
 		Title:       fmt.Sprintf("🏁 Bet Resolved: %s", betDescription),
 		Description: subtitle,
-		Color:       0x57F287, // green-ish
+		Color:       0x57F287,
 		Fields: []*discordgo.MessageEmbedField{
 			{
 				Name:   "Total Payout",

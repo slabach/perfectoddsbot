@@ -55,7 +55,6 @@ func runApp() {
 		return
 	}
 
-	// Connect to the database
 	if getEnv == "production" {
 		mysqlURL, ok := os.LookupEnv("MYSQL_URL")
 		if !ok {
@@ -107,11 +106,9 @@ func runApp() {
 		log.Fatalf("Error migrating database: %v", err)
 	}
 
-	// Run historical stats migration
 	err = services.ReRunHistoricalStatsMigration(db)
 	if err != nil {
 		log.Printf("Error running historical stats migration: %v", err)
-		// Don't fatal here - allow app to continue even if migration fails
 	}
 
 	token := os.Getenv("DISCORD_BOT_TOKEN")
@@ -141,11 +138,9 @@ func runApp() {
 		log.Fatalf("Error opening Discord session: %v", err)
 	}
 
-	// Run parlay resolution fix migration (after Discord session is ready so notifications can be sent)
 	err = services.FixParlayResolutionMigration(dg, db)
 	if err != nil {
 		log.Printf("Error running parlay resolution migration: %v", err)
-		// Don't fatal here - allow app to continue even if migration fails
 	}
 	defer func(dg *discordgo.Session) {
 		err := dg.Close()
@@ -159,7 +154,6 @@ func runApp() {
 		log.Fatalf("Error registering commands: %v", err)
 	}
 
-	// cron scheduled processes
 	scheduler.SetupCron(dg, db)
 
 	log.Println("Bot is running. Press CTRL+C to exit.")
@@ -184,7 +178,6 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	guildID := m.GuildID
 	userID := m.Author.ID
 
-	// getting guild info to create the guild record if it doesn't exist already
 	guild, err := guildService.GetGuildInfo(s, db, guildID, m.ChannelID)
 	if err != nil {
 		msg := fmt.Errorf("error getting guild info: %v", err)
@@ -202,7 +195,6 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		user.Points = guild.StartingPoints
 	}
 
-	// Update username from message author
 	username := common.GetUsernameFromUser(m.Author)
 	common.UpdateUserUsername(db, &user, username)
 
@@ -211,7 +203,6 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 }
 
 func interactionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	// getting guild info to create the guild record if it doesn't exist already
 	_, err := guildService.GetGuildInfo(s, db, i.GuildID, i.ChannelID)
 	if err != nil {
 		common.SendError(s, i, err, db)
@@ -228,26 +219,22 @@ func interactionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 }
 
 func messageReactionAdd(s *discordgo.Session, r *discordgo.MessageReactionAdd) {
-	// 1. Fetch the message to identify the author and count reactions
 	m, err := s.ChannelMessage(r.ChannelID, r.MessageID)
 	if err != nil {
 		log.Printf("Error fetching message for reaction: %v", err)
 		return
 	}
 
-	// 2. Ignore bot messages and self-reactions
 	if m.Author.Bot || m.Author.ID == r.UserID {
 		return
 	}
 
-	// 3. Get Guild Info
 	guild, err := guildService.GetGuildInfo(s, db, r.GuildID, r.ChannelID)
 	if err != nil {
 		log.Printf("Error getting guild info: %v", err)
 		return
 	}
 
-	// 4. Find or Create the User (Author of the message)
 	var user models.User
 	result := db.FirstOrCreate(&user, models.User{DiscordID: m.Author.ID, GuildID: r.GuildID})
 	if result.Error != nil {
@@ -259,13 +246,12 @@ func messageReactionAdd(s *discordgo.Session, r *discordgo.MessageReactionAdd) {
 		user.Points = guild.StartingPoints
 	}
 
-	// 5. Calculate Total Reactions
 	totalReactions := 0
 	for _, reaction := range m.Reactions {
 		totalReactions += reaction.Count
 	}
 
-	// 6. Calculate Exponential Bonus
+	// Calculate Exponential Bonus
 	// Award = P * 2^(totalReactions - 1)
 	if totalReactions > 0 {
 		multiplier := math.Pow(2, float64(totalReactions-1))
@@ -273,7 +259,6 @@ func messageReactionAdd(s *discordgo.Session, r *discordgo.MessageReactionAdd) {
 		user.Points += bonusPoints
 	}
 
-	// Update username if needed
 	if user.Username == nil || *user.Username != m.Author.Username {
 		username := common.GetUsernameFromUser(m.Author)
 		user.Username = &username

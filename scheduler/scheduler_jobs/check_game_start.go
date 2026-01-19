@@ -2,14 +2,15 @@ package scheduler_jobs
 
 import (
 	"fmt"
-	"github.com/bwmarrin/discordgo"
-	"gorm.io/gorm"
 	"log"
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/common"
 	"runtime/debug"
 	"time"
 	_ "time/tzdata"
+
+	"github.com/bwmarrin/discordgo"
+	"gorm.io/gorm"
 )
 
 func CheckGameStart(s *discordgo.Session, db *gorm.DB) (err error) {
@@ -34,7 +35,6 @@ func CheckGameStart(s *discordgo.Session, db *gorm.DB) (err error) {
 			return err
 		}
 
-		// Get the current time in EST
 		currentTimeEST := time.Now().In(est)
 
 		if bet.GameStartDate != nil {

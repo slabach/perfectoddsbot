@@ -6,10 +6,6 @@ import (
 	"testing"
 )
 
-// TestUpdateParlaysOnBetResolution_ComprehensiveScenarios tests comprehensive parlay resolution scenarios
-// These are unit tests that verify the logic without requiring actual database operations
-
-// MockParlayResolutionScenario represents a test scenario for parlay resolution
 type MockParlayResolutionScenario struct {
 	name            string
 	bet             models.Bet
@@ -52,7 +48,7 @@ func TestUpdateParlaysOnBetResolution_ComprehensiveScenarios(t *testing.T) {
 			name: "Single parlay - all legs win - moneyline",
 			bet: models.Bet{
 				ID:      1,
-				Spread:  nil, // Moneyline
+				Spread:  nil,
 				Option1: "Team A",
 				Option2: "Team B",
 			},
@@ -64,7 +60,7 @@ func TestUpdateParlaysOnBetResolution_ComprehensiveScenarios(t *testing.T) {
 			expectedResults: []ExpectedParlayResult{
 				{
 					ParlayID:               1,
-					ExpectedStatus:         "partial", // Other leg still pending
+					ExpectedStatus:         "partial",
 					ExpectedEntryWon:       true,
 					ShouldSendNotification: false,
 					NotificationWon:        false,
@@ -83,13 +79,13 @@ func TestUpdateParlaysOnBetResolution_ComprehensiveScenarios(t *testing.T) {
 			parlayEntries: []MockParlayEntry{
 				{ParlayID: 1, SelectedOption: 1, Spread: floatPtr(-7.5), Resolved: false},
 			},
-			winningOption: 2,   // Option 2 wins (home loses)
-			scoreDiff:     -10, // Home loses by 10
+			winningOption: 2,
+			scoreDiff:     -10,
 			expectedResults: []ExpectedParlayResult{
 				{
 					ParlayID:               1,
 					ExpectedStatus:         "lost",
-					ExpectedEntryWon:       false, // Entry loses (doesn't cover -7.5 with scoreDiff -10)
+					ExpectedEntryWon:       false,
 					ShouldSendNotification: true,
 					NotificationWon:        false,
 				},
@@ -100,20 +96,20 @@ func TestUpdateParlaysOnBetResolution_ComprehensiveScenarios(t *testing.T) {
 			name: "Single parlay - ATS with stored spread different from current",
 			bet: models.Bet{
 				ID:      1,
-				Spread:  floatPtr(-5.5), // Current spread (changed from -7.5)
+				Spread:  floatPtr(-5.5),
 				Option1: "Team A",
 				Option2: "Team B",
 			},
 			parlayEntries: []MockParlayEntry{
-				{ParlayID: 1, SelectedOption: 1, Spread: floatPtr(-7.5), Resolved: false}, // Created Monday
+				{ParlayID: 1, SelectedOption: 1, Spread: floatPtr(-7.5), Resolved: false},
 			},
 			winningOption: 1,
-			scoreDiff:     6, // Home wins by 6
+			scoreDiff:     6,
 			expectedResults: []ExpectedParlayResult{
 				{
 					ParlayID:               1,
-					ExpectedStatus:         "partial", // Other legs still pending
-					ExpectedEntryWon:       false,     // Entry at -7.5 loses (6 < 7.5)
+					ExpectedStatus:         "partial",
+					ExpectedEntryWon:       false,
 					ShouldSendNotification: false,
 					NotificationWon:        false,
 				},
@@ -129,29 +125,29 @@ func TestUpdateParlaysOnBetResolution_ComprehensiveScenarios(t *testing.T) {
 				Option2: "Team B",
 			},
 			parlayEntries: []MockParlayEntry{
-				{ParlayID: 1, SelectedOption: 1, Spread: floatPtr(-7.5), Resolved: false}, // Loses
-				{ParlayID: 2, SelectedOption: 1, Spread: floatPtr(-5.5), Resolved: false}, // Wins
-				{ParlayID: 3, SelectedOption: 2, Spread: floatPtr(-7.5), Resolved: false}, // Wins (covers +7.5)
+				{ParlayID: 1, SelectedOption: 1, Spread: floatPtr(-7.5), Resolved: false},
+				{ParlayID: 2, SelectedOption: 1, Spread: floatPtr(-5.5), Resolved: false},
+				{ParlayID: 3, SelectedOption: 2, Spread: floatPtr(-7.5), Resolved: false},
 			},
 			winningOption: 1,
-			scoreDiff:     6, // Home wins by 6
+			scoreDiff:     6,
 			expectedResults: []ExpectedParlayResult{
 				{
 					ParlayID:               1,
 					ExpectedStatus:         "lost",
-					ExpectedEntryWon:       false, // -7.5 doesn't cover (needs to win by >7.5)
+					ExpectedEntryWon:       false,
 					ShouldSendNotification: true,
 					NotificationWon:        false,
 				},
 				{
 					ParlayID:         2,
-					ExpectedStatus:   "partial", // Other legs still pending
-					ExpectedEntryWon: true,      // -5.5 covers (wins by 6 > 5.5)
+					ExpectedStatus:   "partial",
+					ExpectedEntryWon: true,
 				},
 				{
 					ParlayID:         3,
-					ExpectedStatus:   "partial", // Other legs still pending
-					ExpectedEntryWon: true,      // Option 2 wins (away +7.5, loses by 6 < 7.5, so covers)
+					ExpectedStatus:   "partial",
+					ExpectedEntryWon: true,
 				},
 			},
 			description: "Three parlays on same bet with different spreads get different outcomes",
@@ -172,7 +168,7 @@ func TestUpdateParlaysOnBetResolution_ComprehensiveScenarios(t *testing.T) {
 			expectedResults: []ExpectedParlayResult{
 				{
 					ParlayID:         1,
-					ExpectedStatus:   "partial", // Other legs pending
+					ExpectedStatus:   "partial",
 					ExpectedEntryWon: true,
 				},
 			},
@@ -187,7 +183,7 @@ func TestUpdateParlaysOnBetResolution_ComprehensiveScenarios(t *testing.T) {
 				Option2: "Team B",
 			},
 			parlayEntries: []MockParlayEntry{
-				{ParlayID: 1, SelectedOption: 1, Spread: nil, Resolved: false}, // Legacy entry
+				{ParlayID: 1, SelectedOption: 1, Spread: nil, Resolved: false},
 			},
 			winningOption: 1,
 			scoreDiff:     10,
@@ -195,7 +191,7 @@ func TestUpdateParlaysOnBetResolution_ComprehensiveScenarios(t *testing.T) {
 				{
 					ParlayID:         1,
 					ExpectedStatus:   "partial",
-					ExpectedEntryWon: true, // Uses bet's current spread -7.5, wins
+					ExpectedEntryWon: true,
 				},
 			},
 			description: "Legacy parlay entry uses bet's current spread",
@@ -212,12 +208,12 @@ func TestUpdateParlaysOnBetResolution_ComprehensiveScenarios(t *testing.T) {
 				{ParlayID: 1, SelectedOption: 1, Spread: floatPtr(-7.5), Resolved: false},
 			},
 			winningOption: 1,
-			scoreDiff:     0, // Manually resolved
+			scoreDiff:     0,
 			expectedResults: []ExpectedParlayResult{
 				{
 					ParlayID:         1,
 					ExpectedStatus:   "partial",
-					ExpectedEntryWon: true, // Simple option comparison
+					ExpectedEntryWon: true,
 				},
 			},
 			description: "Manually resolved bet uses simple option comparison",
@@ -231,7 +227,7 @@ func TestUpdateParlaysOnBetResolution_ComprehensiveScenarios(t *testing.T) {
 				Option2: "Team B",
 			},
 			parlayEntries: []MockParlayEntry{
-				{ParlayID: 1, SelectedOption: 2, Resolved: false}, // This entry loses
+				{ParlayID: 1, SelectedOption: 2, Resolved: false},
 			},
 			winningOption: 1,
 			scoreDiff:     5,
@@ -239,7 +235,7 @@ func TestUpdateParlaysOnBetResolution_ComprehensiveScenarios(t *testing.T) {
 				{
 					ParlayID:               1,
 					ExpectedStatus:         "lost",
-					ExpectedEntryWon:       false, // Entry loses
+					ExpectedEntryWon:       false,
 					ShouldSendNotification: true,
 					NotificationWon:        false,
 				},
@@ -255,14 +251,14 @@ func TestUpdateParlaysOnBetResolution_ComprehensiveScenarios(t *testing.T) {
 				Option2: "Team B",
 			},
 			parlayEntries: []MockParlayEntry{
-				{ParlayID: 1, SelectedOption: 1, Resolved: false}, // This entry wins
+				{ParlayID: 1, SelectedOption: 1, Resolved: false},
 			},
 			winningOption: 1,
 			scoreDiff:     5,
 			expectedResults: []ExpectedParlayResult{
 				{
 					ParlayID:               1,
-					ExpectedStatus:         "partial", // Other legs still pending
+					ExpectedStatus:         "partial",
 					ExpectedEntryWon:       true,
 					ShouldSendNotification: false,
 					NotificationWon:        false,
@@ -286,8 +282,8 @@ func TestUpdateParlaysOnBetResolution_ComprehensiveScenarios(t *testing.T) {
 			expectedResults: []ExpectedParlayResult{
 				{
 					ParlayID:               1,
-					ExpectedStatus:         "partial", // Other legs still pending
-					ExpectedEntryWon:       true,      // ATS entry wins with scoreDiff 10 vs spread -7.5
+					ExpectedStatus:         "partial",
+					ExpectedEntryWon:       true,
 					ShouldSendNotification: false,
 					NotificationWon:        false,
 				},
@@ -303,23 +299,23 @@ func TestUpdateParlaysOnBetResolution_ComprehensiveScenarios(t *testing.T) {
 				Option2: "CSU Northridge",
 			},
 			parlayEntries: []MockParlayEntry{
-				{ParlayID: 1, SelectedOption: 1, Spread: floatPtr(-16.5), Resolved: false}, // All bet entries lost
-				{ParlayID: 2, SelectedOption: 2, Spread: floatPtr(-16.5), Resolved: false}, // But Option 2 wins
+				{ParlayID: 1, SelectedOption: 1, Spread: floatPtr(-16.5), Resolved: false},
+				{ParlayID: 2, SelectedOption: 2, Spread: floatPtr(-16.5), Resolved: false},
 			},
-			winningOption: 2,   // Option 2 wins (CSU +16.5)
-			scoreDiff:     -10, // Stanford loses by 10
+			winningOption: 2,
+			scoreDiff:     -10,
 			expectedResults: []ExpectedParlayResult{
 				{
 					ParlayID:               1,
 					ExpectedStatus:         "lost",
-					ExpectedEntryWon:       false, // Option 1 loses
+					ExpectedEntryWon:       false,
 					ShouldSendNotification: true,
 					NotificationWon:        false,
 				},
 				{
 					ParlayID:         2,
 					ExpectedStatus:   "partial",
-					ExpectedEntryWon: true, // Option 2 wins
+					ExpectedEntryWon: true,
 				},
 			},
 			description: "Bet with no winners (all bet entries lost) but parlays still resolve correctly",
@@ -328,26 +324,26 @@ func TestUpdateParlaysOnBetResolution_ComprehensiveScenarios(t *testing.T) {
 			name: "ATS away favored - different spreads",
 			bet: models.Bet{
 				ID:      1,
-				Spread:  floatPtr(3.5), // Away favored
+				Spread:  floatPtr(3.5),
 				Option1: "Team A",
 				Option2: "Team B",
 			},
 			parlayEntries: []MockParlayEntry{
 				{ParlayID: 1, SelectedOption: 1, Spread: floatPtr(3.5), Resolved: false},
-				{ParlayID: 2, SelectedOption: 2, Spread: floatPtr(5.5), Resolved: false}, // Different spread
+				{ParlayID: 2, SelectedOption: 2, Spread: floatPtr(5.5), Resolved: false},
 			},
 			winningOption: 1,
-			scoreDiff:     5, // Home wins by 5
+			scoreDiff:     5,
 			expectedResults: []ExpectedParlayResult{
 				{
 					ParlayID:         1,
 					ExpectedStatus:   "partial",
-					ExpectedEntryWon: true, // Home +3.5 wins with scoreDiff 5
+					ExpectedEntryWon: true,
 				},
 				{
 					ParlayID:         2,
 					ExpectedStatus:   "partial",
-					ExpectedEntryWon: false, // Away -5.5 loses with scoreDiff 5
+					ExpectedEntryWon: false,
 				},
 			},
 			description: "Away favored bets with different spreads resolve correctly",
@@ -356,10 +352,7 @@ func TestUpdateParlaysOnBetResolution_ComprehensiveScenarios(t *testing.T) {
 
 	for _, scenario := range scenarios {
 		t.Run(scenario.name, func(t *testing.T) {
-			// Test the win calculation logic for each entry
-			// Since each entry can belong to a different parlay, we need to match by parlay ID
 			for i, entry := range scenario.parlayEntries {
-				// Find expected result for this entry (by parlay ID)
 				var expectedResult *ExpectedParlayResult
 				for j := range scenario.expectedResults {
 					if scenario.expectedResults[j].ParlayID == entry.ParlayID {
@@ -375,18 +368,13 @@ func TestUpdateParlaysOnBetResolution_ComprehensiveScenarios(t *testing.T) {
 
 				expectedWon := expectedResult.ExpectedEntryWon
 
-				// Calculate expected win using the same logic as UpdateParlaysOnBetResolution
 				var calculatedWon bool
 				if scenario.bet.Spread == nil {
-					// Moneyline: simple option comparison
 					calculatedWon = entry.SelectedOption == scenario.winningOption
 				} else {
-					// ATS bet
 					if scenario.scoreDiff == 0 {
-						// Manually resolved: simple option comparison
 						calculatedWon = entry.SelectedOption == scenario.winningOption
 					} else {
-						// Auto-resolved: use stored spread or bet spread
 						var spreadToUse float64
 						if entry.Spread != nil {
 							spreadToUse = *entry.Spread
@@ -408,7 +396,6 @@ func TestUpdateParlaysOnBetResolution_ComprehensiveScenarios(t *testing.T) {
 	}
 }
 
-// TestParlayResolutionFlow tests the complete parlay resolution flow logic
 func TestParlayResolutionFlow(t *testing.T) {
 	tests := []struct {
 		name               string
@@ -439,7 +426,7 @@ func TestParlayResolutionFlow(t *testing.T) {
 			allEntriesResolved: false,
 			hasLoss:            true,
 			expectedStatus:     "lost",
-			shouldNotify:       false, // Already notified
+			shouldNotify:       false,
 			notificationWon:    false,
 			description:        "Parlay already lost, no duplicate notification",
 		},
@@ -460,8 +447,8 @@ func TestParlayResolutionFlow(t *testing.T) {
 			currentEntryWon:    true,
 			allEntriesResolved: true,
 			hasLoss:            true,
-			expectedStatus:     "lost", // If hasLoss, parlay should be lost (defensive check)
-			shouldNotify:       true,   // Should notify since status is changing from pending to lost
+			expectedStatus:     "lost",
+			shouldNotify:       true,
 			notificationWon:    false,
 			description:        "All resolved with loss - should have been handled earlier, but defensively mark as lost",
 		},
@@ -483,7 +470,7 @@ func TestParlayResolutionFlow(t *testing.T) {
 			allEntriesResolved: true,
 			hasLoss:            false,
 			expectedStatus:     "won",
-			shouldNotify:       false, // Already notified
+			shouldNotify:       false,
 			notificationWon:    false,
 			description:        "Parlay already won, no duplicate notification",
 		},
@@ -491,20 +478,17 @@ func TestParlayResolutionFlow(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Simulate the resolution flow logic
 			var finalStatus string
 			var shouldNotify bool
 			var notifyWon bool
 
 			if !tt.currentEntryWon {
-				// Entry lost
 				finalStatus = "lost"
 				if tt.previousStatus != "lost" && tt.previousStatus != "won" {
 					shouldNotify = true
 					notifyWon = false
 				}
 			} else if tt.allEntriesResolved {
-				// All resolved
 				if !tt.hasLoss {
 					finalStatus = "won"
 					if tt.previousStatus != "lost" && tt.previousStatus != "won" {
@@ -512,7 +496,6 @@ func TestParlayResolutionFlow(t *testing.T) {
 						notifyWon = true
 					}
 				} else {
-					// Should have been handled earlier, but defensively
 					finalStatus = "lost"
 					if tt.previousStatus != "lost" && tt.previousStatus != "won" {
 						shouldNotify = true
@@ -520,7 +503,6 @@ func TestParlayResolutionFlow(t *testing.T) {
 					}
 				}
 			} else {
-				// Some pending
 				finalStatus = "partial"
 				shouldNotify = false
 			}
@@ -540,7 +522,6 @@ func TestParlayResolutionFlow(t *testing.T) {
 	}
 }
 
-// TestParlayResolutionEdgeCases tests edge cases
 func TestParlayResolutionEdgeCases(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -559,7 +540,7 @@ func TestParlayResolutionEdgeCases(t *testing.T) {
 			scoreDiff:      7,
 			selectedOption: 1,
 			winningOption:  1,
-			expectedWon:    false, // 7 < 7.5, loses
+			expectedWon:    false,
 			description:    "Score diff 7 vs spread -7.5, loses by 0.5",
 		},
 		{
@@ -569,7 +550,7 @@ func TestParlayResolutionEdgeCases(t *testing.T) {
 			scoreDiff:      8,
 			selectedOption: 1,
 			winningOption:  1,
-			expectedWon:    true, // 8 > 7.5, wins
+			expectedWon:    true,
 			description:    "Score diff 8 vs spread -7.5, wins by 0.5",
 		},
 		{
@@ -578,8 +559,8 @@ func TestParlayResolutionEdgeCases(t *testing.T) {
 			entrySpread:    nil,
 			scoreDiff:      0,
 			selectedOption: 1,
-			winningOption:  1,     // Tie, but winningOption would be 1 in manual resolution
-			expectedWon:    false, // Actually, if scoreDiff is 0 and manually resolved, this is a tie
+			winningOption:  1,
+			expectedWon:    false,
 			description:    "Zero score diff with moneyline - tie game",
 		},
 		{
@@ -609,7 +590,7 @@ func TestParlayResolutionEdgeCases(t *testing.T) {
 			scoreDiff:      12,
 			selectedOption: 1,
 			winningOption:  1,
-			expectedWon:    true, // Uses bet spread -10.5
+			expectedWon:    true,
 			description:    "Legacy entry uses bet's current spread",
 		},
 	}
@@ -619,21 +600,15 @@ func TestParlayResolutionEdgeCases(t *testing.T) {
 			var won bool
 
 			if tt.betSpread == nil {
-				// Moneyline
 				if tt.scoreDiff == 0 {
-					// Tie game: both options lose
 					won = false
 				} else {
-					// Auto-resolved or manually resolved with non-zero scoreDiff
 					won = tt.selectedOption == tt.winningOption
 				}
 			} else {
-				// ATS
 				if tt.scoreDiff == 0 {
-					// Manually resolved
 					won = tt.selectedOption == tt.winningOption
 				} else {
-					// Auto-resolved
 					var spreadToUse float64
 					if tt.entrySpread != nil {
 						spreadToUse = *tt.entrySpread
@@ -651,7 +626,6 @@ func TestParlayResolutionEdgeCases(t *testing.T) {
 	}
 }
 
-// TestParlayStatusTransitions tests parlay status transitions
 func TestParlayStatusTransitions(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -732,17 +706,14 @@ func TestParlayStatusTransitions(t *testing.T) {
 			var finalStatus string
 
 			if !tt.entryWon {
-				// Entry lost
 				finalStatus = "lost"
 			} else if tt.allResolved {
-				// All resolved
 				if !tt.hasLoss {
 					finalStatus = "won"
 				} else {
 					finalStatus = "lost"
 				}
 			} else {
-				// Some pending
 				finalStatus = "partial"
 			}
 
@@ -753,7 +724,6 @@ func TestParlayStatusTransitions(t *testing.T) {
 	}
 }
 
-// Helper function
 func boolPtr(b bool) *bool {
 	return &b
 }

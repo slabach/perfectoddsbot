@@ -216,7 +216,6 @@ func ToggleCardDrawing(s *discordgo.Session, i *discordgo.InteractionCreate, db 
 		return
 	}
 
-	// Toggle the setting
 	guild.CardDrawingEnabled = !guild.CardDrawingEnabled
 	db.Save(&guild)
 
