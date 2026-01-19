@@ -109,7 +109,7 @@ func registerEpicCards(deck *[]models.Card) {
 		{
 			ID:          71,
 			Name:        "Robbing the Hood",
-			Description: "Steal 50% of the poorest player's points and give it to yourself.",
+			Description: "Steal 10% of the poorest player's points and give it to yourself.",
 			Rarity:      "Epic",
 			Weight:      W_Epic,
 			Handler:     handleRobbingTheHood,

@@ -938,6 +938,10 @@ func ApplyVampireIfApplicable(db *gorm.DB, guildID string, totalWinningPayouts f
 
 		vampirePayout := totalOtherWinnings * 0.01
 
+		if vampirePayout > 500.0 {
+			vampirePayout = 500.0
+		}
+
 		if err := db.Model(&vampireHolder).UpdateColumn("points", gorm.Expr("points + ?", vampirePayout)).Error; err != nil {
 			return totalVampirePayout, winners, applied, err
 		}

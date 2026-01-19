@@ -1732,11 +1732,11 @@ func handleRobbingTheHood(s *discordgo.Session, db *gorm.DB, userID string, guil
 	}
 
 	return &models.CardResult{
-		Message:           "You've drawn Robbing the Hood! You stole 50% of the poorest player's points and gave it to yourself.",
-		PointsDelta:       poorestUser.Points * 0.5,
+		Message:           "You've drawn Robbing the Hood! You stole 10% of the poorest player's points and gave it to yourself.",
+		PointsDelta:       poorestUser.Points * 0.1,
 		PoolDelta:         0,
 		TargetUserID:      &poorestUser.DiscordID,
-		TargetPointsDelta: -(poorestUser.Points * 0.5),
+		TargetPointsDelta: -(poorestUser.Points * 0.1),
 	}, nil
 }
 

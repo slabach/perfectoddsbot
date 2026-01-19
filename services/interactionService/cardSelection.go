@@ -733,7 +733,6 @@ func showBetSelectMenuForPlayCard(s *discordgo.Session, i *discordgo.Interaction
 
 func HandlePlayCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) error {
 	customID := i.MessageComponentData().CustomID
-	// Format: playcard_bet_<cardID>_<userID>_<guildID>
 	parts := strings.Split(customID, "_")
 	if len(parts) != 5 {
 		return fmt.Errorf("invalid playcard bet selection custom ID format")
@@ -768,13 +767,11 @@ func HandlePlayCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCr
 	}
 	betID := uint(selectedBetID)
 
-	// Get user DB record
 	var user models.User
 	if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
 		return fmt.Errorf("user not found: %v", err)
 	}
 
-	// Verify bet exists and is not paid (matches the query logic in showBetSelectMenuForPlayCard)
 	var bet models.Bet
 	if err := db.First(&bet, "id = ? AND guild_id = ? AND paid = 0 AND deleted_at IS NULL", betID, guildID).Error; err != nil {
 		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -786,13 +783,12 @@ func HandlePlayCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCr
 		})
 	}
 
-	// Soft delete all BetEntry records for this bet and user
-	result := db.Where("bet_id = ? AND user_id = ? AND deleted_at IS NULL", betID, user.ID).Delete(&models.BetEntry{})
-	if result.Error != nil {
-		return fmt.Errorf("error soft deleting bet entries: %v", result.Error)
+	var entries []models.BetEntry
+	if err := db.Where("bet_id = ? AND user_id = ? AND deleted_at IS NULL", betID, user.ID).Find(&entries).Error; err != nil {
+		return fmt.Errorf("error querying bet entries: %v", err)
 	}
 
-	if result.RowsAffected == 0 {
+	if len(entries) == 0 {
 		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
@@ -802,13 +798,26 @@ func HandlePlayCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCr
 		})
 	}
 
-	// Get card for notification
+	refundAmount := 0
+	for _, entry := range entries {
+		refundAmount += entry.Amount
+	}
+
+	user.Points += float64(refundAmount)
+	if err := db.Save(&user).Error; err != nil {
+		return fmt.Errorf("error refunding points: %v", err)
+	}
+
+	result := db.Where("bet_id = ? AND user_id = ? AND deleted_at IS NULL", betID, user.ID).Delete(&models.BetEntry{})
+	if result.Error != nil {
+		return fmt.Errorf("error soft deleting bet entries: %v", result.Error)
+	}
+
 	card := cardService.GetCardByID(cardID)
 	if card == nil {
 		return fmt.Errorf("card not found: %d", cardID)
 	}
 
-	// Consume card from inventory
 	if err := cardService.PlayCardFromInventoryWithMessage(s, db, user, cardID, fmt.Sprintf("<@%s> played **%s** and cancelled bet: **%s**", userID, card.Name, bet.Description)); err != nil {
 		return fmt.Errorf("error consuming card: %v", err)
 	}
@@ -818,10 +827,9 @@ func HandlePlayCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCr
 		return fmt.Errorf("error getting guild info: %v", err)
 	}
 
-	// Build confirmation embed
 	embed := buildCardResultEmbed(card, &models.CardResult{
-		Message:     fmt.Sprintf("You cancelled your bet: **%s**", bet.Description),
-		PointsDelta: 0,
+		Message:     fmt.Sprintf("You cancelled your bet: **%s** and received a refund of **%d** points.", bet.Description, refundAmount),
+		PointsDelta: float64(refundAmount),
 		PoolDelta:   0,
 	}, user, "", guild.Pool)
 
