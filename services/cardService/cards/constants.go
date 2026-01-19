@@ -6,7 +6,7 @@ const (
 	W_Uncommon = 1925
 	W_Rare     = 1250
 	W_Epic     = 365
-	W_Mythic   = 233
+	W_Mythic   = 200
 
 	// Card colors
 	C_Common   = 0x95A5A6
