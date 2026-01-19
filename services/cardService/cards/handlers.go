@@ -1926,11 +1926,9 @@ func handleSnipSnap(s *discordgo.Session, db *gorm.DB, userID string, guildID st
 			return nil
 		}
 
-		// Pick random entry
 		randomIndex := rand.Intn(len(entries))
 		entryToFlip := entries[randomIndex]
 
-		// Flip option
 		oldOption := entryToFlip.Option
 		newOption := 0
 		if oldOption == 1 {
