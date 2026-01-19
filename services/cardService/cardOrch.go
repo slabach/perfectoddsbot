@@ -1333,6 +1333,95 @@ func MyInventory(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.
 		Text: fmt.Sprintf("Total cards: %d", totalCards),
 	}
 
+	// Calculate countdown until timer resets and next draw cost
+	now := time.Now()
+	resetPeriod := time.Duration(guild.CardDrawCooldownMinutes) * time.Minute
+	
+	var countdownText string
+	if user.FirstCardDrawCycle != nil {
+		resetTime := user.FirstCardDrawCycle.Add(resetPeriod)
+		if now.Before(resetTime) {
+			timeRemaining := resetTime.Sub(now)
+			hours := int(timeRemaining.Hours())
+			minutes := int(timeRemaining.Minutes()) % 60
+			seconds := int(timeRemaining.Seconds()) % 60
+			if hours > 0 {
+				countdownText = fmt.Sprintf("%dh %dm %ds", hours, minutes, seconds)
+			} else if minutes > 0 {
+				countdownText = fmt.Sprintf("%dm %ds", minutes, seconds)
+			} else {
+				countdownText = fmt.Sprintf("%ds", seconds)
+			}
+		} else {
+			countdownText = "Ready to reset"
+		}
+	} else {
+		countdownText = "No draws yet"
+	}
+
+	// Calculate next draw cost
+	// If timer has reset, the next draw count will be 0
+	var nextDrawCount int
+	if user.FirstCardDrawCycle != nil {
+		resetTime := user.FirstCardDrawCycle.Add(resetPeriod)
+		if now.After(resetTime) || now.Equal(resetTime) {
+			// Timer has reset, next draw will be count 0
+			nextDrawCount = 0
+		} else {
+			// Timer hasn't reset yet, use current count
+			nextDrawCount = user.CardDrawCount
+		}
+	} else {
+		// No draws yet, next will be count 0
+		nextDrawCount = 0
+	}
+
+	var nextDrawCost float64
+	switch nextDrawCount {
+	case 0:
+		nextDrawCost = guild.CardDrawCost
+	case 1:
+		nextDrawCost = guild.CardDrawCost * 10
+	default:
+		nextDrawCost = guild.CardDrawCost * 100
+	}
+
+	// Check for Generous Donation (only affects first draw)
+	if nextDrawCount == 0 {
+		donorID, err := hasGenerousDonationInInventory(db, guildID)
+		if err == nil && donorID != 0 && donorID != user.ID {
+			nextDrawCost = 0
+		}
+	}
+
+	// Check for modifiers (applied sequentially like in DrawCard)
+	hasLuckyHorseshoe := cardCounts[cards.LuckyHorseshoeCardID] > 0
+	if hasLuckyHorseshoe {
+		nextDrawCost = nextDrawCost * 0.5
+	}
+
+	hasUnluckyCat := cardCounts[cards.UnluckyCatCardID] > 0
+	if hasUnluckyCat {
+		nextDrawCost = nextDrawCost * 2.0
+	}
+
+	// Add card draw info fields
+	embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
+		Name:   "⏱️ Timer Reset",
+		Value:  countdownText,
+		Inline: true,
+	})
+	
+	costText := fmt.Sprintf("%.0f points", nextDrawCost)
+	if nextDrawCost == 0 {
+		costText = "Free (Generous Donation)"
+	}
+	embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
+		Name:   "💰 Next Draw Cost",
+		Value:  costText,
+		Inline: true,
+	})
+
 	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
