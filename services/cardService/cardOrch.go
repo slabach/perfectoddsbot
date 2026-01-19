@@ -1324,7 +1324,6 @@ func MyInventory(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.
 		})
 	}
 
-	// Add footer with total count
 	totalCards := 0
 	for _, count := range cardCounts {
 		totalCards += count
@@ -1333,10 +1332,9 @@ func MyInventory(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.
 		Text: fmt.Sprintf("Total cards: %d", totalCards),
 	}
 
-	// Calculate countdown until timer resets and next draw cost
 	now := time.Now()
 	resetPeriod := time.Duration(guild.CardDrawCooldownMinutes) * time.Minute
-	
+
 	var countdownText string
 	if user.FirstCardDrawCycle != nil {
 		resetTime := user.FirstCardDrawCycle.Add(resetPeriod)
@@ -1353,26 +1351,21 @@ func MyInventory(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.
 				countdownText = fmt.Sprintf("%ds", seconds)
 			}
 		} else {
-			countdownText = "Ready to reset"
+			countdownText = "Next Draw Resets"
 		}
 	} else {
 		countdownText = "No draws yet"
 	}
 
-	// Calculate next draw cost
-	// If timer has reset, the next draw count will be 0
 	var nextDrawCount int
 	if user.FirstCardDrawCycle != nil {
 		resetTime := user.FirstCardDrawCycle.Add(resetPeriod)
 		if now.After(resetTime) || now.Equal(resetTime) {
-			// Timer has reset, next draw will be count 0
 			nextDrawCount = 0
 		} else {
-			// Timer hasn't reset yet, use current count
 			nextDrawCount = user.CardDrawCount
 		}
 	} else {
-		// No draws yet, next will be count 0
 		nextDrawCount = 0
 	}
 
@@ -1386,15 +1379,13 @@ func MyInventory(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.
 		nextDrawCost = guild.CardDrawCost * 100
 	}
 
-	// Check for Generous Donation (only affects first draw)
-	if nextDrawCount == 0 {
-		donorID, err := hasGenerousDonationInInventory(db, guildID)
-		if err == nil && donorID != 0 && donorID != user.ID {
-			nextDrawCost = 0
-		}
-	}
+	// if nextDrawCount == 0 {
+	// 	donorID, err := hasGenerousDonationInInventory(db, guildID)
+	// 	if err == nil && donorID != 0 && donorID != user.ID {
+	// 		nextDrawCost = 0
+	// 	}
+	// }
 
-	// Check for modifiers (applied sequentially like in DrawCard)
 	hasLuckyHorseshoe := cardCounts[cards.LuckyHorseshoeCardID] > 0
 	if hasLuckyHorseshoe {
 		nextDrawCost = nextDrawCost * 0.5
@@ -1405,13 +1396,12 @@ func MyInventory(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.
 		nextDrawCost = nextDrawCost * 2.0
 	}
 
-	// Add card draw info fields
 	embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
 		Name:   "⏱️ Timer Reset",
 		Value:  countdownText,
 		Inline: true,
 	})
-	
+
 	costText := fmt.Sprintf("%.0f points", nextDrawCost)
 	if nextDrawCost == 0 {
 		costText = "Free (Generous Donation)"
@@ -1462,13 +1452,11 @@ func showPlayableCardSelectMenu(s *discordgo.Session, i *discordgo.InteractionCr
 		return
 	}
 
-	// Build a map of cardID -> count for inventory
 	inventoryMap := make(map[int]int)
 	for _, item := range inventory {
 		inventoryMap[item.CardID]++
 	}
 
-	// Find all UserPlayable cards in inventory
 	var playableCards []struct {
 		Card  *models.Card
 		Count int
@@ -1498,7 +1486,6 @@ func showPlayableCardSelectMenu(s *discordgo.Session, i *discordgo.InteractionCr
 		return
 	}
 
-	// Limit to 25 options (Discord select menu limit)
 	maxOptions := 25
 	if len(playableCards) > maxOptions {
 		playableCards = playableCards[:maxOptions]
@@ -1511,7 +1498,6 @@ func showPlayableCardSelectMenu(s *discordgo.Session, i *discordgo.InteractionCr
 			label = fmt.Sprintf("%s (x%d)", pc.Card.Name, pc.Count)
 		}
 
-		// Truncate if too long (Discord limit is 100 chars for label, 100 for description)
 		if len(label) > 100 {
 			label = label[:97] + "..."
 		}
