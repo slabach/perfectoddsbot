@@ -2,16 +2,16 @@ package interactionService
 
 import (
 	"fmt"
-	"github.com/bwmarrin/discordgo"
-	"gorm.io/gorm"
 	"math"
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/common"
 	"time"
+
+	"github.com/bwmarrin/discordgo"
+	"gorm.io/gorm"
 )
 
 func PlaceBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, customID string) error {
-	// Handle placing a bet
 	var betID uint
 	var option string
 	_, err := fmt.Sscanf(customID, "bet_%d_%s", &betID, &option)
@@ -24,12 +24,10 @@ func PlaceBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB,
 	if result.Error != nil {
 		return result.Error
 	}
-	
-	// Update username from interaction member
+
 	username := common.GetUsernameFromUser(i.Member.User)
 	common.UpdateUserUsername(db, &user, username)
 
-	// Check for bet lockout
 	if user.BetLockoutUntil != nil && user.BetLockoutUntil.After(time.Now()) {
 		timeLeft := time.Until(*user.BetLockoutUntil).Round(time.Minute)
 		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{

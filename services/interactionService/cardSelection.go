@@ -241,7 +241,6 @@ func handleGrandLarcenySelection(s *discordgo.Session, i *discordgo.InteractionC
 
 func handleAntiAntiBetSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, userID string, targetUserID string, guildID string) error {
 	return db.Transaction(func(tx *gorm.DB) error {
-		// Get the user who drew the card
 		var user models.User
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			Where("discord_id = ? AND guild_id = ?", userID, guildID).
@@ -249,7 +248,6 @@ func handleAntiAntiBetSelection(s *discordgo.Session, i *discordgo.InteractionCr
 			return err
 		}
 
-		// Calculate bet amount: 100 points if user has >= 100 points, otherwise half of current points rounded to nearest whole number
 		var betAmount float64
 		if user.Points >= 100.0 {
 			betAmount = 100.0
@@ -257,18 +255,15 @@ func handleAntiAntiBetSelection(s *discordgo.Session, i *discordgo.InteractionCr
 			betAmount = math.Round(user.Points / 2.0)
 		}
 
-		// Deduct the bet amount from user's points
 		user.Points -= betAmount
 		if user.Points < 0 {
 			user.Points = 0
 		}
 
-		// Save user points
 		if err := tx.Save(&user).Error; err != nil {
 			return err
 		}
 
-		// Add card to inventory with TargetUserID and BetAmount
 		inventory := models.UserInventory{
 			UserID:       user.ID,
 			GuildID:      guildID,
@@ -446,7 +441,6 @@ func buildCardResultEmbed(card *models.Card, result *models.CardResult, user mod
 func HandleCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) error {
 	customID := i.MessageComponentData().CustomID
 	parts := strings.Split(customID, "_")
-	// card_ID_selectbet_UserID_GuildID
 	if len(parts) != 5 {
 		return fmt.Errorf("invalid card bet selection custom ID format")
 	}
@@ -480,7 +474,6 @@ func HandleCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCreate
 	targetBetID := uint(targetBetIDVal)
 
 	return db.Transaction(func(tx *gorm.DB) error {
-		// Get user DB ID
 		var user models.User
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			Where("discord_id = ? AND guild_id = ?", userID, guildID).
@@ -488,7 +481,6 @@ func HandleCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCreate
 			return err
 		}
 
-		// Add card to inventory with TargetBetID
 		inventory := models.UserInventory{
 			UserID:      user.ID,
 			GuildID:     guildID,
@@ -500,13 +492,11 @@ func HandleCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCreate
 			return err
 		}
 
-		// Fetch card info for response
 		card := cardService.GetCardByID(cardID)
 		if card == nil {
 			return fmt.Errorf("card not found")
 		}
 
-		// Get bet info for response
 		var bet models.Bet
 		if err := tx.First(&bet, targetBetID).Error; err != nil {
 			return fmt.Errorf("bet not found")
@@ -517,7 +507,6 @@ func HandleCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCreate
 			return err
 		}
 
-		// Build success embed
 		embed := buildCardResultEmbed(card, &models.CardResult{
 			Message:     fmt.Sprintf("Uno Reverse card active! If you lose on '%s', you win (and vice versa)!", bet.Description),
 			PointsDelta: 0,
@@ -536,7 +525,6 @@ func HandleCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCreate
 func HandleCardOptionSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) error {
 	customID := i.MessageComponentData().CustomID
 	parts := strings.Split(customID, "_")
-	// Format: card_ID_option_UserID_GuildID
 	if len(parts) != 5 {
 		return fmt.Errorf("invalid card option selection custom ID format")
 	}
@@ -559,7 +547,6 @@ func HandleCardOptionSelection(s *discordgo.Session, i *discordgo.InteractionCre
 	}
 
 	return db.Transaction(func(tx *gorm.DB) error {
-		// Get user DB ID
 		var user models.User
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			Where("discord_id = ? AND guild_id = ?", userID, guildID).
@@ -577,21 +564,17 @@ func HandleCardOptionSelection(s *discordgo.Session, i *discordgo.InteractionCre
 			return err
 		}
 
-		// Option ID 2 is "No", Option ID 1 is "Yes" for The Gambler
 		if selectedOptionID == 2 {
-			// "No" option - remove card from inventory if it was added
-			// Since card was added in DrawCard before handler was called, we need to remove it
 			var inventory models.UserInventory
 			result := tx.Where("user_id = ? AND guild_id = ? AND card_id = ?", user.ID, guildID, cardID).First(&inventory)
 			if result.Error == nil {
-				// Card exists in inventory, remove it
 				if err := tx.Delete(&inventory).Error; err != nil {
 					return fmt.Errorf("error removing card from inventory: %v", err)
 				}
 			}
 
 			embed := buildCardResultEmbed(card, &models.CardResult{
-				Message:     "You chose 'No'. The card fizzles out and is not added to your inventory.",
+				Message:     fmt.Sprintf("<@%s> chose 'No'. The card fizzles out and is not added to your inventory.", user.DiscordID),
 				PointsDelta: 0,
 				PoolDelta:   0,
 			}, user, "", guild.Pool)
@@ -604,9 +587,8 @@ func HandleCardOptionSelection(s *discordgo.Session, i *discordgo.InteractionCre
 			})
 		}
 
-		// "Yes" option - card stays in inventory (already added in DrawCard)
 		embed := buildCardResultEmbed(card, &models.CardResult{
-			Message:     "You chose 'Yes'! The Gambler has been added to your inventory. Your next bet resolution has a 50/50 chance to double your win or loss.",
+			Message:     fmt.Sprintf("<@%s> chose 'Yes'! The Gambler has been added to your inventory. Your next bet resolution has a 50/50 chance to double your win or loss.", user.DiscordID),
 			PointsDelta: 0,
 			PoolDelta:   0,
 		}, user, "", guild.Pool)
@@ -622,7 +604,6 @@ func HandleCardOptionSelection(s *discordgo.Session, i *discordgo.InteractionCre
 
 func HandlePlayCardSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) error {
 	customID := i.MessageComponentData().CustomID
-	// Format: playcard_select_<userID>_<guildID>
 	parts := strings.Split(customID, "_")
 	if len(parts) != 4 {
 		return fmt.Errorf("invalid playcard selection custom ID format")
@@ -651,14 +632,11 @@ func HandlePlayCardSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 		return fmt.Errorf("invalid card ID: %v", err)
 	}
 
-	// Check if card is STOP THE STEAL (card ID 70)
 	if selectedCardID == cards.StopTheStealCardID {
 		showBetSelectMenuForPlayCard(s, i, db, selectedCardID, userID, guildID)
 		return nil
 	}
 
-	// For other cards, handle appropriately in the future
-	// For now, return an error
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
@@ -706,7 +684,6 @@ func showBetSelectMenuForPlayCard(s *discordgo.Session, i *discordgo.Interaction
 
 	options := []discordgo.SelectMenuOption{}
 	for _, res := range results {
-		// Show bet description with amount bet
 		label := fmt.Sprintf("%s (%d pts)", res.Description, res.TotalAmount)
 		if len(label) > 100 {
 			label = label[:97] + "..."

@@ -114,8 +114,24 @@ func registerEpicCards(deck *[]models.Card) {
 			Weight:      W_Epic,
 			Handler:     handleRobbingTheHood,
 		},
+		{
+			ID:          74,
+			Name:        "Lehman Brothers Insider",
+			Description: "You penetrated the the banks internal systems and brought them down from the inside. The pool loses 20% of its total points.",
+			Rarity:      "Epic",
+			Weight:      W_Epic,
+			Handler:     handleLehmanBrothersInsider,
+		},
+		// {
+		// 	ID:                   76,
+		// 	Name:                 "Hot Hand",
+		// 	Description:          "For every consecutive bet won with this card, your payout multiplier increases by +0.5x (1.5x, 2.0x, 2.5x...). A loss resets the multiplier to normal and the card is removed from your inventory.",
+		// 	Rarity:               "Epic",
+		// 	Weight:               W_Epic,
+		// 	Handler:              handleHotHand,
+		// 	RoyaltyDiscordUserID: &[]string{"698712210515558432"}[0],
+		// },
 	}
 
-	// Add to deck
 	*deck = append(*deck, epicCards...)
 }

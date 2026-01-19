@@ -3,14 +3,14 @@ package interactionService
 import (
 	"errors"
 	"fmt"
-	"github.com/bwmarrin/discordgo"
 	"perfectOddsBot/services/common"
 	"strconv"
 	"strings"
+
+	"github.com/bwmarrin/discordgo"
 )
 
 func ResolveBet(s *discordgo.Session, i *discordgo.InteractionCreate, customID string) error {
-	// Handle resolving a bet
 	betID, err := strconv.Atoi(strings.TrimPrefix(customID, "resolve_bet_"))
 	if err != nil {
 		return err

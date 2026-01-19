@@ -80,6 +80,14 @@ func registerRareCards(deck *[]models.Card) {
 			Weight:      W_Rare,
 			Handler:     handleGrandLarceny,
 		},
+		{
+			ID:          73,
+			Name:        "Bank Heist",
+			Description: "Steal 300 points from the pool (if possible).",
+			Rarity:      "Rare",
+			Weight:      W_Rare,
+			Handler:     handleBankHeist,
+		},
 	}
 
 	*deck = append(*deck, rareCards...)

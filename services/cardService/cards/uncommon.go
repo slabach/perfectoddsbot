@@ -127,6 +127,14 @@ func registerUncommonCards(deck *[]models.Card) {
 			Handler:        handleLoanShark,
 			AddToInventory: true,
 		},
+		{
+			ID:          75,
+			Name:        "Insider Trading",
+			Description: "Steal 100 points from the pool.",
+			Rarity:      "Uncommon",
+			Weight:      W_Uncommon,
+			Handler:     handleInsiderTrading,
+		},
 	}
 
 	*deck = append(*deck, uncommonCards...)

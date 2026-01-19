@@ -3,8 +3,6 @@ package scheduler_jobs
 import (
 	"errors"
 	"fmt"
-	"github.com/bwmarrin/discordgo"
-	"gorm.io/gorm"
 	"log"
 	"perfectOddsBot/models"
 	"perfectOddsBot/models/external"
@@ -15,6 +13,9 @@ import (
 	"strconv"
 	"time"
 	_ "time/tzdata"
+
+	"github.com/bwmarrin/discordgo"
+	"gorm.io/gorm"
 )
 
 func CheckCFBLines(s *discordgo.Session, db *gorm.DB) (err error) {
@@ -28,7 +29,7 @@ func CheckCFBLines(s *discordgo.Session, db *gorm.DB) (err error) {
 
 	var betList []models.Bet
 
-	result := db.Where("paid = 0 AND active = 1 AND cfbd_id IS NOT NULL").Find(&betList)
+	result := db.Where("paid = 0 AND active = 1 AND cfbd_id IS NOT NULL AND spread IS NOT NULL").Find(&betList)
 	if result.Error != nil {
 		return result.Error
 	}
@@ -38,7 +39,6 @@ func CheckCFBLines(s *discordgo.Session, db *gorm.DB) (err error) {
 		return err
 	}
 
-	// Get the current time in EST
 	currentTimeEST := time.Now().In(est)
 	formattedTime := currentTimeEST.Format("Mon 03:04 pm MST")
 
@@ -58,6 +58,11 @@ func CheckCFBLines(s *discordgo.Session, db *gorm.DB) (err error) {
 			line, lineErr := common.PickLine(obj.Lines)
 			if lineErr != nil {
 				fmt.Println(lineErr)
+				continue
+			}
+
+			// if no spread on the bet, don't update the bet because it's an ML bet
+			if bet.Spread == nil {
 				continue
 			}
 

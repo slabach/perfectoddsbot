@@ -61,7 +61,7 @@ func handleGrail(s *discordgo.Session, db *gorm.DB, userID string, guildID strin
 		return nil, err
 	}
 
-	poolWin := guild.Pool * 0.5
+	poolWin := guild.Pool * 0.25
 
 	return &models.CardResult{
 		Message:     "You discovered the Holy Grail! You won 50% of the pool!",
@@ -76,10 +76,12 @@ func handleJackpot(s *discordgo.Session, db *gorm.DB, userID string, guildID str
 		return nil, err
 	}
 
+	poolWin := guild.Pool * 0.5
+
 	return &models.CardResult{
 		Message:     ":rotating_light: You discovered the JACKPOT! You won 100% of the pool! :rotating_light:",
-		PointsDelta: guild.Pool,
-		PoolDelta:   -guild.Pool,
+		PointsDelta: poolWin,
+		PoolDelta:   -poolWin,
 	}, nil
 }
 
@@ -1797,14 +1799,19 @@ func handleDivineIntervention(s *discordgo.Session, db *gorm.DB, userID string, 
 		return nil, fmt.Errorf("user not found")
 	}
 
-	user.Points = averagePoints
-	if err := db.Save(&user).Error; err != nil {
-		return nil, err
+	if user.Points >= averagePoints {
+		return &models.CardResult{
+			Message:     "You are already at or above average! Divine Intervention fizzles out.",
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
 	}
+
+	pointsDelta := averagePoints - user.Points
 
 	return &models.CardResult{
 		Message:     fmt.Sprintf("Your points balance is set to exactly the average of all players (%.2f).", averagePoints),
-		PointsDelta: 0,
+		PointsDelta: pointsDelta,
 		PoolDelta:   0,
 	}, nil
 }
@@ -1976,5 +1983,47 @@ func handleGetOutOfJail(s *discordgo.Session, db *gorm.DB, userID string, guildI
 		Message:     "You drew Get Out of Jail Free! This card will nullify your next lost bet completely.",
 		PointsDelta: 0,
 		PoolDelta:   0,
+	}, nil
+}
+
+func handleBankHeist(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	guild, err := guildService.GetGuildInfo(s, db, guildID, "")
+	if err != nil {
+		return nil, err
+	}
+
+	if guild.Pool < 300 {
+		return &models.CardResult{
+			Message:     fmt.Sprintf("You've drawn Bank Heist! You stole %0.f points from the pool.", guild.Pool),
+			PointsDelta: guild.Pool,
+			PoolDelta:   -guild.Pool,
+		}, nil
+	}
+
+	return &models.CardResult{
+		Message:     "You've drawn Bank Heist! You stole 300 points from the pool.",
+		PointsDelta: 300,
+		PoolDelta:   -300,
+	}, nil
+}
+
+func handleLehmanBrothersInsider(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	guild, err := guildService.GetGuildInfo(s, db, guildID, "")
+	if err != nil {
+		return nil, err
+	}
+
+	return &models.CardResult{
+		Message:     "You've drawn Lehman Brothers Insider! The pool loses 20% of its total points.",
+		PointsDelta: 0,
+		PoolDelta:   -(guild.Pool * 0.2),
+	}, nil
+}
+
+func handleInsiderTrading(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	return &models.CardResult{
+		Message:     "You've drawn Insider Trading! You stole 100 points from the pool.",
+		PointsDelta: 100,
+		PoolDelta:   -100,
 	}, nil
 }

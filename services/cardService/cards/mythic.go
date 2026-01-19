@@ -7,7 +7,7 @@ func registerMythicCards(deck *[]models.Card) {
 		{
 			ID:          3,
 			Name:        "The Grail",
-			Description: "You discovered the Holy Grail! Win 50% of the pool!",
+			Description: "You discovered the Holy Grail! Win 25% of the pool!",
 			Rarity:      "Mythic",
 			Weight:      W_Mythic,
 			Handler:     handleGrail,
@@ -32,7 +32,7 @@ func registerMythicCards(deck *[]models.Card) {
 		{
 			ID:          52,
 			Name:        "JACKPOT",
-			Description: "You win 100% of the current Pool.",
+			Description: "You win 50% of the current Pool.",
 			Rarity:      "Mythic",
 			Weight:      W_Mythic,
 			Handler:     handleJackpot,
