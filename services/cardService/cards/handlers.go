@@ -1812,3 +1812,11 @@ func handleGambler(s *discordgo.Session, db *gorm.DB, userID string, guildID str
 		PoolDelta:   0,
 	}, nil
 }
+
+func handleGetOutOfJail(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	return &models.CardResult{
+		Message:     "You drew Get Out of Jail Free! This card will nullify your next lost bet completely.",
+		PointsDelta: 0,
+		PoolDelta:   0,
+	}, nil
+}

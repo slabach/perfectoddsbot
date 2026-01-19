@@ -1058,6 +1058,27 @@ func ApplyBetInsuranceIfApplicable(db *gorm.DB, consumer CardConsumer, user mode
 	return 0, false, nil
 }
 
+func ApplyGetOutOfJailIfApplicable(db *gorm.DB, consumer CardConsumer, user models.User, betAmount float64) (float64, bool, error) {
+	var count int64
+	err := db.Model(&models.UserInventory{}).
+		Where("user_id = ? AND guild_id = ? AND card_id = ?", user.ID, user.GuildID, cards.GetOutOfJailCardID).
+		Count(&count).Error
+
+	if err != nil {
+		return 0, false, err
+	}
+
+	if count > 0 {
+		if err := consumer(db, user, cards.GetOutOfJailCardID); err != nil {
+			return 0, false, err
+		}
+
+		return betAmount, true, nil
+	}
+
+	return 0, false, nil
+}
+
 func ApplyGamblerIfAvailable(db *gorm.DB, consumer CardConsumer, user models.User, originalPayout float64, isWin bool) (float64, bool, error) {
 	var count int64
 	err := db.Model(&models.UserInventory{}).

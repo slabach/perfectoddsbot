@@ -124,21 +124,19 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 		return
 	}
 
-	// Get guild info for pool accumulation
 	guild, err := guildService.GetGuildInfo(s, db, bet.GuildID, bet.ChannelID)
 	if err != nil {
 		common.SendError(s, i, err, db)
 		return
 	}
 
-	// Get all entries for this bet
 	var entries []models.BetEntry
 	db.Where("bet_id = ? AND deleted_at IS NULL", bet.ID).Find(&entries)
 
 	totalPayout := 0.0
 	totalWinningPayouts := 0.0
 	lostPoolAmount := 0.0
-	winnerDiscordIDs := make(map[string]float64) // Track DiscordID -> total payout amount
+	winnerDiscordIDs := make(map[string]float64)
 	for _, entry := range entries {
 		var user models.User
 		db.First(&user, "id = ?", entry.UserID)
@@ -147,10 +145,8 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 		}
 
 		if entry.Option == winningOption {
-			// Winning entry - calculate payout
 			payout := common.CalculatePayout(entry.Amount, winningOption, bet)
 
-			// Uno Reverse Check
 			unoApplied, isWinAfterUno, err := cardService.ApplyUnoReverseIfApplicable(db, user, bet.ID, true)
 			if err != nil {
 				common.SendError(s, i, fmt.Errorf("error checking Uno Reverse: %v", err), db)
@@ -158,7 +154,6 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 			}
 
 			if unoApplied && !isWinAfterUno {
-				// Flipped to LOSS
 				user.TotalBetsLost++
 				user.TotalPointsLost += float64(entry.Amount)
 				db.Save(&user)
@@ -180,29 +175,24 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 				}
 			}
 
-			// Define card consumer closure
 			consumer := func(db *gorm.DB, user models.User, cardID int) error {
 				return cardService.PlayCardFromInventory(s, db, user, cardID)
 			}
 
-			// Check for Double Down card and apply 2x multiplier if available
 			modifiedPayout, hasDoubleDown, err := cardService.ApplyDoubleDownIfAvailable(db, consumer, user, payout)
 			if err != nil {
 				common.SendError(s, i, fmt.Errorf("error checking Double Down: %v", err), db)
 				return
 			}
 
-			// Store payout before applying Gambler to check if it was doubled
 			payoutAfterDoubleDown := modifiedPayout
 
-			// Check for Gambler card and apply 50/50 chance to double if available
 			modifiedPayout, hasGambler, err := cardService.ApplyGamblerIfAvailable(db, consumer, user, modifiedPayout, true)
 			if err != nil {
 				common.SendError(s, i, fmt.Errorf("error checking Gambler: %v", err), db)
 				return
 			}
 
-			// Check for Bet Insurance (fizzle on win)
 			_, insuranceApplied, err := cardService.ApplyBetInsuranceIfApplicable(db, consumer, user, 0, true)
 			if err != nil {
 				common.SendError(s, i, fmt.Errorf("error checking Bet Insurance: %v", err), db)
@@ -215,7 +205,7 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 			db.Save(&user)
 			totalPayout += modifiedPayout
 			totalWinningPayouts += modifiedPayout
-			winnerDiscordIDs[user.DiscordID] += modifiedPayout // Accumulate payout for this winner
+			winnerDiscordIDs[user.DiscordID] += modifiedPayout
 
 			if modifiedPayout > 0 {
 				username := common.GetUsernameWithDB(db, s, user.GuildID, user.DiscordID)
@@ -238,9 +228,6 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 				winnersList += fmt.Sprintf("%s - Won $%.1f%s%s%s\n", username, modifiedPayout, doubleDownMsg, gamblerMsg, insuranceMsg)
 			}
 		} else {
-			// Losing entry - add to pool
-
-			// Uno Reverse Check
 			unoApplied, isWinAfterUno, err := cardService.ApplyUnoReverseIfApplicable(db, user, bet.ID, false)
 			if err != nil {
 				common.SendError(s, i, fmt.Errorf("error checking Uno Reverse: %v", err), db)
@@ -248,41 +235,32 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 			}
 
 			if unoApplied && isWinAfterUno {
-				// Flipped to WIN
-				// Calculate payout as if they won
 				payout := common.CalculatePayout(entry.Amount, entry.Option, bet)
 
-				// Define card consumer closure
 				consumer := func(db *gorm.DB, user models.User, cardID int) error {
 					return cardService.PlayCardFromInventory(s, db, user, cardID)
 				}
 
-				// Check for Double Down card and apply 2x multiplier if available
 				modifiedPayout, hasDoubleDown, err := cardService.ApplyDoubleDownIfAvailable(db, consumer, user, payout)
 				if err != nil {
 					common.SendError(s, i, fmt.Errorf("error checking Double Down: %v", err), db)
 					return
 				}
 
-				// Store payout before applying Gambler to check if it was doubled
 				payoutAfterDoubleDown := modifiedPayout
 
-				// Check for Gambler card and apply 50/50 chance to double if available
 				modifiedPayout, hasGambler, err := cardService.ApplyGamblerIfAvailable(db, consumer, user, modifiedPayout, true)
 				if err != nil {
 					common.SendError(s, i, fmt.Errorf("error checking Gambler: %v", err), db)
 					return
 				}
 
-				// Check for Emotional Hedge
-				// Using scoreDiff=0 for manual resolution
 				hedgeRefund, hedgeApplied, err := cardService.ApplyEmotionalHedgeIfApplicable(db, consumer, user, bet, entry.Option, float64(entry.Amount), 0)
 				if err != nil {
 					common.SendError(s, i, fmt.Errorf("error checking Emotional Hedge: %v", err), db)
 					return
 				}
 
-				// Check for Bet Insurance (fizzle on win)
 				_, insuranceApplied, err := cardService.ApplyBetInsuranceIfApplicable(db, consumer, user, 0, true)
 				if err != nil {
 					common.SendError(s, i, fmt.Errorf("error checking Bet Insurance: %v", err), db)
@@ -295,14 +273,12 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 
 				if hedgeApplied && hedgeRefund > 0 {
 					user.Points += hedgeRefund
-					// Subtract refund from pool (since we are paying it out)
-					lostPoolAmount -= hedgeRefund
 				}
 
 				db.Save(&user)
 				totalPayout += modifiedPayout + hedgeRefund
 				totalWinningPayouts += modifiedPayout + hedgeRefund
-				winnerDiscordIDs[user.DiscordID] += modifiedPayout + hedgeRefund // Accumulate payout for this winner
+				winnerDiscordIDs[user.DiscordID] += modifiedPayout + hedgeRefund
 
 				username := common.GetUsernameWithDB(db, s, user.GuildID, user.DiscordID)
 
@@ -349,20 +325,30 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 				}
 			}
 
-			// Define card consumer closure
 			consumer := func(db *gorm.DB, user models.User, cardID int) error {
 				return cardService.PlayCardFromInventory(s, db, user, cardID)
 			}
 
-			// Check for Bet Insurance (refund on loss)
+			jailRefund, jailApplied, err := cardService.ApplyGetOutOfJailIfApplicable(db, consumer, user, float64(entry.Amount))
+			if err != nil {
+				common.SendError(s, i, fmt.Errorf("error checking Get Out of Jail Free: %v", err), db)
+				return
+			}
+
+			if jailApplied && jailRefund > 0 {
+				user.Points += jailRefund
+				db.Save(&user)
+				username := common.GetUsernameWithDB(db, s, user.GuildID, user.DiscordID)
+				loserList += fmt.Sprintf("%s - **Lost $%.1f** (Get Out of Jail Free: Full refund!)\n", username, float64(entry.Amount))
+				continue
+			}
+
 			insuranceRefund, insuranceApplied, err := cardService.ApplyBetInsuranceIfApplicable(db, consumer, user, float64(entry.Amount), false)
 			if err != nil {
 				common.SendError(s, i, fmt.Errorf("error checking Bet Insurance: %v", err), db)
 				return
 			}
 
-			// Check for Gambler card and apply 50/50 chance to double loss if available
-			// For losses, originalPayout is negative (the loss amount)
 			lossAmount := float64(entry.Amount)
 			modifiedLoss, hasGambler, err := cardService.ApplyGamblerIfAvailable(db, consumer, user, -lossAmount, false)
 			if err != nil {
@@ -370,11 +356,8 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 				return
 			}
 
-			// If gambler doubled the loss, modifiedLoss will be double the negative loss
-			// So we need to convert back and add extra to pool
 			actualLoss := lossAmount
 			if hasGambler && modifiedLoss < -lossAmount {
-				// Loss was doubled (modifiedLoss is more negative)
 				actualLoss = -modifiedLoss
 			}
 
@@ -383,7 +366,6 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 
 			if insuranceApplied && insuranceRefund > 0 {
 				user.Points += insuranceRefund
-				// Subtract refund from pool loss
 				lostPoolAmount -= insuranceRefund
 			}
 
@@ -392,7 +374,6 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 		}
 	}
 
-	// Apply Vampire card if there were any winning payouts
 	if totalWinningPayouts > 0 {
 		vampirePayout, vampireWinners, vampireApplied, err := cardService.ApplyVampireIfApplicable(db, bet.GuildID, totalWinningPayouts, winnerDiscordIDs)
 		if err != nil {
@@ -410,7 +391,6 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 		}
 	}
 
-	// Add lost bet amounts to guild pool (atomic update to prevent race conditions)
 	if lostPoolAmount > 0 {
 		db.Model(&models.Guild{}).Where("id = ?", guild.ID).UpdateColumn("pool", gorm.Expr("pool + ?", lostPoolAmount))
 	}
@@ -423,7 +403,6 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 	// The function will use simple option comparison for manually resolved bets
 	err = UpdateParlaysOnBetResolution(s, db, bet.ID, winningOption, 0)
 	if err != nil {
-		// Log error but don't fail the bet resolution
 		fmt.Printf("Error updating parlays for bet %d: %v\n", bet.ID, err)
 	}
 
@@ -468,7 +447,7 @@ func MyOpenBets(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.D
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
 				Content: "Error finding active bets.",
-				Flags:   discordgo.MessageFlagsEphemeral, // Send this response as ephemeral
+				Flags:   discordgo.MessageFlagsEphemeral,
 			},
 		})
 		if err != nil {
@@ -482,7 +461,7 @@ func MyOpenBets(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.D
 		embed := &discordgo.MessageEmbed{
 			Title:       "📊 Your Active Bets",
 			Description: "You have no active bets.",
-			Color:       0x5865F2, // Discord blurple
+			Color:       0x5865F2,
 		}
 		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -520,7 +499,6 @@ func MyOpenBets(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.D
 
 		fieldValue = fmt.Sprintf("**%s**\n💰 Amount: %d points", optionName, bet.Amount)
 
-		// Number each bet to make them more distinct
 		fieldName := fmt.Sprintf("%d. %s", idx+1, bet.Bet.Description)
 
 		fields = append(fields, &discordgo.MessageEmbedField{
@@ -534,7 +512,7 @@ func MyOpenBets(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.D
 		Title:       fmt.Sprintf("📊 Your Active Bets (%d)", len(bets)),
 		Description: "Here are your currently active bets:",
 		Fields:      fields,
-		Color:       0x5865F2, // Discord blurple
+		Color:       0x5865F2,
 	}
 
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{

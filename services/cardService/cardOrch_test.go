@@ -261,6 +261,9 @@ func TestApplyEmotionalHedgeIfApplicable(t *testing.T) {
 		if refund != 0 {
 			t.Errorf("Expected refund 0, got %.2f", refund)
 		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
 	})
 
 	t.Run("Not Applicable (User bet on other team)", func(t *testing.T) {
@@ -305,6 +308,9 @@ func TestApplyEmotionalHedgeIfApplicable(t *testing.T) {
 		}
 		if refund != 0 {
 			t.Errorf("Expected refund 0, got %.2f", refund)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
 		}
 	})
 

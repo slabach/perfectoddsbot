@@ -12,16 +12,15 @@ func registerMythicCards(deck *[]models.Card) {
 			Weight:      W_Mythic,
 			Handler:     handleGrail,
 		},
-
-		// {
-		// 	ID:             43,
-		// 	Name:           "Get Out of Jail Free",
-		// 	Description:    "Nullifies the next lost bet completely.",
-		// 	Rarity:         "Mythic",
-		// 	Weight:         W_Mythic,
-		// 	Handler:        handleGetOutOfJail,
-		// 	AddToInventory: true,
-		// },
+		{
+			ID:             43,
+			Name:           "Get Out of Jail Free",
+			Description:    "Nullifies the next lost bet completely.",
+			Rarity:         "Mythic",
+			Weight:         W_Mythic,
+			Handler:        handleGetOutOfJail,
+			AddToInventory: true,
+		},
 		// {
 		// 	ID:          50,
 		// 	Name:        "Market Crash",

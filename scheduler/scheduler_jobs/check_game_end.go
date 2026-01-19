@@ -84,7 +84,6 @@ func CheckGameEnd(s *discordgo.Session, db *gorm.DB) (err error) {
 					var betEntries []models.BetEntry
 					entriesResult := db.Where("bet_id = ?", bet.ID).Find(&betEntries)
 
-					// Determine winning option even if there are no bet entries (for parlay updates)
 					winningOption := 0
 					if bet.Spread == nil {
 						// Moneyline bet: winner is determined by actual game result
@@ -267,7 +266,7 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 
 	totalPayout := 0.0
 	totalWinningPayouts := 0.0
-	winnerDiscordIDs := make(map[string]float64) // Track DiscordID -> total payout amount
+	winnerDiscordIDs := make(map[string]float64)
 	for _, entry := range entries {
 		var user models.User
 		db.First(&user, "id = ?", entry.UserID)
@@ -279,10 +278,8 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 		betOption := common.GetSchoolName(bet.Option1)
 		var spreadDisplay string
 		if bet.Spread == nil {
-			// Moneyline bet: no spread to display
 			spreadDisplay = ""
 		} else {
-			// Check if entry.Spread is nil (legacy entries) and fall back to bet.Spread
 			var spread float64
 			if entry.Spread != nil {
 				spread = *entry.Spread
@@ -332,37 +329,30 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 				}
 			}
 
-			// Define card consumer closure
 			consumer := func(db *gorm.DB, user models.User, cardID int) error {
 				return cardService.PlayCardFromInventory(s, db, user, cardID)
 			}
 
-			// Check for Double Down card and apply 2x multiplier if available
 			modifiedPayout, hasDoubleDown, err := cardService.ApplyDoubleDownIfAvailable(db, consumer, user, payout)
 			if err != nil {
 				log.Printf("Error checking Double Down for auto-resolved bet: %v", err)
-				// Continue with original payout if error
 				modifiedPayout = payout
 				hasDoubleDown = false
 			}
 
-			// Store payout before applying Gambler to check if it was doubled
 			payoutAfterDoubleDown := modifiedPayout
 
-			// Check for Gambler card and apply 50/50 chance to double if available
 			modifiedPayout, hasGambler, err := cardService.ApplyGamblerIfAvailable(db, consumer, user, modifiedPayout, true)
 			if err != nil {
 				log.Printf("Error checking Gambler for auto-resolved bet: %v", err)
 				hasGambler = false
 			}
 
-			// Check for Emotional Hedge
 			hedgeRefund, hedgeApplied, err := cardService.ApplyEmotionalHedgeIfApplicable(db, consumer, user, bet, entry.Option, float64(entry.Amount), scoreDiff)
 			if err != nil {
 				log.Printf("Error checking Emotional Hedge: %v", err)
 			}
 
-			// Check for Bet Insurance (fizzle on win)
 			_, insuranceApplied, err := cardService.ApplyBetInsuranceIfApplicable(db, consumer, user, 0, true)
 			if err != nil {
 				log.Printf("Error checking Bet Insurance (Win): %v", err)
@@ -379,7 +369,7 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 			db.Save(&user)
 			totalPayout += modifiedPayout + hedgeRefund
 			totalWinningPayouts += modifiedPayout + hedgeRefund
-			winnerDiscordIDs[user.DiscordID] += modifiedPayout + hedgeRefund // Accumulate payout for this winner
+			winnerDiscordIDs[user.DiscordID] += modifiedPayout + hedgeRefund
 
 			if modifiedPayout > 0 {
 				doubleDownMsg := ""
@@ -412,22 +402,18 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 				}
 			}
 		} else {
-			// Uno Reverse Check (Loss -> Win)
 			unoApplied, isWinAfterUno, err := cardService.ApplyUnoReverseIfApplicable(db, user, bet.ID, false)
 			if err != nil {
 				log.Printf("Error checking Uno Reverse: %v", err)
 			}
 
 			if unoApplied && isWinAfterUno {
-				// Flipped to WIN
 				payout := common.CalculatePayout(entry.Amount, entry.Option, bet)
 
-				// Define card consumer closure
 				consumer := func(db *gorm.DB, user models.User, cardID int) error {
 					return cardService.PlayCardFromInventory(s, db, user, cardID)
 				}
 
-				// Check for Double Down card and apply 2x multiplier if available
 				modifiedPayout, hasDoubleDown, err := cardService.ApplyDoubleDownIfAvailable(db, consumer, user, payout)
 				if err != nil {
 					log.Printf("Error checking Double Down for auto-resolved bet (Uno Reverse): %v", err)
@@ -435,23 +421,19 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 					hasDoubleDown = false
 				}
 
-				// Store payout before applying Gambler to check if it was doubled
 				payoutAfterDoubleDown := modifiedPayout
 
-				// Check for Gambler card and apply 50/50 chance to double if available
 				modifiedPayout, hasGambler, err := cardService.ApplyGamblerIfAvailable(db, consumer, user, modifiedPayout, true)
 				if err != nil {
 					log.Printf("Error checking Gambler for auto-resolved bet (Uno Reverse): %v", err)
 					hasGambler = false
 				}
 
-				// Check for Emotional Hedge
 				hedgeRefund, hedgeApplied, err := cardService.ApplyEmotionalHedgeIfApplicable(db, consumer, user, bet, entry.Option, float64(entry.Amount), scoreDiff)
 				if err != nil {
 					log.Printf("Error checking Emotional Hedge (Uno Reverse): %v", err)
 				}
 
-				// Check for Bet Insurance (fizzle on win)
 				_, insuranceApplied, err := cardService.ApplyBetInsuranceIfApplicable(db, consumer, user, 0, true)
 				if err != nil {
 					log.Printf("Error checking Bet Insurance (Win/Uno Reverse): %v", err)
@@ -468,7 +450,7 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 				db.Save(&user)
 				totalPayout += modifiedPayout + hedgeRefund
 				totalWinningPayouts += modifiedPayout + hedgeRefund
-				winnerDiscordIDs[user.DiscordID] += modifiedPayout + hedgeRefund // Accumulate payout for this winner
+				winnerDiscordIDs[user.DiscordID] += modifiedPayout + hedgeRefund
 
 				if modifiedPayout > 0 {
 					doubleDownMsg := ""
@@ -519,6 +501,22 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 				return cardService.PlayCardFromInventory(s, db, user, cardID)
 			}
 
+			jailRefund, jailApplied, err := cardService.ApplyGetOutOfJailIfApplicable(db, consumer, user, float64(entry.Amount))
+			if err != nil {
+				log.Printf("Error checking Get Out of Jail Free: %v", err)
+			}
+
+			if jailApplied && jailRefund > 0 {
+				user.Points += jailRefund
+				db.Save(&user)
+				if spreadDisplay != "" {
+					loserList += fmt.Sprintf("%s - Bet: %s %s - **Lost $%.0f** (Get Out of Jail Free: Full refund!)\n", username, betOption, spreadDisplay, float64(entry.Amount))
+				} else {
+					loserList += fmt.Sprintf("%s - Bet: %s - **Lost $%.0f** (Get Out of Jail Free: Full refund!)\n", username, betOption, float64(entry.Amount))
+				}
+				continue
+			}
+
 			hedgeRefund, hedgeApplied, err := cardService.ApplyEmotionalHedgeIfApplicable(db, consumer, user, bet, entry.Option, float64(entry.Amount), scoreDiff)
 			if err != nil {
 				log.Printf("Error checking Emotional Hedge: %v", err)
@@ -529,7 +527,6 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 				log.Printf("Error checking Bet Insurance (Loss): %v", err)
 			}
 
-			// Check for Gambler card and apply 50/50 chance to double loss if available
 			lossAmount := float64(entry.Amount)
 			modifiedLoss, hasGambler, err := cardService.ApplyGamblerIfAvailable(db, consumer, user, -lossAmount, false)
 			if err != nil {
@@ -537,11 +534,8 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 				hasGambler = false
 			}
 
-			// If gambler doubled the loss, modifiedLoss will be double the negative loss
-			// So we need to convert back and add extra to pool
 			actualLoss := lossAmount
 			if hasGambler && modifiedLoss < -lossAmount {
-				// Loss was doubled (modifiedLoss is more negative)
 				actualLoss = -modifiedLoss
 			}
 
