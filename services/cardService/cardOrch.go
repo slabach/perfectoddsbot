@@ -1021,6 +1021,10 @@ func ApplyEmotionalHedgeIfApplicable(db *gorm.DB, consumer CardConsumer, user mo
 		return 0, false, err
 	}
 
+	if scoreDiff == 0 {
+		return 0, true, nil
+	}
+
 	teamWonStraightUp := false
 	if userPick == 1 {
 		teamWonStraightUp = scoreDiff > 0

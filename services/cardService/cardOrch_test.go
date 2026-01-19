@@ -345,6 +345,59 @@ func TestApplyEmotionalHedgeIfApplicable(t *testing.T) {
 			t.Errorf("Unmet expectations: %v", err)
 		}
 	})
+
+	t.Run("Applicable but No Refund (scoreDiff is 0 - unknown result)", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		user := models.User{ID: 1, GuildID: "guild1"}
+		bet := models.Bet{Option1: "Team A", Option2: "Team B", GuildID: "guild1"}
+		subscribedTeam := "Team A"
+
+		mock.ExpectQuery("SELECT count\\(\\*\\) FROM `user_inventories`").
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+
+		mock.ExpectQuery("SELECT \\* FROM `guilds`").
+			WithArgs(user.GuildID, 1).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "guild_id", "subscribed_team"}).
+				AddRow(1, "guild1", subscribedTeam))
+
+		// User picks Team A
+		userPick := 1
+		betAmount := 100.0
+		// scoreDiff = 0 means we can't determine the actual game result (e.g., manually resolved bet)
+		scoreDiff := 0
+
+		consumed := false
+		consumer := func(db *gorm.DB, u models.User, cardID int) error {
+			consumed = true
+			return nil
+		}
+
+		refund, applied, err := ApplyEmotionalHedgeIfApplicable(db, consumer, user, bet, userPick, betAmount, scoreDiff)
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if !applied {
+			t.Error("Expected card to be applied (consumed)")
+		}
+		if !consumed {
+			t.Error("Expected consumer to be called")
+		}
+		if refund != 0 {
+			t.Errorf("Expected refund 0 when scoreDiff is 0 (unknown result), got %.2f", refund)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
 }
 
 func TestApplyBetInsuranceIfApplicable(t *testing.T) {

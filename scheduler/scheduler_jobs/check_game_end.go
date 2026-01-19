@@ -266,6 +266,7 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 
 	totalPayout := 0.0
 	totalWinningPayouts := 0.0
+	lostPoolAmount := 0.0
 	winnerDiscordIDs := make(map[string]float64)
 	for _, entry := range entries {
 		var user models.User
@@ -307,6 +308,7 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 				user.TotalBetsLost++
 				user.TotalPointsLost += float64(entry.Amount)
 				db.Save(&user)
+				lostPoolAmount += float64(entry.Amount)
 
 				if spreadDisplay != "" {
 					loserList += fmt.Sprintf("%s - Bet: %s %s - **Lost $%d** (Uno Reverse!)\n", username, betOption, spreadDisplay, entry.Amount)
@@ -548,9 +550,11 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 
 			if insuranceApplied && insuranceRefund > 0 {
 				user.Points += insuranceRefund
+				lostPoolAmount -= insuranceRefund
 			}
 
 			db.Save(&user)
+			lostPoolAmount += actualLoss
 
 			hedgeMsg := ""
 			if hedgeApplied && hedgeRefund > 0 {
@@ -596,6 +600,10 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 				}
 			}
 		}
+	}
+
+	if lostPoolAmount > 0 {
+		db.Model(&models.Guild{}).Where("id = ?", guild.ID).UpdateColumn("pool", gorm.Expr("pool + ?", lostPoolAmount))
 	}
 
 	bet.Active = false
