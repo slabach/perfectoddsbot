@@ -288,7 +288,7 @@ func handleTimeout(s *discordgo.Session, db *gorm.DB, userID string, guildID str
 	}
 
 	return &models.CardResult{
-		Message:     "You've been timed out! You cannot buy another card for 1 hour.",
+		Message:     "You've been timed out! You cannot buy another card for 2 hours.",
 		PointsDelta: 0,
 		PoolDelta:   0,
 	}, nil
@@ -718,7 +718,7 @@ func ExecuteJesterMute(s *discordgo.Session, db *gorm.DB, userID string, targetU
 		}
 		if blocked {
 			return &models.CardResult{
-				Message:           fmt.Sprintf("@%s's Shield blocked the Jester's curse!", targetMention),
+				Message:           fmt.Sprintf("%s's Shield blocked the Jester's curse!", targetMention),
 				PointsDelta:       0,
 				PoolDelta:         0,
 				TargetUserID:      &targetID,
@@ -1345,7 +1345,7 @@ func handleRobinHood(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 
 	if blocked {
 		return &models.CardResult{
-			Message:     fmt.Sprintf("Robin Hood attempted to steal from %s, but their Shield parried the theif! The card fizzles out.", topDisplayName),
+			Message:     fmt.Sprintf("Robin Hood attempted to steal from %s, but their Shield parried the thief! The card fizzles out.", topDisplayName),
 			PointsDelta: 0,
 			PoolDelta:   0,
 		}, nil

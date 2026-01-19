@@ -12,6 +12,7 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type CardConsumer func(db *gorm.DB, user models.User, cardID int) error
@@ -89,6 +90,15 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		user.CardDrawCount = 0
 	}
 
+	// Start transaction early to perform inventory checks with row locking
+	tx := db.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Compute base drawCardCost (before modifiers)
 	var drawCardCost float64
 	switch user.CardDrawCount {
 	case 0:
@@ -104,6 +114,7 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	if drawCardCost == guild.CardDrawCost {
 		donorID, err := hasGenerousDonationInInventory(db, guildID)
 		if err != nil {
+			tx.Rollback()
 			common.SendError(s, i, fmt.Errorf("error checking donation inventory: %v", err), db)
 			return
 		}
@@ -119,29 +130,47 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		}
 	}
 
-	hasLuckyHorseshoe, err := hasLuckyHorseshoeInInventory(db, user.ID, guildID)
-	if err != nil {
-		common.SendError(s, i, fmt.Errorf("error checking inventory: %v", err), db)
+	var horseshoeInventory models.UserInventory
+	err = tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("user_id = ? AND guild_id = ? AND card_id = ?", user.ID, guildID, cards.LuckyHorseshoeCardID).
+		First(&horseshoeInventory).Error
+	hasLuckyHorseshoe := err == nil
+	if err != nil && err != gorm.ErrRecordNotFound {
+		tx.Rollback()
+		common.SendError(s, i, fmt.Errorf("error checking Lucky Horseshoe inventory: %v", err), db)
 		return
 	}
 	if hasLuckyHorseshoe {
 		drawCardCost = drawCardCost * 0.5
 	}
 
-	hasUnluckyCat, err := hasUnluckyCatInInventory(db, user.ID, guildID)
-	if err != nil {
-		common.SendError(s, i, fmt.Errorf("error checking inventory: %v", err), db)
+	var unluckyCatInventory models.UserInventory
+	err = tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("user_id = ? AND guild_id = ? AND card_id = ?", user.ID, guildID, cards.UnluckyCatCardID).
+		First(&unluckyCatInventory).Error
+	hasUnluckyCat := err == nil
+	if err != nil && err != gorm.ErrRecordNotFound {
+		tx.Rollback()
+		common.SendError(s, i, fmt.Errorf("error checking Unlucky Cat inventory: %v", err), db)
 		return
 	}
 	if hasUnluckyCat {
 		drawCardCost = drawCardCost * 2.0
 	}
 
-	if user.Points < drawCardCost {
+	var lockedUser models.User
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&lockedUser, user.ID).Error; err != nil {
+		tx.Rollback()
+		common.SendError(s, i, fmt.Errorf("error locking user: %v", err), db)
+		return
+	}
+
+	if lockedUser.Points < drawCardCost {
+		tx.Rollback()
 		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
-				Content: fmt.Sprintf("You need at least %.0f points to draw a card. You have %.1f points.", drawCardCost, user.Points),
+				Content: fmt.Sprintf("You need at least %.0f points to draw a card. You have %.1f points.", drawCardCost, lockedUser.Points),
 				Flags:   discordgo.MessageFlagsEphemeral,
 			},
 		})
@@ -151,15 +180,9 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		return
 	}
 
-	tx := db.Begin()
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-		}
-	}()
-
+	// Consume cards atomically in the same transaction
 	if hasLuckyHorseshoe {
-		if err := PlayCardFromInventory(s, tx, user, cards.LuckyHorseshoeCardID); err != nil {
+		if err := tx.Delete(&horseshoeInventory).Error; err != nil {
 			tx.Rollback()
 			common.SendError(s, i, fmt.Errorf("error consuming Lucky Horseshoe: %v", err), db)
 			return
@@ -167,12 +190,14 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	}
 
 	if hasUnluckyCat {
-		if err := PlayCardFromInventory(s, tx, user, cards.UnluckyCatCardID); err != nil {
+		if err := tx.Delete(&unluckyCatInventory).Error; err != nil {
 			tx.Rollback()
 			common.SendError(s, i, fmt.Errorf("error consuming Unlucky Cat: %v", err), db)
 			return
 		}
 	}
+
+	user = lockedUser
 
 	if donorUserID != 0 {
 		var donorUser models.User
@@ -1017,10 +1042,6 @@ func ApplyEmotionalHedgeIfApplicable(db *gorm.DB, consumer CardConsumer, user mo
 		return 0, false, nil
 	}
 
-	if err := consumer(db, user, cards.EmotionalHedgeCardID); err != nil {
-		return 0, false, err
-	}
-
 	if scoreDiff == 0 {
 		return 0, true, nil
 	}
@@ -1033,6 +1054,9 @@ func ApplyEmotionalHedgeIfApplicable(db *gorm.DB, consumer CardConsumer, user mo
 	}
 
 	if !teamWonStraightUp {
+		if err := consumer(db, user, cards.EmotionalHedgeCardID); err != nil {
+			return 0, false, err
+		}
 		refund := betAmount * 0.5
 		return refund, true, nil
 	}
