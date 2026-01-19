@@ -79,15 +79,19 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 
 	resetPeriod := time.Duration(guild.CardDrawCooldownMinutes) * time.Minute
 
+	// Track whether a reset is needed before we lock the user
+	shouldResetCount := false
 	if user.FirstCardDrawCycle != nil {
 		timeSinceFirstDraw := now.Sub(*user.FirstCardDrawCycle)
 		if timeSinceFirstDraw >= resetPeriod {
 			user.FirstCardDrawCycle = &now
 			user.CardDrawCount = 0
+			shouldResetCount = true
 		}
 	} else {
 		user.FirstCardDrawCycle = &now
 		user.CardDrawCount = 0
+		shouldResetCount = true
 	}
 
 	// Start transaction early to perform inventory checks with row locking
@@ -198,6 +202,12 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	}
 
 	user = lockedUser
+
+	// Re-apply the reset logic if it was needed, since lockedUser has the old DB state
+	if shouldResetCount {
+		user.CardDrawCount = 0
+		user.FirstCardDrawCycle = &now
+	}
 
 	if donorUserID != 0 {
 		var donorUser models.User
@@ -597,7 +607,7 @@ func showBetSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, car
 	err := db.Table("bet_entries").
 		Select("bets.id as bet_id, bets.description, bet_entries.option, bets.option1, bets.option2").
 		Joins("JOIN bets ON bets.id = bet_entries.bet_id").
-		Where("bet_entries.user_id = (SELECT id FROM users WHERE discord_id = ? AND guild_id = ?) AND bets.active = ?", userID, guildID, true).
+		Where("bet_entries.user_id = (SELECT id FROM users WHERE discord_id = ? AND guild_id = ?) AND bets.paid = ?", userID, guildID, false).
 		Limit(25).
 		Scan(&results).Error
 
@@ -1182,9 +1192,7 @@ func processRoyaltyPayment(tx *gorm.DB, card *models.Card, royaltyGuildID string
 		return fmt.Errorf("error fetching royalty user: %v", result.Error)
 	}
 
-	royaltyUser.Points += royaltyAmount
-
-	if err := tx.Save(&royaltyUser).Error; err != nil {
+	if err := tx.Model(&royaltyUser).UpdateColumn("points", gorm.Expr("points + ?", royaltyAmount)).Error; err != nil {
 		return fmt.Errorf("error saving royalty user: %v", err)
 	}
 
