@@ -398,9 +398,6 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 	bet.Active = false
 	db.Model(&bet).UpdateColumn("paid", true).UpdateColumn("active", false)
 
-	// Update any parlays that include this bet
-	// Note: For manually resolved bets, we don't have scoreDiff, so pass 0
-	// The function will use simple option comparison for manually resolved bets
 	err = UpdateParlaysOnBetResolution(s, db, bet.ID, winningOption, 0)
 	if err != nil {
 		fmt.Printf("Error updating parlays for bet %d: %v\n", bet.ID, err)
@@ -476,7 +473,6 @@ func MyOpenBets(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.D
 		return
 	}
 
-	// Create embed with fields for each bet
 	var fields []*discordgo.MessageEmbedField
 	for idx, bet := range bets {
 		var fieldValue string

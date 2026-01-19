@@ -129,6 +129,5 @@ func registerUncommonCards(deck *[]models.Card) {
 		},
 	}
 
-	// Add to deck
 	*deck = append(*deck, uncommonCards...)
 }

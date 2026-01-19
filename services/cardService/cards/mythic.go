@@ -39,6 +39,5 @@ func registerMythicCards(deck *[]models.Card) {
 		},
 	}
 
-	// Add to deck
 	*deck = append(*deck, mythicCards...)
 }

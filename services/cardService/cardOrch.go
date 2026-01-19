@@ -79,7 +79,6 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 
 	resetPeriod := time.Duration(guild.CardDrawCooldownMinutes) * time.Minute
 
-	// Track whether a reset is needed before we lock the user
 	shouldResetCount := false
 	if user.FirstCardDrawCycle != nil {
 		timeSinceFirstDraw := now.Sub(*user.FirstCardDrawCycle)
@@ -94,7 +93,6 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		shouldResetCount = true
 	}
 
-	// Start transaction early to perform inventory checks with row locking
 	tx := db.Begin()
 	defer func() {
 		if r := recover(); r != nil {
@@ -102,7 +100,6 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		}
 	}()
 
-	// Compute base drawCardCost (before modifiers)
 	var drawCardCost float64
 	switch user.CardDrawCount {
 	case 0:
@@ -184,7 +181,6 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		return
 	}
 
-	// Consume cards atomically in the same transaction
 	if hasLuckyHorseshoe {
 		if err := tx.Delete(&horseshoeInventory).Error; err != nil {
 			tx.Rollback()
@@ -203,7 +199,6 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 
 	user = lockedUser
 
-	// Re-apply the reset logic if it was needed, since lockedUser has the old DB state
 	if shouldResetCount {
 		user.CardDrawCount = 0
 		user.FirstCardDrawCycle = &now
@@ -249,7 +244,6 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		return
 	}
 
-	// Add card to inventory if AddToInventory flag is set OR if it's UserPlayable
 	if card.AddToInventory || card.UserPlayable {
 		if err := addCardToInventory(tx, user.ID, guildID, card.ID); err != nil {
 			tx.Rollback()
@@ -267,7 +261,6 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 
 	if cardResult.RequiresSelection {
 		if cardResult.SelectionType == "user" {
-			// Hostile Takeover requires filtered user selection (within 500 points)
 			if card.ID == cards.HostileTakeoverCardID {
 				showFilteredUserSelectMenu(s, i, card.ID, card.Name, card.Description, userID, guildID, db, 500.0)
 			} else {
@@ -330,11 +323,9 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		}
 	}
 
-	// Check if card has Options (for choice cards like The Gambler)
 	if len(card.Options) > 0 {
 		showCardOptionsMenu(s, i, card.ID, card.Name, card.Description, userID, guildID, db, card.Options)
 
-		// Update user points from cardResult if needed
 		if err := tx.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
 			tx.Rollback()
 			common.SendError(s, i, err, db)
@@ -457,7 +448,7 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	}
 
 	var content string
-	if card.ID == cards.RickRollCardID { // Rick Roll card ID
+	if card.ID == cards.RickRollCardID {
 		content = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 	}
 
@@ -549,7 +540,6 @@ func showFilteredUserSelectMenu(s *discordgo.Session, i *discordgo.InteractionCr
 			displayName = *username
 		}
 
-		// Truncate if too long (Discord limit is 100 chars for label, 100 for description)
 		if len(displayName) > 100 {
 			displayName = displayName[:97] + "..."
 		}
@@ -681,7 +671,6 @@ func showCardOptionsMenu(s *discordgo.Session, i *discordgo.InteractionCreate, c
 		label := opt.Name
 		description := opt.Description
 
-		// Truncate if too long (Discord limit is 100 chars for label, 100 for description)
 		if len(label) > 100 {
 			label = label[:97] + "..."
 		}
@@ -698,7 +687,6 @@ func showCardOptionsMenu(s *discordgo.Session, i *discordgo.InteractionCreate, c
 		})
 	}
 
-	// Build options list string for display in message
 	var optionsList strings.Builder
 	for i, opt := range options {
 		if i > 0 {
@@ -738,17 +726,17 @@ func buildCardEmbed(card *models.Card, result *models.CardResult, user models.Us
 	var color int
 	switch card.Rarity {
 	case "Common":
-		color = cards.C_Common // Gray
+		color = cards.C_Common
 	case "Uncommon":
-		color = cards.C_Uncommon // Green
+		color = cards.C_Uncommon
 	case "Rare":
-		color = cards.C_Rare // Blue
+		color = cards.C_Rare
 	case "Epic":
-		color = cards.C_Epic // Purple
+		color = cards.C_Epic
 	case "Mythic":
-		color = cards.C_Mythic // Gold
+		color = cards.C_Mythic
 	default:
-		color = cards.C_Common // Gray
+		color = cards.C_Common
 	}
 
 	embed := &discordgo.MessageEmbed{
@@ -892,18 +880,15 @@ func ApplyAntiAntiBetIfApplicable(db *gorm.DB, bettorUser models.User, isWin boo
 
 	for _, card := range userCards {
 		if isWin {
-			// Bet won: card holder loses, just delete the card
 			var cardHolder models.User
 			if err := db.First(&cardHolder, card.UserID).Error; err != nil {
-				// If we can't find the user, still delete the card
 				db.Delete(&card)
 				continue
 			}
 
-			// Add card holder to losers list
 			losers = append(losers, AntiAntiBetWinner{
 				DiscordID: cardHolder.DiscordID,
-				Payout:    card.BetAmount, // The amount they bet (which they lose)
+				Payout:    card.BetAmount,
 			})
 
 			if err := db.Delete(&card).Error; err != nil {
@@ -1141,7 +1126,6 @@ func ApplyGamblerIfAvailable(db *gorm.DB, consumer CardConsumer, user models.Use
 	}
 
 	if count > 0 {
-		// Consume the card regardless of whether doubling occurs
 		if err := consumer(db, user, cards.GamblerCardID); err != nil {
 			return originalPayout, false, err
 		}
@@ -1242,7 +1226,6 @@ func MyInventory(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.
 		cardCounts[item.CardID]++
 	}
 
-	// Calculate timer and next draw cost (needed even if inventory is empty)
 	now := time.Now()
 	resetPeriod := time.Duration(guild.CardDrawCooldownMinutes) * time.Minute
 
@@ -1300,24 +1283,48 @@ func MyInventory(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.
 		nextDrawCost = nextDrawCost * 2.0
 	}
 
-	// If inventory is empty, show embed with timer info only
+	var lockoutText string
+	if user.CardDrawTimeoutUntil != nil && now.Before(*user.CardDrawTimeoutUntil) {
+		timeRemaining := user.CardDrawTimeoutUntil.Sub(now)
+		hours := int(timeRemaining.Hours())
+		minutes := int(timeRemaining.Minutes()) % 60
+		seconds := int(timeRemaining.Seconds()) % 60
+		if hours > 0 {
+			lockoutText = fmt.Sprintf("%dh %dm %ds", hours, minutes, seconds)
+		} else if minutes > 0 {
+			lockoutText = fmt.Sprintf("%dm %ds", minutes, seconds)
+		} else {
+			lockoutText = fmt.Sprintf("%ds", seconds)
+		}
+	}
+
 	if len(cardCounts) == 0 {
+		fields := []*discordgo.MessageEmbedField{
+			{
+				Name:   "⏱️ Timer Reset",
+				Value:  countdownText,
+				Inline: true,
+			},
+			{
+				Name:   "💰 Next Draw Cost",
+				Value:  fmt.Sprintf("%.0f points", nextDrawCost),
+				Inline: true,
+			},
+		}
+
+		if lockoutText != "" {
+			fields = append(fields, &discordgo.MessageEmbedField{
+				Name:   "🚫 Draw Lockout",
+				Value:  lockoutText,
+				Inline: true,
+			})
+		}
+
 		embed := &discordgo.MessageEmbed{
 			Title:       "🎴 Your Inventory",
 			Description: "Your inventory is empty. Draw some cards to add them to your hand!",
 			Color:       0x3498DB,
-			Fields: []*discordgo.MessageEmbedField{
-				{
-					Name:   "⏱️ Timer Reset",
-					Value:  countdownText,
-					Inline: true,
-				},
-				{
-					Name:   "💰 Next Draw Cost",
-					Value:  fmt.Sprintf("%.0f points", nextDrawCost),
-					Inline: true,
-				},
-			},
+			Fields:      fields,
 		}
 
 		err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -1359,7 +1366,7 @@ func MyInventory(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.
 	embed := &discordgo.MessageEmbed{
 		Title:       "🎴 Your Inventory",
 		Description: "Cards currently in your hand",
-		Color:       0x3498DB, // Blue
+		Color:       0x3498DB,
 		Fields:      []*discordgo.MessageEmbedField{},
 	}
 
@@ -1409,7 +1416,6 @@ func MyInventory(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.
 		Text: fmt.Sprintf("Total cards: %d", totalCards),
 	}
 
-	// Add timer and cost fields (already calculated above)
 	embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
 		Name:   "⏱️ Timer Reset",
 		Value:  countdownText,
@@ -1425,6 +1431,14 @@ func MyInventory(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.
 		Value:  costText,
 		Inline: true,
 	})
+
+	if lockoutText != "" {
+		embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
+			Name:   "🚫 Draw Lockout",
+			Value:  lockoutText,
+			Inline: true,
+		})
+	}
 
 	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,

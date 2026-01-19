@@ -94,7 +94,6 @@ func handlePettyTheft(s *discordgo.Session, db *gorm.DB, userID string, guildID 
 }
 
 func ExecutePickpocketSteal(db *gorm.DB, userID string, targetUserID string, guildID string, amount float64) (*models.CardResult, error) {
-	// Get both users
 	var user models.User
 	if err := db.Clauses(clause.Locking{Strength: "UPDATE"}).
 		Where("discord_id = ? AND guild_id = ?", userID, guildID).
@@ -109,7 +108,6 @@ func ExecutePickpocketSteal(db *gorm.DB, userID string, targetUserID string, gui
 		return nil, err
 	}
 
-	// Check for Shield
 	blocked, err := checkAndConsumeShield(db, targetUser.ID, guildID)
 	if err != nil {
 		return nil, err
@@ -157,7 +155,6 @@ func handleNilFee(s *discordgo.Session, db *gorm.DB, userID string, guildID stri
 		return nil, err
 	}
 
-	// Don't deduct more than user has
 	deductAmount := 50.0
 	if user.Points < deductAmount {
 		deductAmount = user.Points
@@ -170,9 +167,7 @@ func handleNilFee(s *discordgo.Session, db *gorm.DB, userID string, guildID stri
 	}, nil
 }
 
-// handleSmallRebate refunds the cost of buying this card
 func handleSmallRebate(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
-	// Get user to determine card cost
 	var user models.User
 	var guild models.Guild
 	if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
@@ -353,7 +348,6 @@ func handleCharityCase(s *discordgo.Session, db *gorm.DB, userID string, guildID
 		return nil, err
 	}
 
-	// Get all users in guild ordered by points (descending)
 	var allUsers []models.User
 	if err := db.Where("guild_id = ?", guildID).Order("points DESC").Find(&allUsers).Error; err != nil {
 		return nil, err
@@ -367,7 +361,6 @@ func handleCharityCase(s *discordgo.Session, db *gorm.DB, userID string, guildID
 		}, nil
 	}
 
-	// Find user's position (1-indexed from top)
 	userPosition := 0
 	for i, u := range allUsers {
 		if u.ID == user.ID {
@@ -605,7 +598,6 @@ func handleHighFive(s *discordgo.Session, db *gorm.DB, userID string, guildID st
 		}, nil
 	}
 
-	// Pick a random user
 	randomIndex := rand.Intn(len(allUsers))
 	targetUser := allUsers[randomIndex]
 
@@ -639,7 +631,6 @@ func handleRickRoll(s *discordgo.Session, db *gorm.DB, userID string, guildID st
 	}, nil
 }
 
-// handlePocketSand refunds the cost of drawing the card
 func handlePocketSand(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
 	var user models.User
 	var guild models.Guild
@@ -863,7 +854,6 @@ func handleStimulusCheck(s *discordgo.Session, db *gorm.DB, userID string, guild
 		}, nil
 	}
 
-	// Update all users except the current user (current user will get points via PointsDelta)
 	gainAmount := 50.0
 	var updatedCount int64
 	if err := db.Model(&models.User{}).
@@ -881,7 +871,7 @@ func handleStimulusCheck(s *discordgo.Session, db *gorm.DB, userID string, guild
 
 	return &models.CardResult{
 		Message:     fmt.Sprintf("Stimulus Check arrived! Everyone in the server gained %.0f points! (%d users affected)", gainAmount, int(updatedCount)+1),
-		PointsDelta: gainAmount, // Current user gets points through normal flow
+		PointsDelta: gainAmount,
 		PoolDelta:   0,
 	}, nil
 }
@@ -909,7 +899,6 @@ func handleFactoryReset(s *discordgo.Session, db *gorm.DB, userID string, guildI
 }
 
 func handleQuickFlip(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
-	// Get user and guild to determine card cost
 	var user models.User
 	var guild models.Guild
 	if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
@@ -1903,8 +1892,6 @@ func handleRobbingTheHood(s *discordgo.Session, db *gorm.DB, userID string, guil
 }
 
 func handleStopTheSteal(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
-	// This card is UserPlayable and should be played manually via /play-card
-	// If drawn normally, add it to inventory
 	return &models.CardResult{
 		Message:     "You drew STOP THE STEAL! Use /play-card to play this card and cancel any of your active bets.",
 		PointsDelta: 0,

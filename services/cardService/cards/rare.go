@@ -82,6 +82,5 @@ func registerRareCards(deck *[]models.Card) {
 		},
 	}
 
-	// Add to deck
 	*deck = append(*deck, rareCards...)
 }

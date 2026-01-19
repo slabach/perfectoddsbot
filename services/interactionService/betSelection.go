@@ -2,12 +2,13 @@ package interactionService
 
 import (
 	"fmt"
-	"github.com/bwmarrin/discordgo"
-	"gorm.io/gorm"
 	"perfectOddsBot/services/betService"
 	"perfectOddsBot/services/common"
 	"strconv"
 	"strings"
+
+	"github.com/bwmarrin/discordgo"
+	"gorm.io/gorm"
 )
 
 func HandleCBBGamePagination(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, customID string) error {
@@ -15,14 +16,11 @@ func HandleCBBGamePagination(s *discordgo.Session, i *discordgo.InteractionCreat
 		return nil
 	}
 
-	// Extract session ID and page number from custom ID
-	// Format: create_cbb_bet_previous_page_{page}_{sessionID} or create_cbb_bet_next_page_{page}_{sessionID}
 	var sessionID string
 	var currentPage int
 	var err error
 
 	if strings.HasPrefix(customID, "create_cbb_bet_previous_page_") {
-		// Remove prefix to get "{page}_{sessionID}"
 		rest := strings.TrimPrefix(customID, "create_cbb_bet_previous_page_")
 		parts := strings.SplitN(rest, "_", 2)
 		if len(parts) == 2 {
@@ -33,12 +31,10 @@ func HandleCBBGamePagination(s *discordgo.Session, i *discordgo.InteractionCreat
 			sessionID = parts[1]
 			currentPage--
 		} else {
-			// Fallback for old format without session ID
 			currentPage, _ = strconv.Atoi(rest)
 			currentPage--
 		}
 	} else if strings.HasPrefix(customID, "create_cbb_bet_next_page_") {
-		// Remove prefix to get "{page}_{sessionID}"
 		rest := strings.TrimPrefix(customID, "create_cbb_bet_next_page_")
 		parts := strings.SplitN(rest, "_", 2)
 		if len(parts) == 2 {
@@ -49,7 +45,6 @@ func HandleCBBGamePagination(s *discordgo.Session, i *discordgo.InteractionCreat
 			sessionID = parts[1]
 			currentPage++
 		} else {
-			// Fallback for old format without session ID
 			currentPage, _ = strconv.Atoi(rest)
 			currentPage++
 		}
@@ -59,7 +54,6 @@ func HandleCBBGamePagination(s *discordgo.Session, i *discordgo.InteractionCreat
 		return fmt.Errorf("session ID not found in custom ID")
 	}
 
-	// Retrieve paginated options for this session
 	paginatedOptions, exists := betService.GetCBBPaginatedOptions(sessionID)
 	if !exists {
 		return fmt.Errorf("paginated options not found for session %s", sessionID)
@@ -127,14 +121,11 @@ func HandleCFBGamePagination(s *discordgo.Session, i *discordgo.InteractionCreat
 		return nil
 	}
 
-	// Extract session ID and page number from custom ID
-	// Format: create_cfb_bet_previous_page_{page}_{sessionID} or create_cfb_bet_next_page_{page}_{sessionID}
 	var sessionID string
 	var currentPage int
 	var err error
 
 	if strings.HasPrefix(customID, "create_cfb_bet_previous_page_") {
-		// Remove prefix to get "{page}_{sessionID}"
 		rest := strings.TrimPrefix(customID, "create_cfb_bet_previous_page_")
 		parts := strings.SplitN(rest, "_", 2)
 		if len(parts) == 2 {
@@ -145,12 +136,10 @@ func HandleCFBGamePagination(s *discordgo.Session, i *discordgo.InteractionCreat
 			sessionID = parts[1]
 			currentPage--
 		} else {
-			// Fallback for old format without session ID
 			currentPage, _ = strconv.Atoi(rest)
 			currentPage--
 		}
 	} else if strings.HasPrefix(customID, "create_cfb_bet_next_page_") {
-		// Remove prefix to get "{page}_{sessionID}"
 		rest := strings.TrimPrefix(customID, "create_cfb_bet_next_page_")
 		parts := strings.SplitN(rest, "_", 2)
 		if len(parts) == 2 {
@@ -161,7 +150,6 @@ func HandleCFBGamePagination(s *discordgo.Session, i *discordgo.InteractionCreat
 			sessionID = parts[1]
 			currentPage++
 		} else {
-			// Fallback for old format without session ID
 			currentPage, _ = strconv.Atoi(rest)
 			currentPage++
 		}
@@ -171,7 +159,6 @@ func HandleCFBGamePagination(s *discordgo.Session, i *discordgo.InteractionCreat
 		return fmt.Errorf("session ID not found in custom ID")
 	}
 
-	// Retrieve paginated options for this session
 	paginatedOptions, exists := betService.GetCFBPaginatedOptions(sessionID)
 	if !exists {
 		return fmt.Errorf("paginated options not found for session %s", sessionID)
@@ -237,8 +224,6 @@ func HandleCFBGamePagination(s *discordgo.Session, i *discordgo.InteractionCreat
 func HandleCBBGameSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, customID string) error {
 	selectedGameID := i.MessageComponentData().Values[0]
 
-	// Extract session ID from custom ID if present (format: create_cbb_bet_submit_{sessionID})
-	// Clean up session data after bet is submitted
 	if strings.HasPrefix(customID, "create_cbb_bet_submit_") {
 		sessionID := strings.TrimPrefix(customID, "create_cbb_bet_submit_")
 		betService.CleanupCBBPaginatedOptions(sessionID)
@@ -250,7 +235,6 @@ func HandleCBBGameSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, d
 		return err
 	}
 
-	// Show bet type selection screen instead of directly creating bet
 	err = betService.ShowCBBBetTypeSelection(s, i, db, gameIDInt)
 	if err != nil {
 		common.SendError(s, i, err, db)
@@ -263,8 +247,6 @@ func HandleCBBGameSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, d
 func HandleCFBGameSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, customID string) error {
 	selectedGameID := i.MessageComponentData().Values[0]
 
-	// Extract session ID from custom ID if present (format: create_cfb_bet_submit_{sessionID})
-	// Clean up session data after bet is submitted
 	if strings.HasPrefix(customID, "create_cfb_bet_submit_") {
 		sessionID := strings.TrimPrefix(customID, "create_cfb_bet_submit_")
 		betService.CleanupCFBPaginatedOptions(sessionID)
@@ -276,7 +258,6 @@ func HandleCFBGameSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, d
 		return err
 	}
 
-	// Show bet type selection screen instead of directly creating bet
 	err = betService.ShowCFBBetTypeSelection(s, i, db, gameIDInt)
 	if err != nil {
 		common.SendError(s, i, err, db)
@@ -287,52 +268,44 @@ func HandleCFBGameSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, d
 }
 
 func HandleCBBGameCancel(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, customID string) error {
-	// Extract session ID from custom ID (format: create_cbb_bet_cancel_{sessionID})
 	sessionID := strings.TrimPrefix(customID, "create_cbb_bet_cancel_")
-	
-	// Clean up session data
+
 	betService.CleanupCBBPaginatedOptions(sessionID)
-	
-	// Update the message to show cancellation
+
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseUpdateMessage,
 		Data: &discordgo.InteractionResponseData{
-			Content: "❌ Bet creation cancelled.",
+			Content:    "❌ Bet creation cancelled.",
 			Components: []discordgo.MessageComponent{},
 		},
 	})
 	if err != nil {
 		return fmt.Errorf("error responding to cancel: %w", err)
 	}
-	
+
 	return nil
 }
 
 func HandleCFBGameCancel(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, customID string) error {
-	// Extract session ID from custom ID (format: create_cfb_bet_cancel_{sessionID})
 	sessionID := strings.TrimPrefix(customID, "create_cfb_bet_cancel_")
-	
-	// Clean up session data
+
 	betService.CleanupCFBPaginatedOptions(sessionID)
-	
-	// Update the message to show cancellation
+
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseUpdateMessage,
 		Data: &discordgo.InteractionResponseData{
-			Content: "❌ Bet creation cancelled.",
+			Content:    "❌ Bet creation cancelled.",
 			Components: []discordgo.MessageComponent{},
 		},
 	})
 	if err != nil {
 		return fmt.Errorf("error responding to cancel: %w", err)
 	}
-	
+
 	return nil
 }
 
 func HandleCBBBetTypeSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, customID string) error {
-	// Parse custom ID: cbb_bet_type_{ats|ml|cancel}_{betID}
-	// Format: "cbb_bet_type_ats_401817475" or "cbb_bet_type_ml_401817475" or "cbb_bet_type_cancel_401817475"
 	parts := strings.Split(customID, "_")
 	if len(parts) < 5 {
 		return fmt.Errorf("invalid bet type selection custom ID format: %s", customID)
@@ -345,7 +318,7 @@ func HandleCBBBetTypeSelection(s *discordgo.Session, i *discordgo.InteractionCre
 		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseUpdateMessage,
 			Data: &discordgo.InteractionResponseData{
-				Content: "❌ Bet creation cancelled.",
+				Content:    "❌ Bet creation cancelled.",
 				Components: []discordgo.MessageComponent{},
 			},
 		})
@@ -373,8 +346,6 @@ func HandleCBBBetTypeSelection(s *discordgo.Session, i *discordgo.InteractionCre
 }
 
 func HandleCFBBetTypeSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, customID string) error {
-	// Parse custom ID: cfb_bet_type_{ats|ml|cancel}_{betID}
-	// Format: "cfb_bet_type_ats_401778304" or "cfb_bet_type_ml_401778304" or "cfb_bet_type_cancel_401778304"
 	parts := strings.Split(customID, "_")
 	if len(parts) < 5 {
 		return fmt.Errorf("invalid bet type selection custom ID format: %s", customID)
@@ -387,7 +358,7 @@ func HandleCFBBetTypeSelection(s *discordgo.Session, i *discordgo.InteractionCre
 		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseUpdateMessage,
 			Data: &discordgo.InteractionResponseData{
-				Content: "❌ Bet creation cancelled.",
+				Content:    "❌ Bet creation cancelled.",
 				Components: []discordgo.MessageComponent{},
 			},
 		})

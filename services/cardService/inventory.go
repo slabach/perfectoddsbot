@@ -76,7 +76,6 @@ func NotifyCardPlayedWithMessage(s *discordgo.Session, db *gorm.DB, user models.
 		Color:       color,
 	}
 
-	// Only add Effect field if no custom message (since custom message usually contains the effect info)
 	if customMessage == "" {
 		embed.Fields = []*discordgo.MessageEmbedField{
 			{

@@ -3,12 +3,13 @@ package interactionService
 import (
 	"errors"
 	"fmt"
-	"github.com/bwmarrin/discordgo"
-	"gorm.io/gorm"
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/common"
 	"perfectOddsBot/services/guildService"
 	"strconv"
+
+	"github.com/bwmarrin/discordgo"
+	"gorm.io/gorm"
 )
 
 func SubmitBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, customID string) error {
@@ -53,11 +54,10 @@ func SubmitBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 	if result.RowsAffected == 1 {
 		user.Points = guild.StartingPoints
 	}
-	
-	// Update username from interaction member (always update to keep it current)
+
 	username := common.GetUsernameFromUser(i.Member.User)
 	common.UpdateUserUsername(db, &user, username)
-	
+
 	if result.RowsAffected == 1 {
 		db.Save(&user)
 	}
@@ -113,10 +113,8 @@ func SubmitBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 		optionName = bet.Option2
 	}
 
-	// Calculate potential payout
 	potentialPayout := common.CalculatePayout(amount, optionVal, bet)
 
-	// Create success embed
 	embed := &discordgo.MessageEmbed{
 		Title:       "✅ Bet Placed Successfully",
 		Description: fmt.Sprintf("You've placed **%d** points on **%s**", amount, optionName),

@@ -22,7 +22,6 @@ var (
 	cfbPaginatedOptionsMu  sync.RWMutex
 )
 
-// GetCFBPaginatedOptions retrieves paginated options for a given session ID
 func GetCFBPaginatedOptions(sessionID string) ([][]discordgo.SelectMenuOption, bool) {
 	cfbPaginatedOptionsMu.RLock()
 	defer cfbPaginatedOptionsMu.RUnlock()
@@ -30,7 +29,6 @@ func GetCFBPaginatedOptions(sessionID string) ([][]discordgo.SelectMenuOption, b
 	return options, exists
 }
 
-// CleanupCFBPaginatedOptions removes paginated options for a given session ID
 func CleanupCFBPaginatedOptions(sessionID string) {
 	cfbPaginatedOptionsMu.Lock()
 	defer cfbPaginatedOptionsMu.Unlock()
@@ -88,12 +86,10 @@ func CreateCFBBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 			return
 		}
 
-		// line must be on a 0.5 value to avoid pushes
 		if lineValue == math.Trunc(lineValue) {
 			lineValue += 0.5
 		}
 
-		// Convert to Eastern Time
 		loc, err := time.LoadLocation("America/New_York")
 		if err != nil {
 			common.SendError(s, i, err, db)
@@ -196,7 +192,6 @@ func CreateCFBBetSelector(s *discordgo.Session, i *discordgo.InteractionCreate, 
 	conferenceList := []string{"Big Ten", "ACC", "SEC", "Big 12", "Pac-12"}
 	var selectOptions []discordgo.SelectMenuOption
 	for _, bet := range bettingLines {
-		// Only include games from specific conferences that haven't finished and have lines
 		if (common.Contains(conferenceList, bet.HomeConference) || common.Contains(conferenceList, bet.AwayConference)) &&
 			bet.HomeScore == nil && bet.AwayScore == nil {
 			line, lineErr := common.PickLine(bet.Lines)
@@ -205,7 +200,6 @@ func CreateCFBBetSelector(s *discordgo.Session, i *discordgo.InteractionCreate, 
 			}
 
 			label := fmt.Sprintf("%s @ %s", bet.AwayTeam, bet.HomeTeam)
-			// Discord select menu labels have a max length of 100 characters
 			if len(label) > 100 {
 				label = label[:97] + "..."
 			}
@@ -239,10 +233,8 @@ func CreateCFBBetSelector(s *discordgo.Session, i *discordgo.InteractionCreate, 
 		return
 	}
 
-	// Generate unique session ID from interaction ID
 	sessionID := i.Interaction.ID
 
-	// Create paginated options
 	var paginatedOptions [][]discordgo.SelectMenuOption
 	minValues := 1
 	for i := 0; i < len(selectOptions); i += 25 {
@@ -253,7 +245,6 @@ func CreateCFBBetSelector(s *discordgo.Session, i *discordgo.InteractionCreate, 
 		paginatedOptions = append(paginatedOptions, selectOptions[i:end])
 	}
 
-	// Store paginated options in thread-safe map
 	cfbPaginatedOptionsMu.Lock()
 	cfbPaginatedOptionsMap[sessionID] = paginatedOptions
 	cfbPaginatedOptionsMu.Unlock()
@@ -309,7 +300,6 @@ func CreateCFBBetSelector(s *discordgo.Session, i *discordgo.InteractionCreate, 
 }
 
 func ShowCFBBetTypeSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, betID int) error {
-	// Fetch game and line data
 	cfbdBet, err := extService.GetCfbdBet(betID)
 	if err != nil {
 		return err
@@ -323,7 +313,6 @@ func ShowCFBBetTypeSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 	homeTeam := cfbdBet.HomeTeam
 	awayTeam := cfbdBet.AwayTeam
 
-	// Get spread and odds for ATS
 	var spreadValue float64
 	homeSpreadOdds := -110
 	awaySpreadOdds := -110
@@ -331,30 +320,25 @@ func ShowCFBBetTypeSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 		spreadValue = *line.Spread
 	}
 
-	// Check if moneyline odds are available
 	moneylineAvailable := line.HomeMoneyline != nil && line.AwayMoneyline != nil
 
-	// Get moneyline odds (only if available)
 	var homeMoneyline, awayMoneyline int
 	if moneylineAvailable {
 		homeMoneyline = *line.HomeMoneyline
 		awayMoneyline = *line.AwayMoneyline
 	}
 
-	// Format spread for display
 	spreadDisplay := common.FormatOdds(spreadValue)
 	if spreadValue > 0 {
 		spreadDisplay = "+" + spreadDisplay
 	}
 
-	// Build embed with both bet type options
 	description := fmt.Sprintf("**%s @ %s**\n\nSelect the type of bet you want to create:", awayTeam, homeTeam)
 
 	atsField := fmt.Sprintf("**ATS (Against The Spread)**\n1️⃣ %s %s (Odds: %s)\n2️⃣ %s %s (Odds: %s)",
 		homeTeam, common.FormatOdds(spreadValue), common.FormatOdds(float64(homeSpreadOdds)),
 		awayTeam, common.FormatOdds(spreadValue*-1), common.FormatOdds(float64(awaySpreadOdds)))
 
-	// Build embed fields
 	embedFields := []*discordgo.MessageEmbedField{
 		{
 			Name:  "📊 ATS Bet",
@@ -362,7 +346,6 @@ func ShowCFBBetTypeSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 		},
 	}
 
-	// Only add moneyline field and button if odds are available
 	var buttons []discordgo.MessageComponent
 	if moneylineAvailable {
 		moneylineField := fmt.Sprintf("**Moneyline**\n1️⃣ %s (Odds: %s)\n2️⃣ %s (Odds: %s)",
@@ -415,7 +398,6 @@ func ShowCFBBetTypeSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 		Color:       0x3498db,
 	}
 
-	// Create buttons for bet type selection
 	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseUpdateMessage,
 		Data: &discordgo.InteractionResponseData{
@@ -443,13 +425,10 @@ func CreateCFBBetFromGameID(s *discordgo.Session, i *discordgo.InteractionCreate
 	}
 
 	var dbBet models.Bet
-	// Check for existing bet of the same type (ATS has spread, Moneyline doesn't)
 	var result *gorm.DB
 	if betType == "moneyline" || betType == "ml" {
-		// Looking for Moneyline bet (spread IS NULL)
 		result = db.Where("cfbd_id = ? AND guild_id = ? AND spread IS NULL", betID, i.GuildID).Find(&dbBet)
 	} else {
-		// Looking for ATS bet (spread IS NOT NULL)
 		result = db.Where("cfbd_id = ? AND guild_id = ? AND spread IS NOT NULL", betID, i.GuildID).Find(&dbBet)
 	}
 	if result.Error != nil {
@@ -474,7 +453,6 @@ func CreateCFBBetFromGameID(s *discordgo.Session, i *discordgo.InteractionCreate
 		var spreadValue *float64
 
 		if betType == "moneyline" || betType == "ml" {
-			// Moneyline bet - validate odds are available
 			if line.HomeMoneyline == nil || line.AwayMoneyline == nil {
 				return fmt.Errorf("moneyline odds are not available for this game")
 			}
@@ -484,15 +462,12 @@ func CreateCFBBetFromGameID(s *discordgo.Session, i *discordgo.InteractionCreate
 			odds2 = *line.AwayMoneyline
 			spreadValue = nil
 		} else {
-			// ATS bet (default)
 			var lineValue float64
 			if line.Spread != nil {
 				lineValue = *line.Spread
 			} else {
 				return fmt.Errorf("no spread available")
 			}
-
-			// line must be on a 0.5 value to avoid pushes
 			if lineValue == math.Trunc(lineValue) {
 				lineValue += 0.5
 			}
@@ -504,7 +479,6 @@ func CreateCFBBetFromGameID(s *discordgo.Session, i *discordgo.InteractionCreate
 			spreadValue = &lineValue
 		}
 
-		// Convert to Eastern Time
 		loc, err := time.LoadLocation("America/New_York")
 		if err != nil {
 			return err
@@ -594,9 +568,6 @@ func CreateCFBBetFromGameID(s *discordgo.Session, i *discordgo.InteractionCreate
 	return nil
 }
 
-// AutoCreateCFBBet automatically creates an ATS bet for a subscribed team game.
-// This function ONLY creates ATS bets - Moneyline bets must be created manually via slash command.
-// It checks for existing ATS bets only (spread IS NOT NULL) to avoid conflicts with manually created Moneyline bets.
 func AutoCreateCFBBet(s *discordgo.Session, db *gorm.DB, guildId string, channelId, gameId string) error {
 	guild, err := guildService.GetGuildInfo(s, db, guildId, channelId)
 	if err != nil {
@@ -607,8 +578,6 @@ func AutoCreateCFBBet(s *discordgo.Session, db *gorm.DB, guildId string, channel
 	}
 
 	var dbBet models.Bet
-	// AutoCreate only creates ATS bets, so check for existing ATS bet (spread IS NOT NULL)
-	// This allows Moneyline bets to be created manually without conflict
 	result := db.
 		Where("cfbd_id = ? AND paid = 0 AND guild_id = ? AND spread IS NOT NULL", gameId, guildId).
 		Find(&dbBet)
@@ -638,17 +607,13 @@ func AutoCreateCFBBet(s *discordgo.Session, db *gorm.DB, guildId string, channel
 			return err
 		}
 
-		// line must be on a 0.5 value to avoid pushes
 		if lineValue == math.Trunc(lineValue) {
 			lineValue += 0.5
 		}
 
-		// CFBD API doesn't provide spread odds, so default to -110
-		// (Spread odds are typically -110 for ATS bets in CFB)
 		odds1 := -110
 		odds2 := -110
 
-		// Convert to Eastern Time
 		loc, err := time.LoadLocation("America/New_York")
 		if err != nil {
 			return err
