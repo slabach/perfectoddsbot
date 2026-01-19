@@ -25,8 +25,8 @@ func registerMythicCards(deck *[]models.Card) {
 		// 	ID:          50,
 		// 	Name:        "Market Crash",
 		// 	Description: "All active bets currently placed are cancelled; all money bet on them goes to the Pool.",
-		// 	Rarity:      "Epic",
-		// 	Weight:      W_Epic,
+		// 	Rarity:      "Mythic",
+		// 	Weight:      W_Mythic,
 		// 	Handler:     handleMarketCrash,
 		// },
 		{

@@ -2,11 +2,11 @@ package cards
 
 const (
 	// Card weights
-	W_Common   = 2000
-	W_Uncommon = 1400
-	W_Rare     = 1200
-	W_Epic     = 1000
-	W_Mythic   = 350
+	W_Common   = 2400
+	W_Uncommon = 1925
+	W_Rare     = 1250
+	W_Epic     = 365
+	W_Mythic   = 333
 
 	// Card colors
 	C_Common   = 0x95A5A6

@@ -76,8 +76,8 @@ func registerRareCards(deck *[]models.Card) {
 			ID:          31,
 			Name:        "Grand Larceny",
 			Description: "Steal 150 points from a chosen user.",
-			Rarity:      "Uncommon",
-			Weight:      W_Uncommon,
+			Rarity:      "Rare",
+			Weight:      W_Rare,
 			Handler:     handleGrandLarceny,
 		},
 	}
