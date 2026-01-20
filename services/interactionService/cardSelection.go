@@ -78,6 +78,8 @@ func HandleCardUserSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 		return handleAntiAntiBetSelection(s, i, db, userID, targetUserID, guildID)
 	case cards.HostileTakeoverCardID:
 		return handleHostileTakeoverSelection(s, i, db, userID, targetUserID, guildID)
+	case cards.TheGossipCardID:
+		return handleTheGossipSelection(s, i, db, userID, targetUserID, guildID)
 	default:
 		return fmt.Errorf("card %d does not support user selection", cardID)
 	}
@@ -226,6 +228,43 @@ func handleGrandLarcenySelection(s *discordgo.Session, i *discordgo.InteractionC
 				targetName = fmt.Sprintf("<@%s>", *result.TargetUserID)
 			}
 			result.Message = fmt.Sprintf("Grand Larceny successful! You stole %.0f points from %s!", result.PointsDelta, targetName)
+		}
+
+		embed := buildCardResultEmbed(card, result, user, targetUsername, guild.Pool)
+
+		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Embeds: []*discordgo.MessageEmbed{embed},
+			},
+		})
+	})
+}
+
+func handleTheGossipSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, userID string, targetUserID string, guildID string) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		result, err := cards.ExecuteTheGossip(s, tx, userID, targetUserID, guildID)
+		if err != nil {
+			return err
+		}
+
+		guild, err := guildService.GetGuildInfo(s, tx, guildID, i.ChannelID)
+		if err != nil {
+			return err
+		}
+
+		var user models.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("discord_id = ? AND guild_id = ?", userID, guildID).
+			First(&user).Error; err != nil {
+			return err
+		}
+
+		targetUsername := common.GetUsernameWithDB(tx, s, guildID, targetUserID)
+
+		card := cardService.GetCardByID(cards.TheGossipCardID)
+		if card == nil {
+			return fmt.Errorf("card not found")
 		}
 
 		embed := buildCardResultEmbed(card, result, user, targetUsername, guild.Pool)

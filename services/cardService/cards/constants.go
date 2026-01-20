@@ -49,6 +49,8 @@ const (
 	StopTheStealCardID     = 70
 	GamblerCardID          = 72
 	GetOutOfJailCardID     = 43
+	CouponCardID           = 123
+	TheGossipCardID        = 211
 
 	RoyaltyGuildID = "761721066959667220"
 )

@@ -481,6 +481,14 @@ func handleUnluckyCat(s *discordgo.Session, db *gorm.DB, userID string, guildID 
 	}, nil
 }
 
+func handleCoupon(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	return &models.CardResult{
+		Message:     "You found a coupon! Your next card purchase will be 25% off.",
+		PointsDelta: 0,
+		PoolDelta:   0,
+	}, nil
+}
+
 func handlePickpocketCommon(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
 	var allUsers []models.User
 	if err := db.Where("guild_id = ? AND discord_id != ?", guildID, userID).Find(&allUsers).Error; err != nil {
@@ -1629,6 +1637,40 @@ func handleGrandLarceny(s *discordgo.Session, db *gorm.DB, userID string, guildI
 		PoolDelta:         0,
 		RequiresSelection: true,
 		SelectionType:     "user",
+	}, nil
+}
+
+func handleTheGossip(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	return &models.CardResult{
+		Message:           "The Gossip requires you to select a target!",
+		PointsDelta:       0,
+		PoolDelta:         0,
+		RequiresSelection: true,
+		SelectionType:     "user",
+	}, nil
+}
+
+func ExecuteTheGossip(s *discordgo.Session, db *gorm.DB, userID string, targetUserID string, guildID string) (*models.CardResult, error) {
+	var targetUser models.User
+	if err := db.Where("discord_id = ? AND guild_id = ?", targetUserID, guildID).First(&targetUser).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return &models.CardResult{
+				Message:     "Target user not found in this server.",
+				PointsDelta: 0,
+				PoolDelta:   0,
+			}, nil
+		}
+		return nil, err
+	}
+
+	targetID := targetUserID
+	targetMention := "<@" + targetUserID + ">"
+	return &models.CardResult{
+		Message:           fmt.Sprintf("The Gossip spreads! %s's current point balance is **%.1f points**.", targetMention, targetUser.Points),
+		PointsDelta:       0,
+		PoolDelta:         0,
+		TargetUserID:      &targetID,
+		TargetPointsDelta: 0,
 	}, nil
 }
 
