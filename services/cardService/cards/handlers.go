@@ -110,6 +110,8 @@ func ExecutePickpocketSteal(db *gorm.DB, userID string, targetUserID string, gui
 		return nil, err
 	}
 
+	targetMention := "<@" + targetUserID + ">"
+
 	blocked, err := checkAndConsumeShield(db, targetUser.ID, guildID)
 	if err != nil {
 		return nil, err
@@ -117,7 +119,7 @@ func ExecutePickpocketSteal(db *gorm.DB, userID string, targetUserID string, gui
 	if blocked {
 		targetID := targetUserID
 		return &models.CardResult{
-			Message:           "Their Shield blocked the theft attempt!",
+			Message:           fmt.Sprintf("%s's Shield blocked the theft attempt!", targetMention),
 			PointsDelta:       0,
 			PoolDelta:         0,
 			TargetUserID:      &targetID,
@@ -1048,6 +1050,7 @@ func ExecuteBetFreeze(s *discordgo.Session, db *gorm.DB, userID string, targetUs
 		First(&targetUser).Error; err != nil {
 		return nil, err
 	}
+	targetMention := "<@" + targetUserID + ">"
 
 	blocked, err := checkAndConsumeShield(db, targetUser.ID, guildID)
 	if err != nil {
@@ -1056,7 +1059,7 @@ func ExecuteBetFreeze(s *discordgo.Session, db *gorm.DB, userID string, targetUs
 	if blocked {
 		targetID := targetUserID
 		return &models.CardResult{
-			Message:           "Their Shield blocked the Bet Freeze!",
+			Message:           fmt.Sprintf("%s's Shield blocked the Bet Freeze!", targetMention),
 			PointsDelta:       0,
 			PoolDelta:         0,
 			TargetUserID:      &targetID,
@@ -1071,7 +1074,7 @@ func ExecuteBetFreeze(s *discordgo.Session, db *gorm.DB, userID string, targetUs
 	if spareKeyBlocked {
 		targetID := targetUserID
 		return &models.CardResult{
-			Message:           "Their Spare Key got them out of the Bet Freeze!",
+			Message:           fmt.Sprintf("%s's Spare Key got them out of the Bet Freeze!", targetMention),
 			PointsDelta:       0,
 			PoolDelta:         0,
 			TargetUserID:      &targetID,
@@ -1088,7 +1091,7 @@ func ExecuteBetFreeze(s *discordgo.Session, db *gorm.DB, userID string, targetUs
 
 	targetID := targetUserID
 	return &models.CardResult{
-		Message:           "Target's betting ability has been frozen for 2 hours!",
+		Message:           fmt.Sprintf("%s's betting ability has been frozen for 2 hours!", targetMention),
 		PointsDelta:       0,
 		PoolDelta:         0,
 		TargetUserID:      &targetID,
@@ -1810,6 +1813,37 @@ func handleVampire(s *discordgo.Session, db *gorm.DB, userID string, guildID str
 	}, nil
 }
 
+func handleAlgaeBloom(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	var guild models.Guild
+	if err := db.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("guild_id = ?", guildID).
+		First(&guild).Error; err != nil {
+		return nil, err
+	}
+
+	now := time.Now()
+	twentyFourHoursLater := now.Add(24 * time.Hour)
+
+	var message string
+	if guild.PoolDrainUntil != nil && now.Before(*guild.PoolDrainUntil) {
+		message = "Algae Bloom was extended! The pool drain effect will continue for another 24 hours from now."
+	} else {
+		message = "Algae has taken over the pool! For the next 24 hours, every card drawn removes 100 points from the pool."
+	}
+
+	guild.PoolDrainUntil = &twentyFourHoursLater
+
+	if err := db.Save(&guild).Error; err != nil {
+		return nil, err
+	}
+
+	return &models.CardResult{
+		Message:     message,
+		PointsDelta: 0,
+		PoolDelta:   0,
+	}, nil
+}
+
 func handleHostileTakeover(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
 	return &models.CardResult{
 		Message:           "Hostile Takeover requires you to select a target user within 500 points of you!",
@@ -1922,14 +1956,55 @@ func handleNuke(s *discordgo.Session, db *gorm.DB, userID string, guildID string
 
 	if err := db.Model(&models.User{}).
 		Where("guild_id = ?", guildID).
-		Update("points", gorm.Expr("points * 0.9")).Error; err != nil {
+		Update("points", gorm.Expr("points * 0.75")).Error; err != nil {
+		return nil, err
+	}
+
+	var guild models.Guild
+	if err := db.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("guild_id = ?", guildID).
+		First(&guild).Error; err != nil {
 		return nil, err
 	}
 
 	return &models.CardResult{
 		Message:     "You've drawn The Nuke! Everyone (including you) loses 10% of their points to the Pool.",
 		PointsDelta: 0,
-		PoolDelta:   0,
+		PoolDelta:   -(guild.Pool * 0.25),
+	}, nil
+}
+
+func handleEMP(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	var allUsers []models.User
+	if err := db.Where("guild_id = ?", guildID).Find(&allUsers).Error; err != nil {
+		return nil, err
+	}
+
+	if len(allUsers) == 0 {
+		return &models.CardResult{
+			Message:     "No players found in the server. EMP fizzles out.",
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	if err := db.Model(&models.User{}).
+		Where("guild_id = ?", guildID).
+		Update("points", gorm.Expr("points * 0.95")).Error; err != nil {
+		return nil, err
+	}
+
+	var guild models.Guild
+	if err := db.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("guild_id = ?", guildID).
+		First(&guild).Error; err != nil {
+		return nil, err
+	}
+
+	return &models.CardResult{
+		Message:     "You've drawn EMP! Everyone (including you and the pool) loses 5% of their points to the Pool.",
+		PointsDelta: 0,
+		PoolDelta:   -(guild.Pool * 0.05),
 	}, nil
 }
 
@@ -2061,6 +2136,14 @@ func handleRobbingTheHood(s *discordgo.Session, db *gorm.DB, userID string, guil
 func handleStopTheSteal(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
 	return &models.CardResult{
 		Message:     fmt.Sprintf("<@%s> drew STOP THE STEAL! Use /play-card to play this card and cancel any of your active bets.", userID),
+		PointsDelta: 0,
+		PoolDelta:   0,
+	}, nil
+}
+
+func handlePoolBoy(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	return &models.CardResult{
+		Message:     fmt.Sprintf("<@%s> drew Pool Boy! Use /play-card to play this card and clean the algae from the pool.", userID),
 		PointsDelta: 0,
 		PoolDelta:   0,
 	}, nil
@@ -2629,6 +2712,7 @@ func ExecuteSocialDistancing(db *gorm.DB, userID string, targetUserID string, gu
 		}
 		return nil, err
 	}
+	targetMention := "<@" + targetUserID + ">"
 
 	blocked, err := checkAndConsumeShield(db, targetUser.ID, guildID)
 	if err != nil {
@@ -2637,7 +2721,7 @@ func ExecuteSocialDistancing(db *gorm.DB, userID string, targetUserID string, gu
 	if blocked {
 		targetID := targetUserID
 		return &models.CardResult{
-			Message:           "Their Shield blocked the Social Distancing!",
+			Message:           fmt.Sprintf("%s's Shield blocked the Social Distancing!", targetMention),
 			PointsDelta:       0,
 			PoolDelta:         0,
 			TargetUserID:      &targetID,
@@ -2652,7 +2736,7 @@ func ExecuteSocialDistancing(db *gorm.DB, userID string, targetUserID string, gu
 	if spareKeyBlocked {
 		targetID := targetUserID
 		return &models.CardResult{
-			Message:           "Their Spare Key got them out of Social Distancing!",
+			Message:           fmt.Sprintf("%s's Spare Key got them out of Social Distancing!", targetMention),
 			PointsDelta:       0,
 			PoolDelta:         0,
 			TargetUserID:      &targetID,
@@ -2677,7 +2761,6 @@ func ExecuteSocialDistancing(db *gorm.DB, userID string, targetUserID string, gu
 	}
 
 	targetID := targetUserID
-	targetMention := "<@" + targetUserID + ">"
 	userMention := "<@" + userID + ">"
 
 	return &models.CardResult{

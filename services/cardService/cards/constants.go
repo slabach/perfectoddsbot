@@ -2,11 +2,11 @@ package cards
 
 const (
 	// Card weights
-	W_Common   = 2400
-	W_Uncommon = 1925
+	W_Common   = 2000
+	W_Uncommon = 1825
 	W_Rare     = 1250
 	W_Epic     = 365
-	W_Mythic   = 200
+	W_Mythic   = 250
 
 	// Card colors
 	C_Common   = 0x95A5A6
@@ -57,6 +57,7 @@ const (
 	ShoppingSpreeCardID    = 208
 	BountyHunterCardID     = 214
 	SocialDistancingCardID = 215
+	PoolBoyCardID          = 86
 
 	RoyaltyGuildID = "761721066959667220"
 )

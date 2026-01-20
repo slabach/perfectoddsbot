@@ -268,6 +268,19 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	user.Points -= drawCardCost
 	guild.Pool += drawCardCost
 
+	if guild.PoolDrainUntil != nil {
+		if now.After(*guild.PoolDrainUntil) {
+			guild.PoolDrainUntil = nil
+		} else {
+			poolDrainAmount := 100.0
+			if guild.Pool >= poolDrainAmount {
+				guild.Pool -= poolDrainAmount
+			} else {
+				guild.Pool = 0
+			}
+		}
+	}
+
 	user.CardDrawCount++
 
 	if err := tx.Save(&user).Error; err != nil {
@@ -445,6 +458,7 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		var targetUser models.User
 		if err := tx.Where("discord_id = ? AND guild_id = ?", *cardResult.TargetUserID, guildID).First(&targetUser).Error; err == nil {
 			if cardResult.TargetPointsDelta < 0 {
+				targetMention := "<@" + *cardResult.TargetUserID + ">"
 				hasShield, err := hasShieldInInventory(tx, targetUser.ID, guildID)
 				if err != nil {
 					tx.Rollback()
@@ -460,9 +474,9 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 
 					cardResult.TargetPointsDelta = 0
 					if cardResult.Message == "" {
-						cardResult.Message = "Their Shield blocked the hit!"
+						cardResult.Message = fmt.Sprintf("%s's Shield blocked the hit!", targetMention)
 					} else {
-						cardResult.Message += " (Their Shield blocked the hit!)"
+						cardResult.Message += fmt.Sprintf(" (%s's Shield blocked the hit!)", targetMention)
 					}
 				}
 			}
