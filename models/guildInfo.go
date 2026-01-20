@@ -1,6 +1,10 @@
 package models
 
-import "gorm.io/gorm"
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
 
 type Guild struct {
 	gorm.Model
@@ -16,4 +20,5 @@ type Guild struct {
 	CardDrawCost            float64 `gorm:"default:10"`
 	CardDrawCooldownMinutes int     `gorm:"default:60"`
 	CardDrawingEnabled      bool    `gorm:"default:true"`
+	PoolDrainUntil          *time.Time
 }

@@ -88,6 +88,32 @@ func registerRareCards(deck *[]models.Card) {
 			Weight:      W_Rare,
 			Handler:     handleBankHeist,
 		},
+		{
+			ID:          84,
+			Name:        "EMP",
+			Description: "Everyone (including you and the pool) loses 5% of their points.",
+			Rarity:      "Rare",
+			Weight:      W_Rare,
+			Handler:     handleEMP,
+		},
+		{
+			ID:          85,
+			Name:        "Algae Bloom",
+			Description: "Algae has taken over the pool! For the next 24 hours, every card drawn drains 100 points from the pool.",
+			Rarity:      "Rare",
+			Weight:      W_Rare,
+			Handler:     handleAlgaeBloom,
+		},
+		{
+			ID:             86,
+			Name:           "Pool Boy",
+			Description:    "**PLAYABLE CARD** Play this card at any point to clean the algae from the pool and stop the drain.",
+			Rarity:         "Rare",
+			Weight:         W_Rare,
+			Handler:        handlePoolBoy,
+			UserPlayable:   true,
+			AddToInventory: true,
+		},
 	}
 
 	*deck = append(*deck, rareCards...)

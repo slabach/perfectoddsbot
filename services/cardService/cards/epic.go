@@ -16,7 +16,7 @@ func registerEpicCards(deck *[]models.Card) {
 		{
 			ID:          46,
 			Name:        "The Nuke",
-			Description: "Everyone (including you) loses 10% of their points to the Pool.",
+			Description: "Everyone (including you and the pool) loses 25% of their points.",
 			Rarity:      "Epic",
 			Weight:      W_Epic,
 			Handler:     handleNuke,
