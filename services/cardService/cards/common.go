@@ -206,6 +206,48 @@ func registerCommonCards(deck *[]models.Card) {
 			Weight:      W_Common,
 			Handler:     handlePocketSand,
 		},
+		// {
+		// 	ID:             118,
+		// 	Name:           "Spare Key",
+		// 	Description:    "Use this to ignore your next 'Timeout' or card-buying restriction.",
+		// 	Rarity:         "Common",
+		// 	Weight:         W_Common,
+		// 	Handler:        handleSpareKey,
+		// 	AddToInventory: true,
+		// },
+		{
+			ID:             123,
+			Name:           "Coupon",
+			Description:    "The next card you buy is 25% off.",
+			Rarity:         "Common",
+			Weight:         W_Common,
+			Handler:        handleCoupon,
+			AddToInventory: true,
+		},
+		// {
+		// 	ID:          210,
+		// 	Name:        "Hot Potato",
+		// 	Description: "You lose 50 points. Pass this effect to a random user who also loses 50 points.",
+		// 	Rarity:      "Common",
+		// 	Weight:      W_Common,
+		// 	Handler:     handleHotPotato,
+		// },
+		{
+			ID:          211,
+			Name:        "The Gossip",
+			Description: "Choose a user. Thier current point balance is displayed in the server.",
+			Rarity:      "Common",
+			Weight:      W_Common,
+			Handler:     handleTheGossip,
+		},
+		// {
+		// 	ID:          212,
+		// 	Name:        "Tag!",
+		// 	Description: "Choose a user. For the next 12 hours, they gain 1 point every time anyone buys a card.",
+		// 	Rarity:      "Common",
+		// 	Weight:      W_Common,
+		// 	Handler:     handleTag,
+		// },
 	}
 
 	*deck = append(*deck, commonCards...)

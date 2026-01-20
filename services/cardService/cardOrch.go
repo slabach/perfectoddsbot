@@ -159,6 +159,20 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		drawCardCost = drawCardCost * 2.0
 	}
 
+	var couponInventory models.UserInventory
+	err = tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("user_id = ? AND guild_id = ? AND card_id = ?", user.ID, guildID, cards.CouponCardID).
+		First(&couponInventory).Error
+	hasCoupon := err == nil
+	if err != nil && err != gorm.ErrRecordNotFound {
+		tx.Rollback()
+		common.SendError(s, i, fmt.Errorf("error checking Coupon inventory: %v", err), db)
+		return
+	}
+	if hasCoupon {
+		drawCardCost = drawCardCost * 0.75
+	}
+
 	var lockedUser models.User
 	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&lockedUser, user.ID).Error; err != nil {
 		tx.Rollback()
@@ -193,6 +207,14 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		if err := tx.Delete(&unluckyCatInventory).Error; err != nil {
 			tx.Rollback()
 			common.SendError(s, i, fmt.Errorf("error consuming Unlucky Cat: %v", err), db)
+			return
+		}
+	}
+
+	if hasCoupon {
+		if err := tx.Delete(&couponInventory).Error; err != nil {
+			tx.Rollback()
+			common.SendError(s, i, fmt.Errorf("error consuming Coupon: %v", err), db)
 			return
 		}
 	}
@@ -1281,6 +1303,11 @@ func MyInventory(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.
 	hasUnluckyCat := cardCounts[cards.UnluckyCatCardID] > 0
 	if hasUnluckyCat {
 		nextDrawCost = nextDrawCost * 2.0
+	}
+
+	hasCoupon := cardCounts[cards.CouponCardID] > 0
+	if hasCoupon {
+		nextDrawCost = nextDrawCost * 0.75
 	}
 
 	var lockoutText string
