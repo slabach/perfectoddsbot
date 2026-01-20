@@ -83,6 +83,7 @@ func SetupCron(s *discordgo.Session, db *gorm.DB) {
 		}
 	})
 
+	// Card expiration jobs. All card checks should be run every hour.
 	_, err = cronService.AddFunc("0 0 */1 * * *", func() {
 		// Runs every hour to collect Loan Shark debts
 		err := scheduler_jobs.CheckLoanShark(s, db)

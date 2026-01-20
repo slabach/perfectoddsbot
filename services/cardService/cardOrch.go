@@ -281,6 +281,12 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		return
 	}
 
+	if err := processTagCards(tx, guildID); err != nil {
+		tx.Rollback()
+		common.SendError(s, i, fmt.Errorf("error processing tag cards: %v", err), db)
+		return
+	}
+
 	if cardResult.RequiresSelection {
 		if cardResult.SelectionType == "user" {
 			if card.ID == cards.HostileTakeoverCardID {
@@ -492,7 +498,7 @@ func showUserSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, ca
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
-			Content: fmt.Sprintf("🎴 You drew **%s**!\n%s\n\nSelect a user to target:", cardName, cardDescription),
+			Content: fmt.Sprintf("🎴 <@%s> drew **%s**!\n%s\n\nSelect a user to target:", userID, cardName, cardDescription),
 			Components: []discordgo.MessageComponent{
 				discordgo.ActionsRow{
 					Components: []discordgo.MessageComponent{
@@ -542,7 +548,7 @@ func showFilteredUserSelectMenu(s *discordgo.Session, i *discordgo.InteractionCr
 		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
-				Content: fmt.Sprintf("🎴 You drew **%s**!\n%s\n\nNo users found within %.0f points of you (you have %.1f points). Hostile Takeover fizzles out.", cardName, cardDescription, maxPointDifference, drawer.Points),
+				Content: fmt.Sprintf("🎴 <@%s> drew **%s**!\n%s\n\nNo users found within %.0f points of you (you have %.1f points). Hostile Takeover fizzles out.", userID, cardName, cardDescription, maxPointDifference, drawer.Points),
 				Flags:   discordgo.MessageFlagsEphemeral,
 			},
 		})
@@ -584,7 +590,7 @@ func showFilteredUserSelectMenu(s *discordgo.Session, i *discordgo.InteractionCr
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
-			Content: fmt.Sprintf("🎴 You drew **%s**!\n%s\n\nSelect a user within %.0f points of you (you have %.1f points):", cardName, cardDescription, maxPointDifference, drawer.Points),
+			Content: fmt.Sprintf("🎴 <@%s> drew **%s**!\n%s\n\nSelect a user within %.0f points of you (you have %.1f points):", userID, cardName, cardDescription, maxPointDifference, drawer.Points),
 			Components: []discordgo.MessageComponent{
 				discordgo.ActionsRow{
 					Components: []discordgo.MessageComponent{
@@ -632,7 +638,7 @@ func showBetSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, car
 		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
-				Content: fmt.Sprintf("🎴 You drew **%s**!\n%s\n\nYou have no active bets to use this card on! The card fizzles out.", cardName, cardDescription),
+				Content: fmt.Sprintf("🎴 <@%s> drew **%s**!\n%s\n\nYou have no active bets to use this card on! The card fizzles out.", userID, cardName, cardDescription),
 				Flags:   discordgo.MessageFlagsEphemeral,
 			},
 		})
@@ -664,7 +670,7 @@ func showBetSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, car
 	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
-			Content: fmt.Sprintf("🎴 You drew **%s**!\n%s\n\nSelect an active bet to target:", cardName, cardDescription),
+			Content: fmt.Sprintf("🎴 <@%s> drew **%s**!\n%s\n\nSelect an active bet to target:", userID, cardName, cardDescription),
 			Components: []discordgo.MessageComponent{
 				discordgo.ActionsRow{
 					Components: []discordgo.MessageComponent{
@@ -721,7 +727,7 @@ func showCardOptionsMenu(s *discordgo.Session, i *discordgo.InteractionCreate, c
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
-			Content: fmt.Sprintf("🎴 You drew **%s**!\n%s\n\n%s\n\nSelect an option:", cardName, cardDescription, optionsList.String()),
+			Content: fmt.Sprintf("🎴 <@%s> drew **%s**!\n%s\n\n%s\n\nSelect an option:", userID, cardName, cardDescription, optionsList.String()),
 			Components: []discordgo.MessageComponent{
 				discordgo.ActionsRow{
 					Components: []discordgo.MessageComponent{
@@ -762,7 +768,7 @@ func buildCardEmbed(card *models.Card, result *models.CardResult, user models.Us
 	}
 
 	embed := &discordgo.MessageEmbed{
-		Title:       fmt.Sprintf("🎴 You Drew: %s", card.Name),
+		Title:       fmt.Sprintf("🎴 <@%s> Drew: %s", user.DiscordID, card.Name),
 		Description: card.Description,
 		Color:       color,
 		Fields:      []*discordgo.MessageEmbedField{},
@@ -1212,6 +1218,54 @@ func addCardToInventory(db *gorm.DB, userID uint, guildID string, cardID int) er
 		CardID:  cardID,
 	}
 	return db.Create(&inventory).Error
+}
+
+func processTagCards(tx *gorm.DB, guildID string) error {
+	now := time.Now()
+	expirationTime := now.Add(-12 * time.Hour)
+
+	var tagCards []models.UserInventory
+	if err := tx.Where("guild_id = ? AND card_id = ? AND deleted_at IS NULL", guildID, cards.TagCardID).
+		Find(&tagCards).Error; err != nil {
+		return err
+	}
+
+	if len(tagCards) == 0 {
+		return nil
+	}
+
+	userPointsMap := make(map[uint]bool)
+	var expiredCards []models.UserInventory
+
+	for _, tagCard := range tagCards {
+		if tagCard.CreatedAt.Before(expirationTime) {
+			expiredCards = append(expiredCards, tagCard)
+		} else {
+			if !userPointsMap[tagCard.UserID] {
+				var tagUser models.User
+				if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+					Where("id = ? AND guild_id = ?", tagCard.UserID, guildID).
+					First(&tagUser).Error; err != nil {
+					continue
+				}
+
+				tagUser.Points += 1.0
+				if err := tx.Save(&tagUser).Error; err != nil {
+					return err
+				}
+
+				userPointsMap[tagCard.UserID] = true
+			}
+		}
+	}
+
+	for _, expiredCard := range expiredCards {
+		if err := tx.Delete(&expiredCard).Error; err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func getUserInventory(db *gorm.DB, userID uint, guildID string) ([]models.UserInventory, error) {

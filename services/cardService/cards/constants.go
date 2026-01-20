@@ -51,6 +51,9 @@ const (
 	GetOutOfJailCardID     = 43
 	CouponCardID           = 123
 	TheGossipCardID        = 211
+	DuelCardID             = 216
+	SpareKeyCardID         = 118
+	TagCardID              = 212
 
 	RoyaltyGuildID = "761721066959667220"
 )

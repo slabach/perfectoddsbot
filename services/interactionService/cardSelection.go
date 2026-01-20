@@ -80,6 +80,10 @@ func HandleCardUserSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 		return handleHostileTakeoverSelection(s, i, db, userID, targetUserID, guildID)
 	case cards.TheGossipCardID:
 		return handleTheGossipSelection(s, i, db, userID, targetUserID, guildID)
+	case cards.DuelCardID:
+		return handleDuelSelection(s, i, db, userID, targetUserID, guildID)
+	case cards.TagCardID:
+		return handleTagSelection(s, i, db, userID, targetUserID, guildID)
 	default:
 		return fmt.Errorf("card %d does not support user selection", cardID)
 	}
@@ -263,6 +267,80 @@ func handleTheGossipSelection(s *discordgo.Session, i *discordgo.InteractionCrea
 		targetUsername := common.GetUsernameWithDB(tx, s, guildID, targetUserID)
 
 		card := cardService.GetCardByID(cards.TheGossipCardID)
+		if card == nil {
+			return fmt.Errorf("card not found")
+		}
+
+		embed := buildCardResultEmbed(card, result, user, targetUsername, guild.Pool)
+
+		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Embeds: []*discordgo.MessageEmbed{embed},
+			},
+		})
+	})
+}
+
+func handleDuelSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, userID string, targetUserID string, guildID string) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		result, err := cards.ExecuteDuel(tx, userID, targetUserID, guildID)
+		if err != nil {
+			return err
+		}
+
+		guild, err := guildService.GetGuildInfo(s, tx, guildID, i.ChannelID)
+		if err != nil {
+			return err
+		}
+
+		var user models.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("discord_id = ? AND guild_id = ?", userID, guildID).
+			First(&user).Error; err != nil {
+			return err
+		}
+
+		targetUsername := common.GetUsernameWithDB(tx, s, guildID, targetUserID)
+
+		card := cardService.GetCardByID(cards.DuelCardID)
+		if card == nil {
+			return fmt.Errorf("card not found")
+		}
+
+		embed := buildCardResultEmbed(card, result, user, targetUsername, guild.Pool)
+
+		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Embeds: []*discordgo.MessageEmbed{embed},
+			},
+		})
+	})
+}
+
+func handleTagSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, userID string, targetUserID string, guildID string) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		result, err := cards.ExecuteTag(tx, userID, targetUserID, guildID)
+		if err != nil {
+			return err
+		}
+
+		guild, err := guildService.GetGuildInfo(s, tx, guildID, i.ChannelID)
+		if err != nil {
+			return err
+		}
+
+		var user models.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("discord_id = ? AND guild_id = ?", userID, guildID).
+			First(&user).Error; err != nil {
+			return err
+		}
+
+		targetUsername := common.GetUsernameWithDB(tx, s, guildID, targetUserID)
+
+		card := cardService.GetCardByID(cards.TagCardID)
 		if card == nil {
 			return fmt.Errorf("card not found")
 		}

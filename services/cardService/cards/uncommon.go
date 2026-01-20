@@ -200,6 +200,22 @@ func registerUncommonCards(deck *[]models.Card) {
 		// 	Weight:      W_Uncommon,
 		// 	Handler:     handleSocialDistancing,
 		// },
+		{
+			ID:          216,
+			Name:        "DUEL!",
+			Description: "Choose a user. You both roll a die. The highest roll wins 100 points from the loser. If you tie, you both lose 50 points.",
+			Rarity:      "Uncommon",
+			Weight:      W_Uncommon,
+			Handler:     handleDuel,
+		},
+		{
+			ID:          212,
+			Name:        "Tag!",
+			Description: "Choose a user. For the next 12 hours, they gain 1 point every time anyone buys a card.",
+			Rarity:      "Rare",
+			Weight:      W_Rare,
+			Handler:     handleTag,
+		},
 	}
 
 	*deck = append(*deck, uncommonCards...)

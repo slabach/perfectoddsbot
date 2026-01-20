@@ -304,6 +304,30 @@ func handleTimeout(s *discordgo.Session, db *gorm.DB, userID string, guildID str
 		return nil, err
 	}
 
+	spareKeyBlocked, err := checkAndConsumeSpareKey(db, user.ID, guildID)
+	if err != nil {
+		return nil, err
+	}
+	if spareKeyBlocked {
+		return &models.CardResult{
+			Message:     fmt.Sprintf("<@%s>'s Spare Key blocked the Timeout! The card fizzles out.", userID),
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	shieldBlocked, err := checkAndConsumeShield(db, user.ID, guildID)
+	if err != nil {
+		return nil, err
+	}
+	if shieldBlocked {
+		return &models.CardResult{
+			Message:     fmt.Sprintf("<@%s>'s Shield blocked the Timeout! The card fizzles out.", userID),
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
 	timeoutUntil := time.Now().Add(2 * time.Hour)
 	user.CardDrawTimeoutUntil = &timeoutUntil
 
@@ -312,7 +336,7 @@ func handleTimeout(s *discordgo.Session, db *gorm.DB, userID string, guildID str
 	}
 
 	return &models.CardResult{
-		Message:     "You've been timed out! You cannot buy another card for 2 hours.",
+		Message:     fmt.Sprintf("<@%s> has been timed out! They cannot buy another card for 2 hours.", userID),
 		PointsDelta: 0,
 		PoolDelta:   0,
 	}, nil
@@ -676,6 +700,14 @@ func handleShield(s *discordgo.Session, db *gorm.DB, userID string, guildID stri
 	}, nil
 }
 
+func handleSpareKey(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	return &models.CardResult{
+		Message:     "You found a spare key! This will block your next timeout or card-buying restriction.",
+		PointsDelta: 0,
+		PoolDelta:   0,
+	}, nil
+}
+
 func handleMajorGlitch(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
 	var userCount int64
 	if err := db.Model(&models.User{}).Where("guild_id = ?", guildID).Count(&userCount).Error; err != nil {
@@ -752,6 +784,20 @@ func ExecuteJesterMute(s *discordgo.Session, db *gorm.DB, userID string, targetU
 		if blocked {
 			return &models.CardResult{
 				Message:           fmt.Sprintf("%s's Shield blocked the Jester's curse!", targetMention),
+				PointsDelta:       0,
+				PoolDelta:         0,
+				TargetUserID:      &targetID,
+				TargetPointsDelta: 0,
+			}, nil
+		}
+
+		spareKeyBlocked, err := checkAndConsumeSpareKey(db, targetUser.ID, guildID)
+		if err != nil {
+			return nil, err
+		}
+		if spareKeyBlocked {
+			return &models.CardResult{
+				Message:           fmt.Sprintf("%s's Spare Key blocked the Jester's curse!", targetMention),
 				PointsDelta:       0,
 				PoolDelta:         0,
 				TargetUserID:      &targetID,
@@ -972,6 +1018,21 @@ func ExecuteBetFreeze(s *discordgo.Session, db *gorm.DB, userID string, targetUs
 		targetID := targetUserID
 		return &models.CardResult{
 			Message:           "Their Shield blocked the Bet Freeze!",
+			PointsDelta:       0,
+			PoolDelta:         0,
+			TargetUserID:      &targetID,
+			TargetPointsDelta: 0,
+		}, nil
+	}
+
+	spareKeyBlocked, err := checkAndConsumeSpareKey(db, targetUser.ID, guildID)
+	if err != nil {
+		return nil, err
+	}
+	if spareKeyBlocked {
+		targetID := targetUserID
+		return &models.CardResult{
+			Message:           "Their Spare Key got them out of the Bet Freeze!",
 			PointsDelta:       0,
 			PoolDelta:         0,
 			TargetUserID:      &targetID,
@@ -1630,6 +1691,24 @@ func checkAndConsumeShield(db *gorm.DB, userID uint, guildID string) (bool, erro
 	return false, nil
 }
 
+func checkAndConsumeSpareKey(db *gorm.DB, userID uint, guildID string) (bool, error) {
+	var count int64
+	err := db.Model(&models.UserInventory{}).
+		Where("user_id = ? AND guild_id = ? AND card_id = ?", userID, guildID, SpareKeyCardID).
+		Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+	if count > 0 {
+		if err := removeCardFromInventory(db, userID, guildID, SpareKeyCardID); err != nil {
+			return true, fmt.Errorf("failed to consume spare key: %v", err)
+		}
+
+		return true, nil
+	}
+	return false, nil
+}
+
 func handleGrandLarceny(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
 	return &models.CardResult{
 		Message:           "Grand Larceny requires you to select a target!",
@@ -1942,7 +2021,7 @@ func handleRobbingTheHood(s *discordgo.Session, db *gorm.DB, userID string, guil
 
 func handleStopTheSteal(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
 	return &models.CardResult{
-		Message:     "You drew STOP THE STEAL! Use /play-card to play this card and cancel any of your active bets.",
+		Message:     fmt.Sprintf("<@%s> drew STOP THE STEAL! Use /play-card to play this card and cancel any of your active bets.", userID),
 		PointsDelta: 0,
 		PoolDelta:   0,
 	}, nil
@@ -2014,7 +2093,7 @@ func handleSnipSnap(s *discordgo.Session, db *gorm.DB, userID string, guildID st
 
 func handleGambler(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
 	return &models.CardResult{
-		Message:     "You drew The Gambler! You must choose your fate...",
+		Message:     fmt.Sprintf("<@%s> drew The Gambler! You must choose your fate...", userID),
 		PointsDelta: 0,
 		PoolDelta:   0,
 	}, nil
@@ -2022,7 +2101,7 @@ func handleGambler(s *discordgo.Session, db *gorm.DB, userID string, guildID str
 
 func handleGetOutOfJail(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
 	return &models.CardResult{
-		Message:     "You drew Get Out of Jail Free! This card will nullify your next lost bet completely.",
+		Message:     fmt.Sprintf("<@%s> drew Get Out of Jail Free! This card will nullify your next lost bet completely.", userID),
 		PointsDelta: 0,
 		PoolDelta:   0,
 	}, nil
@@ -2067,5 +2146,241 @@ func handleInsiderTrading(s *discordgo.Session, db *gorm.DB, userID string, guil
 		Message:     "You've drawn Insider Trading! You stole 100 points from the pool.",
 		PointsDelta: 100,
 		PoolDelta:   -100,
+	}, nil
+}
+
+func handleHotPotato(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	var result *models.CardResult
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		var user models.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("discord_id = ? AND guild_id = ?", userID, guildID).
+			First(&user).Error; err != nil {
+			return err
+		}
+
+		var allUsers []models.User
+		if err := tx.Where("guild_id = ? AND discord_id != ?", guildID, userID).Find(&allUsers).Error; err != nil {
+			return err
+		}
+
+		if len(allUsers) == 0 {
+			result = &models.CardResult{
+				Message:     "No other users found to pass the hot potato to. The card fizzles out.",
+				PointsDelta: 0,
+				PoolDelta:   0,
+			}
+			return nil
+		}
+
+		randomIndex := rand.Intn(len(allUsers))
+		targetUser := allUsers[randomIndex]
+
+		var lockedTarget models.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("discord_id = ? AND guild_id = ?", targetUser.DiscordID, guildID).
+			First(&lockedTarget).Error; err != nil {
+			return err
+		}
+
+		userLoss := 50.0
+		targetLoss := 50.0
+
+		if user.Points < userLoss {
+			userLoss = user.Points
+		}
+		if lockedTarget.Points < targetLoss {
+			targetLoss = lockedTarget.Points
+		}
+
+		user.Points -= userLoss
+		lockedTarget.Points -= targetLoss
+
+		if err := tx.Save(&user).Error; err != nil {
+			return err
+		}
+		if err := tx.Save(&lockedTarget).Error; err != nil {
+			return err
+		}
+
+		targetID := lockedTarget.DiscordID
+		targetMention := "<@" + lockedTarget.DiscordID + ">"
+		userMention := "<@" + userID + ">"
+
+		result = &models.CardResult{
+			Message:           fmt.Sprintf("🥔 Hot Potato! %s lost %.0f points. The hot potato was passed to %s who also lost %.0f points!", userMention, userLoss, targetMention, targetLoss),
+			PointsDelta:       -userLoss,
+			PoolDelta:         0,
+			TargetUserID:      &targetID,
+			TargetPointsDelta: -targetLoss,
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func handleDuel(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	return &models.CardResult{
+		Message:           "DUEL! requires you to select a target!",
+		PointsDelta:       0,
+		PoolDelta:         0,
+		RequiresSelection: true,
+		SelectionType:     "user",
+	}, nil
+}
+
+func ExecuteDuel(db *gorm.DB, userID string, targetUserID string, guildID string) (*models.CardResult, error) {
+	var result *models.CardResult
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		var user models.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("discord_id = ? AND guild_id = ?", userID, guildID).
+			First(&user).Error; err != nil {
+			return err
+		}
+
+		var targetUser models.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("discord_id = ? AND guild_id = ?", targetUserID, guildID).
+			First(&targetUser).Error; err != nil {
+			return err
+		}
+
+		userRoll := rand.Intn(6) + 1
+		targetRoll := rand.Intn(6) + 1
+
+		targetID := targetUserID
+		targetMention := "<@" + targetUserID + ">"
+		userMention := "<@" + userID + ">"
+
+		if userRoll > targetRoll {
+			transferAmount := 100.0
+			if targetUser.Points < transferAmount {
+				transferAmount = targetUser.Points
+			}
+
+			user.Points += transferAmount
+			targetUser.Points -= transferAmount
+
+			if err := tx.Save(&user).Error; err != nil {
+				return err
+			}
+			if err := tx.Save(&targetUser).Error; err != nil {
+				return err
+			}
+
+			result = &models.CardResult{
+				Message:           fmt.Sprintf("⚔️ DUEL! %s rolled %d, %s rolled %d. You win! You gained %.0f points from %s!", userMention, userRoll, targetMention, targetRoll, transferAmount, targetMention),
+				PointsDelta:       transferAmount,
+				PoolDelta:         0,
+				TargetUserID:      &targetID,
+				TargetPointsDelta: -transferAmount,
+			}
+		} else if targetRoll > userRoll {
+			transferAmount := 100.0
+			if user.Points < transferAmount {
+				transferAmount = user.Points
+			}
+
+			user.Points -= transferAmount
+			targetUser.Points += transferAmount
+
+			if err := tx.Save(&user).Error; err != nil {
+				return err
+			}
+			if err := tx.Save(&targetUser).Error; err != nil {
+				return err
+			}
+
+			result = &models.CardResult{
+				Message:           fmt.Sprintf("⚔️ DUEL! %s rolled %d, %s rolled %d. You lose! %s gained %.0f points from you!", userMention, userRoll, targetMention, targetRoll, targetMention, transferAmount),
+				PointsDelta:       -transferAmount,
+				PoolDelta:         0,
+				TargetUserID:      &targetID,
+				TargetPointsDelta: transferAmount,
+			}
+		} else {
+			userLoss := 50.0
+			targetLoss := 50.0
+
+			if user.Points < userLoss {
+				userLoss = user.Points
+			}
+			if targetUser.Points < targetLoss {
+				targetLoss = targetUser.Points
+			}
+
+			user.Points -= userLoss
+			targetUser.Points -= targetLoss
+
+			if err := tx.Save(&user).Error; err != nil {
+				return err
+			}
+			if err := tx.Save(&targetUser).Error; err != nil {
+				return err
+			}
+
+			result = &models.CardResult{
+				Message:           fmt.Sprintf("⚔️ DUEL! You both rolled %d! It's a tie! You both lose 50 points.", userRoll),
+				PointsDelta:       -userLoss,
+				PoolDelta:         0,
+				TargetUserID:      &targetID,
+				TargetPointsDelta: -targetLoss,
+			}
+		}
+
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func handleTag(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	return &models.CardResult{
+		Message:           "Tag! requires you to select a target user!",
+		PointsDelta:       0,
+		PoolDelta:         0,
+		RequiresSelection: true,
+		SelectionType:     "user",
+	}, nil
+}
+
+func ExecuteTag(db *gorm.DB, userID string, targetUserID string, guildID string) (*models.CardResult, error) {
+	var targetUser models.User
+	if err := db.Where("discord_id = ? AND guild_id = ?", targetUserID, guildID).First(&targetUser).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return &models.CardResult{
+				Message:     "Target user not found in this server.",
+				PointsDelta: 0,
+				PoolDelta:   0,
+			}, nil
+		}
+		return nil, err
+	}
+
+	inventory := models.UserInventory{
+		UserID:  targetUser.ID,
+		GuildID: guildID,
+		CardID:  TagCardID,
+	}
+	if err := db.Create(&inventory).Error; err != nil {
+		return nil, err
+	}
+
+	targetID := targetUserID
+	targetMention := "<@" + targetUserID + ">"
+	userMention := "<@" + userID + ">"
+
+	return &models.CardResult{
+		Message:           fmt.Sprintf("🏷️ Tag! %s tagged %s! %s will gain 1 point every time anyone buys a card for the next 12 hours.", userMention, targetMention, targetMention),
+		PointsDelta:       0,
+		PoolDelta:         0,
+		TargetUserID:      &targetID,
+		TargetPointsDelta: 0,
 	}, nil
 }
