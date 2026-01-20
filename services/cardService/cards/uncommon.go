@@ -192,14 +192,14 @@ func registerUncommonCards(deck *[]models.Card) {
 			Weight:      W_Uncommon,
 			Handler:     handleBountyHunter,
 		},
-		// {
-		// 	ID:          215,
-		// 	Name:        "Social Distancing",
-		// 	Description: "Choose a user. They gain a shield, but they also cannot buy any new cards for 1 hour.",
-		// 	Rarity:      "Uncommon",
-		// 	Weight:      W_Uncommon,
-		// 	Handler:     handleSocialDistancing,
-		// },
+		{
+			ID:          215,
+			Name:        "Social Distancing",
+			Description: "Choose a user. They gain a shield, but they also cannot buy any new cards for 2 hours.",
+			Rarity:      "Uncommon",
+			Weight:      W_Uncommon,
+			Handler:     handleSocialDistancing,
+		},
 		{
 			ID:          216,
 			Name:        "DUEL!",
