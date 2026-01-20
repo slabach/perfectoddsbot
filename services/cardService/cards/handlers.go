@@ -141,11 +141,50 @@ func ExecutePickpocketSteal(db *gorm.DB, userID string, targetUserID string, gui
 		return nil, err
 	}
 
+	var bountyCards []models.UserInventory
+	if err := db.Where("user_id = ? AND guild_id = ? AND card_id = ? AND deleted_at IS NULL", targetUser.ID, guildID, BountyHunterCardID).
+		Find(&bountyCards).Error; err != nil {
+		return nil, err
+	}
+
+	bountyCount := len(bountyCards)
+	bountyReward := 0.0
+	bountyMessage := ""
 	targetID := targetUserID
+
+	if bountyCount > 0 {
+		var guild models.Guild
+		if err := db.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("guild_id = ?", guildID).
+			First(&guild).Error; err != nil {
+			return nil, err
+		}
+
+		totalBountyReward := float64(bountyCount) * 100.0
+
+		if guild.Pool >= totalBountyReward {
+			bountyReward = totalBountyReward
+		} else {
+			bountyReward = guild.Pool
+		}
+
+		for _, bountyCard := range bountyCards {
+			if err := db.Delete(&bountyCard).Error; err != nil {
+				return nil, err
+			}
+		}
+
+		if bountyCount == 1 {
+			bountyMessage = fmt.Sprintf(" You also claimed 1 bounty (+%.0f points from pool)!", bountyReward)
+		} else {
+			bountyMessage = fmt.Sprintf(" You also claimed %d bounties (+%.0f points from pool)!", bountyCount, bountyReward)
+		}
+	}
+
 	return &models.CardResult{
-		Message:           "You successfully pickpocketed your target!",
-		PointsDelta:       stealAmount,
-		PoolDelta:         0,
+		Message:           fmt.Sprintf("You successfully pickpocketed your target!%s", bountyMessage),
+		PointsDelta:       stealAmount + bountyReward,
+		PoolDelta:         -bountyReward,
 		TargetUserID:      &targetID,
 		TargetPointsDelta: -stealAmount,
 	}, nil
@@ -2378,6 +2417,187 @@ func ExecuteTag(db *gorm.DB, userID string, targetUserID string, guildID string)
 
 	return &models.CardResult{
 		Message:           fmt.Sprintf("🏷️ Tag! %s tagged %s! %s will gain 1 point every time anyone buys a card for the next 12 hours.", userMention, targetMention, targetMention),
+		PointsDelta:       0,
+		PoolDelta:         0,
+		TargetUserID:      &targetID,
+		TargetPointsDelta: 0,
+	}, nil
+}
+
+func handleCrowdfund(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	var allUsers []models.User
+	if err := db.Where("guild_id = ?", guildID).Find(&allUsers).Error; err != nil {
+		return nil, err
+	}
+
+	pointsDelta := float64(len(allUsers))
+
+	return &models.CardResult{
+		Message:     "You've drawn Crowdfund! You get 1 point for every user in the server.",
+		PointsDelta: pointsDelta,
+		PoolDelta:   0,
+	}, nil
+}
+
+func handleReversePickpocket(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	var result *models.CardResult
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		var user models.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("discord_id = ? AND guild_id = ?", userID, guildID).
+			First(&user).Error; err != nil {
+			return err
+		}
+
+		var allUsers []models.User
+		if err := tx.Where("guild_id = ? AND discord_id != ?", guildID, userID).Find(&allUsers).Error; err != nil {
+			return err
+		}
+
+		if len(allUsers) == 0 {
+			result = &models.CardResult{
+				Message:     "No other users found to give points to. The card fizzles out.",
+				PointsDelta: 0,
+				PoolDelta:   0,
+			}
+			return nil
+		}
+
+		randomIndex := rand.Intn(len(allUsers))
+		targetUser := allUsers[randomIndex]
+
+		var lockedTarget models.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("discord_id = ? AND guild_id = ?", targetUser.DiscordID, guildID).
+			First(&lockedTarget).Error; err != nil {
+			return err
+		}
+
+		transferAmount := 150.0
+		if user.Points < transferAmount {
+			transferAmount = user.Points
+		}
+
+		user.Points -= transferAmount
+		lockedTarget.Points += transferAmount
+
+		if err := tx.Save(&user).Error; err != nil {
+			return err
+		}
+		if err := tx.Save(&lockedTarget).Error; err != nil {
+			return err
+		}
+
+		targetID := lockedTarget.DiscordID
+		targetMention := "<@" + lockedTarget.DiscordID + ">"
+		userMention := "<@" + userID + ">"
+
+		result = &models.CardResult{
+			Message:           fmt.Sprintf("🫴 Reverse Pickpocket! %s sneakily gave %.0f points to %s!", userMention, transferAmount, targetMention),
+			PointsDelta:       -transferAmount,
+			PoolDelta:         0,
+			TargetUserID:      &targetID,
+			TargetPointsDelta: transferAmount,
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func handleShoppingSpree(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	var result *models.CardResult
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		var user models.User
+		if err := tx.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
+			return err
+		}
+
+		now := time.Now()
+		expirationTime := now.Add(-12 * time.Hour)
+
+		var allShoppingSpreeCards []models.UserInventory
+		if err := tx.Where("user_id = ? AND guild_id = ? AND card_id = ? AND deleted_at IS NULL", user.ID, guildID, ShoppingSpreeCardID).
+			Order("created_at ASC").
+			Find(&allShoppingSpreeCards).Error; err != nil {
+			return err
+		}
+
+		var activeCards []models.UserInventory
+		for _, card := range allShoppingSpreeCards {
+			if card.CreatedAt.After(expirationTime) || card.CreatedAt.Equal(expirationTime) {
+				activeCards = append(activeCards, card)
+			}
+		}
+
+		if len(activeCards) > 1 {
+			// Keep the oldest one (first in list), delete the rest
+			for i := 1; i < len(activeCards); i++ {
+				if err := tx.Delete(&activeCards[i]).Error; err != nil {
+					return err
+				}
+			}
+			result = &models.CardResult{
+				Message:     "You already have an active Shopping Spree! This card fizzles out.",
+				PointsDelta: 0,
+				PoolDelta:   0,
+			}
+		} else {
+			result = &models.CardResult{
+				Message:     "Shopping Spree activated! Your card-buying costs are reduced by 50% for 12 hours.",
+				PointsDelta: 0,
+				PoolDelta:   0,
+			}
+		}
+
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func handleBountyHunter(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	return &models.CardResult{
+		Message:           "Bounty Hunter requires you to select a target user!",
+		PointsDelta:       0,
+		PoolDelta:         0,
+		RequiresSelection: true,
+		SelectionType:     "user",
+	}, nil
+}
+
+func ExecuteBountyHunter(db *gorm.DB, userID string, targetUserID string, guildID string) (*models.CardResult, error) {
+	var targetUser models.User
+	if err := db.Where("discord_id = ? AND guild_id = ?", targetUserID, guildID).First(&targetUser).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return &models.CardResult{
+				Message:     "Target user not found in this server.",
+				PointsDelta: 0,
+				PoolDelta:   0,
+			}, nil
+		}
+		return nil, err
+	}
+
+	inventory := models.UserInventory{
+		UserID:  targetUser.ID,
+		GuildID: guildID,
+		CardID:  BountyHunterCardID,
+	}
+	if err := db.Create(&inventory).Error; err != nil {
+		return nil, err
+	}
+
+	targetID := targetUserID
+	targetMention := "<@" + targetUserID + ">"
+	userMention := "<@" + userID + ">"
+
+	return &models.CardResult{
+		Message:           fmt.Sprintf("🎯 Bounty Hunter! %s placed a bounty on %s! The next person to steal from them will collect 100 points from the pool!", userMention, targetMention),
 		PointsDelta:       0,
 		PoolDelta:         0,
 		TargetUserID:      &targetID,

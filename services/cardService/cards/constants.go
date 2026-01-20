@@ -54,6 +54,8 @@ const (
 	DuelCardID             = 216
 	SpareKeyCardID         = 118
 	TagCardID              = 212
+	ShoppingSpreeCardID   = 208
+	BountyHunterCardID    = 214
 
 	RoyaltyGuildID = "761721066959667220"
 )

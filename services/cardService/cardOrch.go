@@ -145,6 +145,30 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		drawCardCost = drawCardCost * 0.5
 	}
 
+	var shoppingSpreeInventory models.UserInventory
+	err = tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("user_id = ? AND guild_id = ? AND card_id = ? AND deleted_at IS NULL", user.ID, guildID, cards.ShoppingSpreeCardID).
+		First(&shoppingSpreeInventory).Error
+	hasShoppingSpree := err == nil
+	if err != nil && err != gorm.ErrRecordNotFound {
+		tx.Rollback()
+		common.SendError(s, i, fmt.Errorf("error checking Shopping Spree inventory: %v", err), db)
+		return
+	}
+	if hasShoppingSpree {
+		expirationTime := now.Add(-12 * time.Hour)
+		if shoppingSpreeInventory.CreatedAt.Before(expirationTime) {
+			drawCardCost = drawCardCost * 0.5
+			if err := tx.Delete(&shoppingSpreeInventory).Error; err != nil {
+				tx.Rollback()
+				common.SendError(s, i, fmt.Errorf("error deleting expired Shopping Spree: %v", err), db)
+				return
+			}
+		} else {
+			drawCardCost = drawCardCost * 0.5
+		}
+	}
+
 	var unluckyCatInventory models.UserInventory
 	err = tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 		Where("user_id = ? AND guild_id = ? AND card_id = ?", user.ID, guildID, cards.UnluckyCatCardID).
@@ -1303,6 +1327,17 @@ func MyInventory(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.
 	}
 
 	now := time.Now()
+	expirationTime := now.Add(-12 * time.Hour)
+	hasShoppingSpree := false
+	for _, item := range inventory {
+		if item.CardID == cards.ShoppingSpreeCardID {
+			if item.CreatedAt.After(expirationTime) || item.CreatedAt.Equal(expirationTime) {
+				hasShoppingSpree = true
+				break
+			}
+		}
+	}
+
 	resetPeriod := time.Duration(guild.CardDrawCooldownMinutes) * time.Minute
 
 	var countdownText string
@@ -1362,6 +1397,10 @@ func MyInventory(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.
 	hasCoupon := cardCounts[cards.CouponCardID] > 0
 	if hasCoupon {
 		nextDrawCost = nextDrawCost * 0.75
+	}
+
+	if hasShoppingSpree {
+		nextDrawCost = nextDrawCost * 0.5
 	}
 
 	var lockoutText string
@@ -1506,6 +1545,8 @@ func MyInventory(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.
 	costText := fmt.Sprintf("%.0f points", nextDrawCost)
 	if nextDrawCost == 0 {
 		costText = "Free (Generous Donation)"
+	} else if hasShoppingSpree {
+		costText = fmt.Sprintf("%.0f points (Shopping Spree: -50%%)", nextDrawCost)
 	}
 	embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
 		Name:   "💰 Next Draw Cost",
