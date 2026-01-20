@@ -86,6 +86,8 @@ func HandleCardUserSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 		return handleTagSelection(s, i, db, userID, targetUserID, guildID)
 	case cards.BountyHunterCardID:
 		return handleBountyHunterSelection(s, i, db, userID, targetUserID, guildID)
+	case cards.SocialDistancingCardID:
+		return handleSocialDistancingSelection(s, i, db, userID, targetUserID, guildID)
 	default:
 		return fmt.Errorf("card %d does not support user selection", cardID)
 	}
@@ -380,6 +382,43 @@ func handleBountyHunterSelection(s *discordgo.Session, i *discordgo.InteractionC
 		targetUsername := common.GetUsernameWithDB(tx, s, guildID, targetUserID)
 
 		card := cardService.GetCardByID(cards.BountyHunterCardID)
+		if card == nil {
+			return fmt.Errorf("card not found")
+		}
+
+		embed := buildCardResultEmbed(card, result, user, targetUsername, guild.Pool)
+
+		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Embeds: []*discordgo.MessageEmbed{embed},
+			},
+		})
+	})
+}
+
+func handleSocialDistancingSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, userID string, targetUserID string, guildID string) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		result, err := cards.ExecuteSocialDistancing(tx, userID, targetUserID, guildID)
+		if err != nil {
+			return err
+		}
+
+		guild, err := guildService.GetGuildInfo(s, tx, guildID, i.ChannelID)
+		if err != nil {
+			return err
+		}
+
+		var user models.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("discord_id = ? AND guild_id = ?", userID, guildID).
+			First(&user).Error; err != nil {
+			return err
+		}
+
+		targetUsername := common.GetUsernameWithDB(tx, s, guildID, targetUserID)
+
+		card := cardService.GetCardByID(cards.SocialDistancingCardID)
 		if card == nil {
 			return fmt.Errorf("card not found")
 		}

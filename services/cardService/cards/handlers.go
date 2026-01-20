@@ -2604,3 +2604,87 @@ func ExecuteBountyHunter(db *gorm.DB, userID string, targetUserID string, guildI
 		TargetPointsDelta: 0,
 	}, nil
 }
+
+func handleSocialDistancing(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	return &models.CardResult{
+		Message:           "Social Distancing requires you to select a target user!",
+		PointsDelta:       0,
+		PoolDelta:         0,
+		RequiresSelection: true,
+		SelectionType:     "user",
+	}, nil
+}
+
+func ExecuteSocialDistancing(db *gorm.DB, userID string, targetUserID string, guildID string) (*models.CardResult, error) {
+	var targetUser models.User
+	if err := db.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("discord_id = ? AND guild_id = ?", targetUserID, guildID).
+		First(&targetUser).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return &models.CardResult{
+				Message:     "Target user not found in this server.",
+				PointsDelta: 0,
+				PoolDelta:   0,
+			}, nil
+		}
+		return nil, err
+	}
+
+	blocked, err := checkAndConsumeShield(db, targetUser.ID, guildID)
+	if err != nil {
+		return nil, err
+	}
+	if blocked {
+		targetID := targetUserID
+		return &models.CardResult{
+			Message:           "Their Shield blocked the Social Distancing!",
+			PointsDelta:       0,
+			PoolDelta:         0,
+			TargetUserID:      &targetID,
+			TargetPointsDelta: 0,
+		}, nil
+	}
+
+	spareKeyBlocked, err := checkAndConsumeSpareKey(db, targetUser.ID, guildID)
+	if err != nil {
+		return nil, err
+	}
+	if spareKeyBlocked {
+		targetID := targetUserID
+		return &models.CardResult{
+			Message:           "Their Spare Key got them out of Social Distancing!",
+			PointsDelta:       0,
+			PoolDelta:         0,
+			TargetUserID:      &targetID,
+			TargetPointsDelta: 0,
+		}, nil
+	}
+
+	inventory := models.UserInventory{
+		UserID:  targetUser.ID,
+		GuildID: guildID,
+		CardID:  ShieldCardID,
+	}
+	if err := db.Create(&inventory).Error; err != nil {
+		return nil, err
+	}
+
+	lockoutUntil := time.Now().Add(2 * time.Hour)
+	targetUser.CardDrawTimeoutUntil = &lockoutUntil
+
+	if err := db.Save(&targetUser).Error; err != nil {
+		return nil, err
+	}
+
+	targetID := targetUserID
+	targetMention := "<@" + targetUserID + ">"
+	userMention := "<@" + userID + ">"
+
+	return &models.CardResult{
+		Message:           fmt.Sprintf("Social Distancing! %s gave %s a Shield, but %s cannot buy any new cards for 2 hours.", userMention, targetMention, targetMention),
+		PointsDelta:       0,
+		PoolDelta:         0,
+		TargetUserID:      &targetID,
+		TargetPointsDelta: 0,
+	}, nil
+}

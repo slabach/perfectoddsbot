@@ -489,7 +489,8 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 
 	tx.Commit()
 
-	embed := buildCardEmbed(card, cardResult, user, targetUsername, guild.Pool, drawCardCost)
+	username = common.GetUsernameWithDB(db, s, guildID, user.DiscordID)
+	embed := buildCardEmbed(card, cardResult, user, username, targetUsername, guild.Pool, drawCardCost)
 
 	if donorUserID != 0 && donorName != "" {
 		if embed.Footer == nil {
@@ -774,7 +775,7 @@ func showCardOptionsMenu(s *discordgo.Session, i *discordgo.InteractionCreate, c
 	}
 }
 
-func buildCardEmbed(card *models.Card, result *models.CardResult, user models.User, targetUsername string, poolBalance float64, drawCardCost float64) *discordgo.MessageEmbed {
+func buildCardEmbed(card *models.Card, result *models.CardResult, user models.User, username string, targetUsername string, poolBalance float64, drawCardCost float64) *discordgo.MessageEmbed {
 	var color int
 	switch card.Rarity {
 	case "Common":
@@ -792,7 +793,7 @@ func buildCardEmbed(card *models.Card, result *models.CardResult, user models.Us
 	}
 
 	embed := &discordgo.MessageEmbed{
-		Title:       fmt.Sprintf("🎴 <@%s> Drew: %s", user.DiscordID, card.Name),
+		Title:       fmt.Sprintf("🎴 %s Drew: %s", username, card.Name),
 		Description: card.Description,
 		Color:       color,
 		Fields:      []*discordgo.MessageEmbedField{},
