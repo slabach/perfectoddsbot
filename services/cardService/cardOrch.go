@@ -265,6 +265,15 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		}
 	}
 
+	var lockedGuild models.Guild
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&lockedGuild, guild.ID).Error; err != nil {
+		tx.Rollback()
+		common.SendError(s, i, fmt.Errorf("error locking guild: %v", err), db)
+		return
+	}
+
+	*guild = lockedGuild
+
 	user.Points -= drawCardCost
 	guild.Pool += drawCardCost
 
@@ -284,6 +293,12 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	user.CardDrawCount++
 
 	if err := tx.Save(&user).Error; err != nil {
+		tx.Rollback()
+		common.SendError(s, i, err, db)
+		return
+	}
+
+	if err := tx.Save(&guild).Error; err != nil {
 		tx.Rollback()
 		common.SendError(s, i, err, db)
 		return

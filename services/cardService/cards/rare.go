@@ -89,7 +89,7 @@ func registerRareCards(deck *[]models.Card) {
 			Handler:     handleBankHeist,
 		},
 		{
-			ID:          46,
+			ID:          84,
 			Name:        "EMP",
 			Description: "Everyone (including you and the pool) loses 5% of their points.",
 			Rarity:      "Rare",

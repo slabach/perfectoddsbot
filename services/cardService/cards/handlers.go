@@ -1968,7 +1968,7 @@ func handleNuke(s *discordgo.Session, db *gorm.DB, userID string, guildID string
 	}
 
 	return &models.CardResult{
-		Message:     "You've drawn The Nuke! Everyone (including you) loses 10% of their points to the Pool.",
+		Message:     "You've drawn The Nuke! Everyone (including you) loses 25% of their points to the Pool.",
 		PointsDelta: 0,
 		PoolDelta:   -(guild.Pool * 0.25),
 	}, nil
@@ -2002,7 +2002,7 @@ func handleEMP(s *discordgo.Session, db *gorm.DB, userID string, guildID string)
 	}
 
 	return &models.CardResult{
-		Message:     "You've drawn EMP! Everyone (including you and the pool) loses 5% of their points to the Pool.",
+		Message:     "You've drawn EMP! Everyone (including you and the pool) loses 5% of their points.",
 		PointsDelta: 0,
 		PoolDelta:   -(guild.Pool * 0.05),
 	}, nil
