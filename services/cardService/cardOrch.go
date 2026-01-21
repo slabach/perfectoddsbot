@@ -147,6 +147,7 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	err = tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 		Where("user_id = ? AND guild_id = ? AND card_id = ? AND deleted_at IS NULL",
 			user.ID, guildID, cards.ShoppingSpreeCardID).
+		Order("created_at DESC").
 		Find(&shoppingSpreeItems).Error
 	if err != nil {
 		tx.Rollback()
@@ -158,34 +159,38 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	for idx := range inventoryItems {
 		inventoryMap[inventoryItems[idx].CardID] = &inventoryItems[idx]
 	}
-	if len(shoppingSpreeItems) > 0 {
-		inventoryMap[cards.ShoppingSpreeCardID] = &shoppingSpreeItems[0]
-	}
 
 	var horseshoeInventory *models.UserInventory
 	var shoppingSpreeInventory *models.UserInventory
 	var unluckyCatInventory *models.UserInventory
 	var couponInventory *models.UserInventory
 
+	expirationTime := now.Add(-12 * time.Hour)
+	var expiredShoppingSpreeItems []*models.UserInventory
+	for idx := range shoppingSpreeItems {
+		item := &shoppingSpreeItems[idx]
+		if item.CreatedAt.Before(expirationTime) {
+			expiredShoppingSpreeItems = append(expiredShoppingSpreeItems, item)
+		} else {
+			if shoppingSpreeInventory == nil {
+				shoppingSpreeInventory = item
+				inventoryMap[cards.ShoppingSpreeCardID] = item
+				drawCardCost = drawCardCost * 0.5
+			}
+		}
+	}
+
+	for _, expiredItem := range expiredShoppingSpreeItems {
+		if err := tx.Delete(expiredItem).Error; err != nil {
+			tx.Rollback()
+			common.SendError(s, i, fmt.Errorf("error deleting expired Shopping Spree: %v", err), db)
+			return
+		}
+	}
+
 	if inv, ok := inventoryMap[cards.LuckyHorseshoeCardID]; ok {
 		horseshoeInventory = inv
 		drawCardCost = drawCardCost * 0.5
-	}
-
-	if inv, ok := inventoryMap[cards.ShoppingSpreeCardID]; ok {
-		shoppingSpreeInventory = inv
-		expirationTime := now.Add(-12 * time.Hour)
-		if shoppingSpreeInventory.CreatedAt.Before(expirationTime) {
-			drawCardCost = drawCardCost * 0.5
-			if err := tx.Delete(shoppingSpreeInventory).Error; err != nil {
-				tx.Rollback()
-				common.SendError(s, i, fmt.Errorf("error deleting expired Shopping Spree: %v", err), db)
-				return
-			}
-			shoppingSpreeInventory = nil
-		} else {
-			drawCardCost = drawCardCost * 0.5
-		}
 	}
 
 	if inv, ok := inventoryMap[cards.UnluckyCatCardID]; ok {
