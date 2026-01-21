@@ -136,7 +136,7 @@ func runApp() {
 
 	err = services.RunCardMigration(db)
 	if err != nil {
-		log.Printf("Error running parlay resolution migration: %v", err)
+		log.Printf("Error running card migration: %v", err)
 	}
 	defer func(dg *discordgo.Session) {
 		err := dg.Close()

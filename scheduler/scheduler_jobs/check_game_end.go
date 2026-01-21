@@ -328,7 +328,7 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 				}
 			}
 
-			consumer := func(db *gorm.DB, user models.User, cardID int) error {
+			consumer := func(db *gorm.DB, user models.User, cardID uint) error {
 				return cardService.PlayCardFromInventory(s, db, user, cardID)
 			}
 
@@ -409,7 +409,7 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 			if unoApplied && isWinAfterUno {
 				payout := common.CalculatePayout(entry.Amount, entry.Option, bet)
 
-				consumer := func(db *gorm.DB, user models.User, cardID int) error {
+				consumer := func(db *gorm.DB, user models.User, cardID uint) error {
 					return cardService.PlayCardFromInventory(s, db, user, cardID)
 				}
 
@@ -496,7 +496,7 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 				}
 			}
 
-			consumer := func(db *gorm.DB, user models.User, cardID int) error {
+			consumer := func(db *gorm.DB, user models.User, cardID uint) error {
 				return cardService.PlayCardFromInventory(s, db, user, cardID)
 			}
 

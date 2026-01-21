@@ -17,7 +17,7 @@ type Card struct {
 	RarityID             uint
 	CardRarity           CardRarity `gorm:"foreignKey:RarityID"`
 	Weight               int
-	Handler              CardHandler
+	Handler              CardHandler `gorm:"-"`
 	HandlerName          string
 	AddToInventory       bool    `gorm:"default:false"`
 	RoyaltyDiscordUserID *string `gorm:"size:64"`

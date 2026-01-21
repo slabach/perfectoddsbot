@@ -9,7 +9,7 @@ type UserInventory struct {
 	ID           uint   `gorm:"primaryKey"`
 	UserID       uint   `gorm:"index:idx_user_guild_card; not null"`
 	GuildID      string `gorm:"index:idx_user_guild_card; size:64; not null"`
-	CardID       int    `gorm:"index:idx_user_guild_card; not null"`
+	CardID       uint   `gorm:"index:idx_user_guild_card; not null"`
 	Card         Card   `gorm:"foreignKey:CardID;"`
 	TargetBetID  *uint
 	TargetUserID *string `gorm:"size:64"`

@@ -233,8 +233,8 @@ func registerUncommonCards(deck *[]models.Card) {
 			Code:        "TAG",
 			Name:        "Tag!",
 			Description: "Choose a user. For the next 12 hours, they gain 1 point every time anyone buys a card.",
-			Rarity:      "Rare",
-			Weight:      W_Rare,
+			Rarity:      "Uncommon",
+			Weight:      W_Uncommon,
 			Handler:     handleTag,
 		},
 	}

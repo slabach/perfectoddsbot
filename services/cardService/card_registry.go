@@ -59,9 +59,9 @@ func PickRandomCard(hasSubscription bool) *models.Card {
 	return eligibleCards[0]
 }
 
-func GetCardByID(id int) *models.Card {
+func GetCardByID(id uint) *models.Card {
 	for i := range Deck {
-		if Deck[i].ID == uint(id) {
+		if Deck[i].ID == id {
 			return &Deck[i]
 		}
 	}

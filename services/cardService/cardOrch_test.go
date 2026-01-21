@@ -45,7 +45,7 @@ func TestApplyDoubleDownIfAvailable(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 
 		consumed := false
-		consumer := func(db *gorm.DB, u models.User, cardID int) error {
+		consumer := func(db *gorm.DB, u models.User, cardID uint) error {
 			if u.ID != user.ID {
 				t.Errorf("Expected user ID %d, got %d", user.ID, u.ID)
 			}
@@ -92,7 +92,7 @@ func TestApplyDoubleDownIfAvailable(t *testing.T) {
 			WithArgs(user.ID, user.GuildID, cards.DoubleDownCardID).
 			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 
-		consumer := func(db *gorm.DB, u models.User, cardID int) error {
+		consumer := func(db *gorm.DB, u models.User, cardID uint) error {
 			t.Error("Consumer should not be called")
 			return nil
 		}
@@ -130,7 +130,7 @@ func TestApplyDoubleDownIfAvailable(t *testing.T) {
 			WithArgs(user.ID, user.GuildID, cards.DoubleDownCardID).
 			WillReturnError(errors.New("db error"))
 
-		consumer := func(db *gorm.DB, u models.User, cardID int) error {
+		consumer := func(db *gorm.DB, u models.User, cardID uint) error {
 			t.Error("Consumer should not be called")
 			return nil
 		}
@@ -181,7 +181,7 @@ func TestApplyEmotionalHedgeIfApplicable(t *testing.T) {
 		scoreDiff := -10
 
 		consumed := false
-		consumer := func(db *gorm.DB, u models.User, cardID int) error {
+		consumer := func(db *gorm.DB, u models.User, cardID uint) error {
 			consumed = true
 			return nil
 		}
@@ -232,7 +232,7 @@ func TestApplyEmotionalHedgeIfApplicable(t *testing.T) {
 		scoreDiff := 10
 
 		consumed := false
-		consumer := func(db *gorm.DB, u models.User, cardID int) error {
+		consumer := func(db *gorm.DB, u models.User, cardID uint) error {
 			consumed = true
 			return nil
 		}
@@ -282,7 +282,7 @@ func TestApplyEmotionalHedgeIfApplicable(t *testing.T) {
 		betAmount := 100.0
 		scoreDiff := -10
 
-		consumer := func(db *gorm.DB, u models.User, cardID int) error {
+		consumer := func(db *gorm.DB, u models.User, cardID uint) error {
 			t.Error("Consumer should not be called")
 			return nil
 		}
@@ -320,7 +320,7 @@ func TestApplyEmotionalHedgeIfApplicable(t *testing.T) {
 			WithArgs(user.ID, user.GuildID, cards.EmotionalHedgeCardID).
 			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 
-		consumer := func(db *gorm.DB, u models.User, cardID int) error {
+		consumer := func(db *gorm.DB, u models.User, cardID uint) error {
 			t.Error("Consumer should not be called")
 			return nil
 		}
@@ -361,7 +361,7 @@ func TestApplyEmotionalHedgeIfApplicable(t *testing.T) {
 		scoreDiff := 0
 
 		consumed := false
-		consumer := func(db *gorm.DB, u models.User, cardID int) error {
+		consumer := func(db *gorm.DB, u models.User, cardID uint) error {
 			consumed = true
 			return nil
 		}
@@ -405,7 +405,7 @@ func TestApplyBetInsuranceIfApplicable(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 
 		consumed := false
-		consumer := func(db *gorm.DB, u models.User, cardID int) error {
+		consumer := func(db *gorm.DB, u models.User, cardID uint) error {
 			if u.ID != user.ID {
 				t.Errorf("Expected user ID %d, got %d", user.ID, u.ID)
 			}
@@ -453,7 +453,7 @@ func TestApplyBetInsuranceIfApplicable(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 
 		consumed := false
-		consumer := func(db *gorm.DB, u models.User, cardID int) error {
+		consumer := func(db *gorm.DB, u models.User, cardID uint) error {
 			consumed = true
 			return nil
 		}
@@ -494,7 +494,7 @@ func TestApplyBetInsuranceIfApplicable(t *testing.T) {
 			WithArgs(user.ID, user.GuildID, cards.BetInsuranceCardID).
 			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 
-		consumer := func(db *gorm.DB, u models.User, cardID int) error {
+		consumer := func(db *gorm.DB, u models.User, cardID uint) error {
 			t.Error("Consumer should not be called")
 			return nil
 		}
@@ -532,7 +532,7 @@ func TestApplyBetInsuranceIfApplicable(t *testing.T) {
 			WithArgs(user.ID, user.GuildID, cards.BetInsuranceCardID).
 			WillReturnError(errors.New("db error"))
 
-		consumer := func(db *gorm.DB, u models.User, cardID int) error {
+		consumer := func(db *gorm.DB, u models.User, cardID uint) error {
 			t.Error("Consumer should not be called")
 			return nil
 		}
@@ -1277,7 +1277,7 @@ func TestApplyGamblerIfAvailable(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 
 		consumed := false
-		consumer := func(db *gorm.DB, u models.User, cardID int) error {
+		consumer := func(db *gorm.DB, u models.User, cardID uint) error {
 			if u.ID != user.ID {
 				t.Errorf("Expected user ID %d, got %d", user.ID, u.ID)
 			}
@@ -1325,7 +1325,7 @@ func TestApplyGamblerIfAvailable(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 
 		consumed := false
-		consumer := func(db *gorm.DB, u models.User, cardID int) error {
+		consumer := func(db *gorm.DB, u models.User, cardID uint) error {
 			consumed = true
 			return nil
 		}
@@ -1366,7 +1366,7 @@ func TestApplyGamblerIfAvailable(t *testing.T) {
 			WithArgs(user.ID, user.GuildID, cards.GamblerCardID).
 			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 
-		consumer := func(db *gorm.DB, u models.User, cardID int) error {
+		consumer := func(db *gorm.DB, u models.User, cardID uint) error {
 			t.Error("Consumer should not be called")
 			return nil
 		}
@@ -1404,7 +1404,7 @@ func TestApplyGamblerIfAvailable(t *testing.T) {
 			WithArgs(user.ID, user.GuildID, cards.GamblerCardID).
 			WillReturnError(errors.New("db error"))
 
-		consumer := func(db *gorm.DB, u models.User, cardID int) error {
+		consumer := func(db *gorm.DB, u models.User, cardID uint) error {
 			t.Error("Consumer should not be called")
 			return nil
 		}

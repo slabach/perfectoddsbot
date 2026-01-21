@@ -264,7 +264,7 @@ func registerCommonCards(deck *[]models.Card) {
 			ID:          211,
 			Code:        "GOO",
 			Name:        "The Gossip",
-			Description: "Choose a user. Thier current point balance is displayed in the server.",
+			Description: "Choose a user. Their current point balance is displayed in the server.",
 			Rarity:      "Common",
 			Weight:      W_Common,
 			Handler:     handleTheGossip,
