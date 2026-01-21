@@ -101,14 +101,10 @@ func runApp() {
 		&models.Bet{}, &models.BetEntry{}, &models.BetMessage{}, &models.ErrorLog{},
 		&models.Guild{}, &models.User{}, &models.Migration{},
 		&models.Parlay{}, &models.ParlayEntry{}, &models.UserInventory{},
+		&models.Card{}, &models.CardOption{}, &models.CardRarity{},
 	)
 	if err != nil {
 		log.Fatalf("Error migrating database: %v", err)
-	}
-
-	err = services.ReRunHistoricalStatsMigration(db)
-	if err != nil {
-		log.Printf("Error running historical stats migration: %v", err)
 	}
 
 	token := os.Getenv("DISCORD_BOT_TOKEN")
@@ -138,7 +134,7 @@ func runApp() {
 		log.Fatalf("Error opening Discord session: %v", err)
 	}
 
-	err = services.FixParlayResolutionMigration(dg, db)
+	err = services.RunCardMigration(db)
 	if err != nil {
 		log.Printf("Error running parlay resolution migration: %v", err)
 	}

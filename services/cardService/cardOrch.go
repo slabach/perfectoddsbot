@@ -319,7 +319,7 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	}
 
 	if card.AddToInventory || card.UserPlayable {
-		if err := addCardToInventory(tx, user.ID, guildID, card.ID); err != nil {
+		if err := addCardToInventory(tx, user.ID, guildID, int(card.ID)); err != nil {
 			tx.Rollback()
 			common.SendError(s, i, fmt.Errorf("error adding card to inventory: %v", err), db)
 			return
@@ -342,9 +342,9 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	if cardResult.RequiresSelection {
 		if cardResult.SelectionType == "user" {
 			if card.ID == cards.HostileTakeoverCardID {
-				showFilteredUserSelectMenu(s, i, card.ID, card.Name, card.Description, userID, guildID, db, 500.0)
+				showFilteredUserSelectMenu(s, i, int(card.ID), card.Name, card.Description, userID, guildID, db, 500.0)
 			} else {
-				showUserSelectMenu(s, i, card.ID, card.Name, card.Description, userID, guildID, db)
+				showUserSelectMenu(s, i, int(card.ID), card.Name, card.Description, userID, guildID, db)
 			}
 
 			if err := tx.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
@@ -373,7 +373,7 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 			tx.Commit()
 			return
 		} else if cardResult.SelectionType == "bet" {
-			showBetSelectMenu(s, i, card.ID, card.Name, card.Description, userID, guildID, db)
+			showBetSelectMenu(s, i, int(card.ID), card.Name, card.Description, userID, guildID, db)
 
 			if err := tx.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
 				tx.Rollback()
@@ -404,7 +404,7 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	}
 
 	if len(card.Options) > 0 {
-		showCardOptionsMenu(s, i, card.ID, card.Name, card.Description, userID, guildID, db, card.Options)
+		showCardOptionsMenu(s, i, int(card.ID), card.Name, card.Description, userID, guildID, db, card.Options)
 
 		if err := tx.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
 			tx.Rollback()

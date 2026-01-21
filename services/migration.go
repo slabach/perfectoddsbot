@@ -4,15 +4,17 @@ import (
 	"fmt"
 	"log"
 	"perfectOddsBot/models"
-	"perfectOddsBot/services/betService"
-	"perfectOddsBot/services/common"
-	"perfectOddsBot/services/guildService"
+	"perfectOddsBot/services/cardService/cards"
+	"reflect"
+	"runtime"
+	"strings"
 	"time"
 
-	"github.com/bwmarrin/discordgo"
 	"gorm.io/gorm"
 )
 
+// #region Historical Migrations
+/*
 func RunHistoricalStatsMigration(db *gorm.DB) error {
 	var existingMigration models.Migration
 	result := db.Where("name = ?", "historical_betting_stats").First(&existingMigration)
@@ -363,5 +365,147 @@ func FixParlayResolutionMigration(s *discordgo.Session, db *gorm.DB) error {
 	}
 
 	log.Println("Fix parlay resolution migration completed.")
+	return nil
+}
+*/
+// #endregion
+
+func RunCardMigration(db *gorm.DB) error {
+	var existingMigration models.Migration
+	result := db.Where("name = ?", "card_migration").First(&existingMigration)
+	if result.Error == nil && existingMigration.ID != 0 {
+		log.Println("Card migration has already been executed. Skipping.")
+		return nil
+	}
+
+	log.Println("Starting card migration...")
+
+	rarities := []models.CardRarity{
+		{
+			Name:    "Common",
+			Weight:  2000,
+			Color:   "0x95A5A6",
+			Icon:    "🤍",
+			Royalty: 0.5,
+		},
+		{
+			Name:    "Uncommon",
+			Weight:  1825,
+			Color:   "0x2ECC71",
+			Icon:    "💚",
+			Royalty: 1.0,
+		},
+		{
+			Name:    "Rare",
+			Weight:  1250,
+			Color:   "0x3498DB",
+			Icon:    "💙",
+			Royalty: 2.0,
+		},
+		{
+			Name:    "Epic",
+			Weight:  365,
+			Color:   "0x9B59B6",
+			Icon:    "💜",
+			Royalty: 5.0,
+		},
+		{
+			Name:    "Mythic",
+			Weight:  250,
+			Color:   "0xF1C40F",
+			Icon:    "✨",
+			Royalty: 25.0,
+		},
+	}
+
+	rarityMap := make(map[string]uint)
+	for _, rarity := range rarities {
+		createdRarity := models.CardRarity{
+			ID:      rarity.ID,
+			Name:    rarity.Name,
+			Weight:  rarity.Weight,
+			Color:   rarity.Color,
+			Icon:    rarity.Icon,
+			Royalty: rarity.Royalty,
+		}
+		if err := db.Create(&createdRarity).Error; err != nil {
+			log.Printf("Error creating rarity %s: %v", rarity.Name, err)
+			continue
+		}
+		rarityMap[rarity.Name] = createdRarity.ID
+	}
+
+	var deck []models.Card
+	cards.RegisterAllCards(&deck)
+
+	extractHandlerName := func(handler models.CardHandler) string {
+		if handler == nil {
+			return ""
+		}
+		funcValue := reflect.ValueOf(handler)
+		if !funcValue.IsValid() || funcValue.IsNil() {
+			return ""
+		}
+		funcPtr := funcValue.Pointer()
+		if funcPtr == 0 {
+			return ""
+		}
+		fn := runtime.FuncForPC(funcPtr)
+		if fn == nil {
+			return ""
+		}
+		fullName := fn.Name()
+		// Extract just the handler name (e.g., "handleGambler" from "perfectOddsBot/services/cardService/cards.handleGambler")
+		parts := strings.Split(fullName, ".")
+		if len(parts) > 0 {
+			return parts[len(parts)-1]
+		}
+		return fullName
+	}
+
+	for _, card := range deck {
+		cardOptions := card.Options
+
+		card.HandlerName = extractHandlerName(card.Handler)
+
+		if rarityID, exists := rarityMap[card.Rarity]; exists {
+			card.RarityID = rarityID
+		} else {
+			log.Printf("Warning: Rarity '%s' not found in map for card %d (%s)", card.Rarity, card.ID, card.Name)
+		}
+
+		card.Active = true
+
+		if err := db.Create(&card).Error; err != nil {
+			log.Printf("Error creating card %d: %v", card.ID, err)
+			continue
+		}
+
+		if len(cardOptions) > 0 {
+			for _, option := range cardOptions {
+				cardOption := models.CardOption{
+					ID:          option.ID,
+					CardID:      card.ID,
+					Name:        option.Name,
+					Description: option.Description,
+				}
+				if err := db.Create(&cardOption).Error; err != nil {
+					log.Printf("Error creating option %d for card %d: %v", option.ID, card.ID, err)
+					continue
+				}
+			}
+		}
+	}
+	log.Printf("Created %d cards", len(deck))
+
+	migration := models.Migration{
+		Name:       "card_migration",
+		ExecutedAt: time.Now(),
+	}
+	if err := db.Create(&migration).Error; err != nil {
+		return fmt.Errorf("error marking migration as complete: %v", err)
+	}
+
+	log.Println("Card migration completed.")
 	return nil
 }

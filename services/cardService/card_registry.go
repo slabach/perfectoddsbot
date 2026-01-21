@@ -61,7 +61,7 @@ func PickRandomCard(hasSubscription bool) *models.Card {
 
 func GetCardByID(id int) *models.Card {
 	for i := range Deck {
-		if Deck[i].ID == id {
+		if Deck[i].ID == uint(id) {
 			return &Deck[i]
 		}
 	}
