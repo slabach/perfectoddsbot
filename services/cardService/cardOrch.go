@@ -131,71 +131,81 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		}
 	}
 
-	var horseshoeInventory models.UserInventory
+	var inventoryItems []models.UserInventory
 	err = tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-		Where("user_id = ? AND guild_id = ? AND card_id = ?", user.ID, guildID, cards.LuckyHorseshoeCardID).
-		First(&horseshoeInventory).Error
-	hasLuckyHorseshoe := err == nil
-	if err != nil && err != gorm.ErrRecordNotFound {
+		Where("user_id = ? AND guild_id = ? AND card_id IN (?, ?, ?)",
+			user.ID, guildID,
+			cards.LuckyHorseshoeCardID, cards.UnluckyCatCardID, cards.CouponCardID).
+		Find(&inventoryItems).Error
+	if err != nil {
 		tx.Rollback()
-		common.SendError(s, i, fmt.Errorf("error checking Lucky Horseshoe inventory: %v", err), db)
+		common.SendError(s, i, fmt.Errorf("error checking inventory: %v", err), db)
 		return
 	}
-	if hasLuckyHorseshoe {
-		drawCardCost = drawCardCost * 0.5
-	}
 
-	var shoppingSpreeInventory models.UserInventory
+	var shoppingSpreeItems []models.UserInventory
 	err = tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-		Where("user_id = ? AND guild_id = ? AND card_id = ? AND deleted_at IS NULL", user.ID, guildID, cards.ShoppingSpreeCardID).
-		First(&shoppingSpreeInventory).Error
-	hasShoppingSpree := err == nil
-	if err != nil && err != gorm.ErrRecordNotFound {
+		Where("user_id = ? AND guild_id = ? AND card_id = ? AND deleted_at IS NULL",
+			user.ID, guildID, cards.ShoppingSpreeCardID).
+		Order("created_at DESC").
+		Find(&shoppingSpreeItems).Error
+	if err != nil {
 		tx.Rollback()
 		common.SendError(s, i, fmt.Errorf("error checking Shopping Spree inventory: %v", err), db)
 		return
 	}
-	if hasShoppingSpree {
-		expirationTime := now.Add(-12 * time.Hour)
-		if shoppingSpreeInventory.CreatedAt.Before(expirationTime) {
-			drawCardCost = drawCardCost * 0.5
-			if err := tx.Delete(&shoppingSpreeInventory).Error; err != nil {
-				tx.Rollback()
-				common.SendError(s, i, fmt.Errorf("error deleting expired Shopping Spree: %v", err), db)
-				return
-			}
+
+	inventoryMap := make(map[uint]*models.UserInventory)
+	for idx := range inventoryItems {
+		inventoryMap[inventoryItems[idx].CardID] = &inventoryItems[idx]
+	}
+
+	var horseshoeInventory *models.UserInventory
+	var shoppingSpreeInventory *models.UserInventory
+	var unluckyCatInventory *models.UserInventory
+	var couponInventory *models.UserInventory
+
+	expirationTime := now.Add(-12 * time.Hour)
+	var expiredShoppingSpreeItems []*models.UserInventory
+	for idx := range shoppingSpreeItems {
+		item := &shoppingSpreeItems[idx]
+		if item.CreatedAt.Before(expirationTime) {
+			expiredShoppingSpreeItems = append(expiredShoppingSpreeItems, item)
 		} else {
-			drawCardCost = drawCardCost * 0.5
+			if shoppingSpreeInventory == nil {
+				shoppingSpreeInventory = item
+				inventoryMap[cards.ShoppingSpreeCardID] = item
+				drawCardCost = drawCardCost * 0.5
+			}
 		}
 	}
 
-	var unluckyCatInventory models.UserInventory
-	err = tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-		Where("user_id = ? AND guild_id = ? AND card_id = ?", user.ID, guildID, cards.UnluckyCatCardID).
-		First(&unluckyCatInventory).Error
-	hasUnluckyCat := err == nil
-	if err != nil && err != gorm.ErrRecordNotFound {
-		tx.Rollback()
-		common.SendError(s, i, fmt.Errorf("error checking Unlucky Cat inventory: %v", err), db)
-		return
+	for _, expiredItem := range expiredShoppingSpreeItems {
+		if err := tx.Delete(expiredItem).Error; err != nil {
+			tx.Rollback()
+			common.SendError(s, i, fmt.Errorf("error deleting expired Shopping Spree: %v", err), db)
+			return
+		}
 	}
-	if hasUnluckyCat {
+
+	if inv, ok := inventoryMap[cards.LuckyHorseshoeCardID]; ok {
+		horseshoeInventory = inv
+		drawCardCost = drawCardCost * 0.5
+	}
+
+	if inv, ok := inventoryMap[cards.UnluckyCatCardID]; ok {
+		unluckyCatInventory = inv
 		drawCardCost = drawCardCost * 2.0
 	}
 
-	var couponInventory models.UserInventory
-	err = tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-		Where("user_id = ? AND guild_id = ? AND card_id = ?", user.ID, guildID, cards.CouponCardID).
-		First(&couponInventory).Error
-	hasCoupon := err == nil
-	if err != nil && err != gorm.ErrRecordNotFound {
-		tx.Rollback()
-		common.SendError(s, i, fmt.Errorf("error checking Coupon inventory: %v", err), db)
-		return
-	}
-	if hasCoupon {
+	if inv, ok := inventoryMap[cards.CouponCardID]; ok {
+		couponInventory = inv
 		drawCardCost = drawCardCost * 0.75
 	}
+
+	hasLuckyHorseshoe := horseshoeInventory != nil
+	hasUnluckyCat := unluckyCatInventory != nil
+	hasCoupon := couponInventory != nil
 
 	var lockedUser models.User
 	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&lockedUser, user.ID).Error; err != nil {
@@ -220,7 +230,7 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	}
 
 	if hasLuckyHorseshoe {
-		if err := tx.Delete(&horseshoeInventory).Error; err != nil {
+		if err := tx.Delete(horseshoeInventory).Error; err != nil {
 			tx.Rollback()
 			common.SendError(s, i, fmt.Errorf("error consuming Lucky Horseshoe: %v", err), db)
 			return
@@ -228,7 +238,7 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	}
 
 	if hasUnluckyCat {
-		if err := tx.Delete(&unluckyCatInventory).Error; err != nil {
+		if err := tx.Delete(unluckyCatInventory).Error; err != nil {
 			tx.Rollback()
 			common.SendError(s, i, fmt.Errorf("error consuming Unlucky Cat: %v", err), db)
 			return
@@ -236,7 +246,7 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	}
 
 	if hasCoupon {
-		if err := tx.Delete(&couponInventory).Error; err != nil {
+		if err := tx.Delete(couponInventory).Error; err != nil {
 			tx.Rollback()
 			common.SendError(s, i, fmt.Errorf("error consuming Coupon: %v", err), db)
 			return
@@ -375,12 +385,6 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		} else if cardResult.SelectionType == "bet" {
 			showBetSelectMenu(s, i, card.ID, card.Name, card.Description, userID, guildID, db)
 
-			if err := tx.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
-				tx.Rollback()
-				common.SendError(s, i, err, db)
-				return
-			}
-
 			user.Points += cardResult.PointsDelta
 			if user.Points < 0 {
 				user.Points = 0
@@ -406,12 +410,6 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	if len(card.Options) > 0 {
 		showCardOptionsMenu(s, i, card.ID, card.Name, card.Description, userID, guildID, db, card.Options)
 
-		if err := tx.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
-			tx.Rollback()
-			common.SendError(s, i, err, db)
-			return
-		}
-
 		user.Points += cardResult.PointsDelta
 		if user.Points < 0 {
 			user.Points = 0
@@ -430,12 +428,6 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		}
 
 		tx.Commit()
-		return
-	}
-
-	if err := tx.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
-		tx.Rollback()
-		common.SendError(s, i, fmt.Errorf("error reloading user: %v", err), db)
 		return
 	}
 
@@ -631,9 +623,17 @@ func showFilteredUserSelectMenu(s *discordgo.Session, i *discordgo.InteractionCr
 			description = description[:97] + "..."
 		}
 
+		value := u.DiscordID
+		if len(value) == 0 {
+			continue
+		}
+		if len(value) > 25 {
+			value = value[:25]
+		}
+
 		selectOptions = append(selectOptions, discordgo.SelectMenuOption{
 			Label:       displayName,
-			Value:       u.DiscordID,
+			Value:       value,
 			Description: description,
 			Emoji:       nil,
 			Default:     false,
@@ -714,9 +714,17 @@ func showBetSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, car
 			label = label[:97] + "..."
 		}
 
+		value := fmt.Sprintf("%d", res.BetID)
+		if len(value) == 0 {
+			continue
+		}
+		if len(value) > 25 {
+			value = value[:25]
+		}
+
 		options = append(options, discordgo.SelectMenuOption{
 			Label: label,
-			Value: fmt.Sprintf("%d", res.BetID),
+			Value: value,
 		})
 	}
 
@@ -760,13 +768,35 @@ func showCardOptionsMenu(s *discordgo.Session, i *discordgo.InteractionCreate, c
 			description = description[:97] + "..."
 		}
 
+		value := fmt.Sprintf("%d", opt.ID)
+		if len(value) == 0 {
+			continue
+		}
+		if len(value) > 25 {
+			value = value[:25]
+		}
+
 		selectOptions = append(selectOptions, discordgo.SelectMenuOption{
 			Label:       label,
-			Value:       fmt.Sprintf("%d", opt.ID),
+			Value:       value,
 			Description: description,
 			Emoji:       nil,
 			Default:     false,
 		})
+	}
+
+	if len(selectOptions) == 0 {
+		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: fmt.Sprintf("🎴 <@%s> drew **%s**!\n%s\n\nNo valid options available for this card.", userID, cardName, cardDescription),
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
 	}
 
 	var optionsList strings.Builder
@@ -907,6 +937,7 @@ func hasGenerousDonationInInventory(db *gorm.DB, guildID string) (uint, error) {
 	var inventory models.UserInventory
 	err := db.Model(&models.UserInventory{}).
 		Where("guild_id = ? AND card_id = ?", guildID, cards.GenerousDonationCardID).
+		Limit(1).
 		First(&inventory).Error
 
 	if err == gorm.ErrRecordNotFound {
@@ -1290,26 +1321,24 @@ func processTagCards(tx *gorm.DB, guildID string) error {
 
 	userPointsMap := make(map[uint]bool)
 	var expiredCards []models.UserInventory
+	var userIDsToUpdate []uint
 
 	for _, tagCard := range tagCards {
 		if tagCard.CreatedAt.Before(expirationTime) {
 			expiredCards = append(expiredCards, tagCard)
 		} else {
 			if !userPointsMap[tagCard.UserID] {
-				var tagUser models.User
-				if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-					Where("id = ? AND guild_id = ?", tagCard.UserID, guildID).
-					First(&tagUser).Error; err != nil {
-					continue
-				}
-
-				tagUser.Points += 1.0
-				if err := tx.Save(&tagUser).Error; err != nil {
-					return err
-				}
-
+				userIDsToUpdate = append(userIDsToUpdate, tagCard.UserID)
 				userPointsMap[tagCard.UserID] = true
 			}
+		}
+	}
+
+	if len(userIDsToUpdate) > 0 {
+		if err := tx.Model(&models.User{}).
+			Where("id IN ? AND guild_id = ?", userIDsToUpdate, guildID).
+			UpdateColumn("points", gorm.Expr("points + 1.0")).Error; err != nil {
+			return err
 		}
 	}
 

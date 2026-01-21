@@ -4,20 +4,23 @@ import (
 	"math/rand"
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/cardService/cards"
-	"time"
 )
 
 var (
-	Deck []models.Card
+	Deck    []models.Card
+	cardMap map[uint]*models.Card
 )
 
 func init() {
-	rand.Seed(time.Now().UnixNano())
 	RegisterAllCards()
 }
 
 func RegisterAllCards() {
 	cards.RegisterAllCards(&Deck)
+	cardMap = make(map[uint]*models.Card, len(Deck))
+	for i := range Deck {
+		cardMap[Deck[i].ID] = &Deck[i]
+	}
 }
 
 func PickRandomCard(hasSubscription bool) *models.Card {
@@ -60,10 +63,5 @@ func PickRandomCard(hasSubscription bool) *models.Card {
 }
 
 func GetCardByID(id uint) *models.Card {
-	for i := range Deck {
-		if Deck[i].ID == id {
-			return &Deck[i]
-		}
-	}
-	return nil
+	return cardMap[id]
 }
