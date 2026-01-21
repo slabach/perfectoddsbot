@@ -420,6 +420,14 @@ func RunCardMigration(db *gorm.DB) error {
 
 	rarityMap := make(map[string]uint)
 	for _, rarity := range rarities {
+		var existingRarity models.CardRarity
+		result := db.Where("name = ?", rarity.Name).First(&existingRarity)
+		if result.Error == nil {
+			log.Printf("Rarity %s already exists, using existing", rarity.Name)
+			rarityMap[rarity.Name] = existingRarity.ID
+			continue
+		}
+
 		createdRarity := models.CardRarity{
 			ID:      rarity.ID,
 			Name:    rarity.Name,
@@ -463,6 +471,7 @@ func RunCardMigration(db *gorm.DB) error {
 		return fullName
 	}
 
+	successCount := 0
 	for _, card := range deck {
 		cardOptions := card.Options
 
@@ -472,17 +481,54 @@ func RunCardMigration(db *gorm.DB) error {
 			card.RarityID = rarityID
 		} else {
 			log.Printf("Warning: Rarity '%s' not found in map for card %d (%s)", card.Rarity, card.ID, card.Name)
+			continue
 		}
 
 		card.Active = true
 
-		if err := db.Create(&card).Error; err != nil {
-			log.Printf("Error creating card %d: %v", card.ID, err)
+		var existingCard models.Card
+		result := db.Where("id = ?", card.ID).First(&existingCard)
+		if result.Error == nil {
+			log.Printf("Card %d (%s) already exists, skipping creation", card.ID, card.Name)
+			successCount++
+			if len(cardOptions) > 0 {
+				for _, option := range cardOptions {
+					var existingOption models.CardOption
+					optionResult := db.Where("id = ?", option.ID).First(&existingOption)
+					if optionResult.Error == nil {
+						log.Printf("Card option %d already exists, skipping", option.ID)
+						continue
+					}
+					cardOption := models.CardOption{
+						ID:          option.ID,
+						CardID:      card.ID,
+						Name:        option.Name,
+						Description: option.Description,
+					}
+					if err := db.Create(&cardOption).Error; err != nil {
+						log.Printf("Error creating option %d for card %d: %v", option.ID, card.ID, err)
+						continue
+					}
+				}
+			}
 			continue
 		}
 
+		if err := db.Create(&card).Error; err != nil {
+			log.Printf("Error creating card %d (%s): %v", card.ID, card.Name, err)
+			continue
+		}
+
+		successCount++
+
 		if len(cardOptions) > 0 {
 			for _, option := range cardOptions {
+				var existingOption models.CardOption
+				optionResult := db.Where("id = ?", option.ID).First(&existingOption)
+				if optionResult.Error == nil {
+					log.Printf("Card option %d already exists, skipping", option.ID)
+					continue
+				}
 				cardOption := models.CardOption{
 					ID:          option.ID,
 					CardID:      card.ID,
@@ -496,7 +542,7 @@ func RunCardMigration(db *gorm.DB) error {
 			}
 		}
 	}
-	log.Printf("Created %d cards", len(deck))
+	log.Printf("Created %d cards (out of %d total)", successCount, len(deck))
 
 	migration := models.Migration{
 		Name:       "card_migration",

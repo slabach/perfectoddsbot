@@ -98,10 +98,11 @@ func runApp() {
 	}(db)
 
 	err = db.AutoMigrate(
-		&models.Bet{}, &models.BetEntry{}, &models.BetMessage{}, &models.ErrorLog{},
-		&models.Guild{}, &models.User{}, &models.Migration{},
+		&models.Migration{}, &models.Guild{}, &models.User{},
+		&models.CardRarity{}, &models.Card{}, &models.CardOption{},
+		&models.Bet{}, &models.BetEntry{}, &models.BetMessage{},
 		&models.Parlay{}, &models.ParlayEntry{}, &models.UserInventory{},
-		&models.Card{}, &models.CardOption{}, &models.CardRarity{},
+		&models.ErrorLog{},
 	)
 	if err != nil {
 		log.Fatalf("Error migrating database: %v", err)
