@@ -4,7 +4,6 @@ import (
 	"math/rand"
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/cardService/cards"
-	"time"
 )
 
 var (
@@ -13,7 +12,6 @@ var (
 )
 
 func init() {
-	rand.Seed(time.Now().UnixNano())
 	RegisterAllCards()
 }
 

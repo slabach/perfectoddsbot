@@ -155,8 +155,8 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	}
 
 	inventoryMap := make(map[uint]*models.UserInventory)
-	for i := range inventoryItems {
-		inventoryMap[inventoryItems[i].CardID] = &inventoryItems[i]
+	for idx := range inventoryItems {
+		inventoryMap[inventoryItems[idx].CardID] = &inventoryItems[idx]
 	}
 	if len(shoppingSpreeItems) > 0 {
 		inventoryMap[cards.ShoppingSpreeCardID] = &shoppingSpreeItems[0]
