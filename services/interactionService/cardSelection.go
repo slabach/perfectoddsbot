@@ -640,10 +640,11 @@ func HandleCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCreate
 		return fmt.Errorf("invalid card bet selection custom ID format")
 	}
 
-	cardID, err := strconv.Atoi(parts[1])
+	cardIDInt, err := strconv.Atoi(parts[1])
 	if err != nil {
 		return fmt.Errorf("invalid card ID: %v", err)
 	}
+	cardID := uint(cardIDInt)
 
 	userID := parts[3]
 	guildID := parts[4]
@@ -724,10 +725,11 @@ func HandleCardOptionSelection(s *discordgo.Session, i *discordgo.InteractionCre
 		return fmt.Errorf("invalid card option selection custom ID format")
 	}
 
-	cardID, err := strconv.Atoi(parts[1])
+	cardIDInt, err := strconv.Atoi(parts[1])
 	if err != nil {
 		return fmt.Errorf("invalid card ID: %v", err)
 	}
+	cardID := uint(cardIDInt)
 
 	userID := parts[3]
 	guildID := parts[4]
@@ -822,10 +824,11 @@ func HandlePlayCardSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 	}
 
 	selectedCardIDStr := i.MessageComponentData().Values[0]
-	selectedCardID, err := strconv.Atoi(selectedCardIDStr)
+	selectedCardIDInt, err := strconv.Atoi(selectedCardIDStr)
 	if err != nil {
 		return fmt.Errorf("invalid card ID: %v", err)
 	}
+	selectedCardID := uint(selectedCardIDInt)
 
 	if selectedCardID == cards.StopTheStealCardID {
 		showBetSelectMenuForPlayCard(s, i, db, selectedCardID, userID, guildID)
@@ -845,7 +848,7 @@ func HandlePlayCardSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 	})
 }
 
-func showBetSelectMenuForPlayCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, cardID int, userID string, guildID string) {
+func showBetSelectMenuForPlayCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, cardID uint, userID string, guildID string) {
 	var results []struct {
 		BetID       uint
 		Description string
@@ -934,10 +937,11 @@ func HandlePlayCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCr
 		return fmt.Errorf("invalid playcard bet selection custom ID format")
 	}
 
-	cardID, err := strconv.Atoi(parts[2])
+	cardIDInt, err := strconv.Atoi(parts[2])
 	if err != nil {
 		return fmt.Errorf("invalid card ID: %v", err)
 	}
+	cardID := uint(cardIDInt)
 
 	userID := parts[3]
 	guildID := parts[4]
@@ -1042,7 +1046,7 @@ func HandlePlayCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCr
 	})
 }
 
-func handlePoolBoyPlay(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, cardID int, userID string, guildID string) error {
+func handlePoolBoyPlay(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, cardID uint, userID string, guildID string) error {
 	return db.Transaction(func(tx *gorm.DB) error {
 		var user models.User
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).

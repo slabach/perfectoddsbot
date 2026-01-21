@@ -11,11 +11,11 @@ import (
 	"gorm.io/gorm"
 )
 
-func PlayCardFromInventory(s *discordgo.Session, db *gorm.DB, user models.User, cardID int) error {
+func PlayCardFromInventory(s *discordgo.Session, db *gorm.DB, user models.User, cardID uint) error {
 	return PlayCardFromInventoryWithMessage(s, db, user, cardID, "")
 }
 
-func PlayCardFromInventoryWithMessage(s *discordgo.Session, db *gorm.DB, user models.User, cardID int, customMessage string) error {
+func PlayCardFromInventoryWithMessage(s *discordgo.Session, db *gorm.DB, user models.User, cardID uint, customMessage string) error {
 	card := GetCardByID(cardID)
 	if card == nil {
 		return fmt.Errorf("card definition not found for ID %d", cardID)

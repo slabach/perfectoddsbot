@@ -8,6 +8,7 @@ func registerUncommonCards(deck *[]models.Card) {
 	uncommonCards := []models.Card{
 		{
 			ID:          4,
+			Code:        "PET",
 			Name:        "Petty Theft",
 			Description: "Choose a user. Steal 50 of their points.",
 			Rarity:      "Uncommon",
@@ -16,6 +17,7 @@ func registerUncommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:             25,
+			Code:           "SHI",
 			Name:           "The Shield",
 			Description:    "Blocks the next 'Steal' or negative effect played against you.",
 			Rarity:         "Uncommon",
@@ -25,6 +27,7 @@ func registerUncommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:                   26,
+			Code:                 "MGL",
 			Name:                 "Major Glitch",
 			Description:          "Everyone in the server gets 100 points.",
 			Rarity:               "Uncommon",
@@ -34,6 +37,7 @@ func registerUncommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:                   27,
+			Code:                 "DDN",
 			Name:                 "Double Down",
 			Description:          "The payout of your next winning bet is increased by 2x",
 			Rarity:               "Uncommon",
@@ -44,6 +48,7 @@ func registerUncommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:             28,
+			Code:           "GDO",
 			Name:           "Generous Donation",
 			Description:    "You pay for the next (standard cost) card bought by another user.",
 			Rarity:         "Uncommon",
@@ -53,6 +58,7 @@ func registerUncommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:          29,
+			Code:        "JES",
 			Name:        "The Jester",
 			Description: "Choose a user. Mute them for 15 minutes.",
 			Rarity:      "Uncommon",
@@ -61,6 +67,7 @@ func registerUncommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:          30,
+			Code:        "STI",
 			Name:        "Stimulus Check",
 			Description: "Everyone in the server gets 50 points.",
 			Rarity:      "Uncommon",
@@ -77,6 +84,7 @@ func registerUncommonCards(deck *[]models.Card) {
 		// // },
 		{
 			ID:          34,
+			Code:        "BFZ",
 			Name:        "Bet Freeze",
 			Description: "Choose a user. Prevent them from placing bets for 2 hours.",
 			Rarity:      "Uncommon",
@@ -85,6 +93,7 @@ func registerUncommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:             35,
+			Code:           "BIS",
 			Name:           "Bet Insurance",
 			Description:    "If you lose your next bet, get 25% of your wager back.",
 			Rarity:         "Uncommon",
@@ -94,6 +103,7 @@ func registerUncommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:          36,
+			Code:        "QFL",
 			Name:        "Quick Flip",
 			Description: "Flip a coin. Heads: Double your card cost back. Tails: Get nothing.",
 			Rarity:      "Uncommon",
@@ -102,6 +112,7 @@ func registerUncommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:                   63,
+			Code:                 "GSH",
 			Name:                 "Green Shells",
 			Description:          "3 people are randomly selected to randomly lose between 1-25 points.",
 			Rarity:               "Uncommon",
@@ -111,6 +122,7 @@ func registerUncommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:                   65,
+			Code:                 "WAM",
 			Name:                 "Whack-a-Mole",
 			Description:          "Bonk 3-5 random players who each randomly lose between 1-10 points",
 			Rarity:               "Uncommon",
@@ -120,6 +132,7 @@ func registerUncommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:             37,
+			Code:           "LSK",
 			Name:           "Loan Shark",
 			Description:    "Get 500 points now, but you automatically lose 600 points in 3 days.",
 			Rarity:         "Uncommon",
@@ -129,6 +142,7 @@ func registerUncommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:          75,
+			Code:        "ITR",
 			Name:        "Insider Trading",
 			Description: "Steal 100 points from the pool.",
 			Rarity:      "Uncommon",
@@ -137,6 +151,7 @@ func registerUncommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:          125,
+			Code:        "CWD",
 			Name:        "Crowdfund",
 			Description: "You get 1 point for every user in the server.",
 			Rarity:      "Uncommon",
@@ -153,6 +168,7 @@ func registerUncommonCards(deck *[]models.Card) {
 		// },
 		{
 			ID:          202,
+			Code:        "RPK",
 			Name:        "Reverse Pickpocket",
 			Description: "Sneakily give 150 points to a random user.",
 			Rarity:      "Uncommon",
@@ -161,6 +177,7 @@ func registerUncommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:             208,
+			Code:           "SPS",
 			Name:           "Shopping Spree",
 			Description:    "Reduces all your card-buying costs by 50% for 12 hours.",
 			Rarity:         "Uncommon",
@@ -186,6 +203,7 @@ func registerUncommonCards(deck *[]models.Card) {
 		// },
 		{
 			ID:          214,
+			Code:        "BHN",
 			Name:        "Bounty Hunter",
 			Description: "Choose a user. They next person to steal points from them gains an extra 100 points from the pool.",
 			Rarity:      "Uncommon",
@@ -194,6 +212,7 @@ func registerUncommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:          215,
+			Code:        "SDS",
 			Name:        "Social Distancing",
 			Description: "Choose a user. They gain a shield, but they also cannot buy any new cards for 2 hours.",
 			Rarity:      "Uncommon",
@@ -202,6 +221,7 @@ func registerUncommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:          216,
+			Code:        "DUE",
 			Name:        "DUEL!",
 			Description: "Choose a user. You both roll a die. The highest roll wins 100 points from the loser. If you tie, you both lose 50 points.",
 			Rarity:      "Uncommon",
@@ -210,10 +230,11 @@ func registerUncommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:          212,
+			Code:        "TAG",
 			Name:        "Tag!",
 			Description: "Choose a user. For the next 12 hours, they gain 1 point every time anyone buys a card.",
-			Rarity:      "Rare",
-			Weight:      W_Rare,
+			Rarity:      "Uncommon",
+			Weight:      W_Uncommon,
 			Handler:     handleTag,
 		},
 	}

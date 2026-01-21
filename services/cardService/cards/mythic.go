@@ -6,6 +6,7 @@ func registerMythicCards(deck *[]models.Card) {
 	mythicCards := []models.Card{
 		{
 			ID:          3,
+			Code:        "GRA",
 			Name:        "The Grail",
 			Description: "You discovered the Holy Grail! Win 25% of the pool!",
 			Rarity:      "Mythic",
@@ -14,6 +15,7 @@ func registerMythicCards(deck *[]models.Card) {
 		},
 		{
 			ID:             43,
+			Code:           "GOJ",
 			Name:           "Get Out of Jail Free",
 			Description:    "Nullifies the next lost bet completely.",
 			Rarity:         "Mythic",
@@ -31,6 +33,7 @@ func registerMythicCards(deck *[]models.Card) {
 		// },
 		{
 			ID:          52,
+			Code:        "POT",
 			Name:        "JACKPOT",
 			Description: "You win 50% of the current Pool.",
 			Rarity:      "Mythic",

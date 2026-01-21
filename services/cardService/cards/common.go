@@ -6,6 +6,7 @@ func registerCommonCards(deck *[]models.Card) {
 	commonCards := []models.Card{
 		{
 			ID:          1,
+			Code:        "DUD",
 			Name:        "The Dud",
 			Description: "A blank card. Nothing happens.",
 			Rarity:      "Common",
@@ -14,6 +15,7 @@ func registerCommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:          2,
+			Code:        "PEN",
 			Name:        "The Penny",
 			Description: "You found a penny on the ground. It's worth something, right?",
 			Rarity:      "Common",
@@ -22,6 +24,7 @@ func registerCommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:          5,
+			Code:        "PAP",
 			Name:        "Papercut",
 			Description: "You cut your finger drawing the card. Lose 10 points.",
 			Rarity:      "Common",
@@ -30,6 +33,7 @@ func registerCommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:          6,
+			Code:        "VEN",
 			Name:        "Vending Machine",
 			Description: "You found loose change in the return slot. Gain 25 points.",
 			Rarity:      "Common",
@@ -38,6 +42,7 @@ func registerCommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:          7,
+			Code:        "NIL",
 			Name:        "Unexpected NIL Fee",
 			Description: "Kicker threatened to enter the portal. Pay 50 points to the pool to keep them on campus.",
 			Rarity:      "Common",
@@ -46,6 +51,7 @@ func registerCommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:          8,
+			Code:        "SMA",
 			Name:        "Small Rebate",
 			Description: "Refund the cost of buying this card.",
 			Rarity:      "Common",
@@ -54,6 +60,7 @@ func registerCommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:          9,
+			Code:        "TIP",
 			Name:        "Tip Jar",
 			Description: "Force the person above you on the leaderboard to give you 10 points.",
 			Rarity:      "Common",
@@ -62,6 +69,7 @@ func registerCommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:          10,
+			Code:        "HIP",
 			Name:        "Hole in Pocket",
 			Description: "Lose 5% of your total points to the Pool.",
 			Rarity:      "Common",
@@ -70,6 +78,7 @@ func registerCommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:          11,
+			Code:        "PIG",
 			Name:        "Piggy Bank",
 			Description: "Gain 5% of your total points from the void.",
 			Rarity:      "Common",
@@ -78,6 +87,7 @@ func registerCommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:          12,
+			Code:        "PAR",
 			Name:        "Participation Trophy",
 			Description: "Gain 1 point and a pat on the back.",
 			Rarity:      "Common",
@@ -86,6 +96,7 @@ func registerCommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:          13,
+			Code:        "TOU",
 			Name:        "Timeout",
 			Description: "You cannot buy another card for 2 hours.",
 			Rarity:      "Common",
@@ -94,6 +105,7 @@ func registerCommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:          24,
+			Code:        "BAD",
 			Name:        "Bad Investment",
 			Description: "Lose 50 points.",
 			Rarity:      "Common",
@@ -102,6 +114,7 @@ func registerCommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:          14,
+			Code:        "WAL",
 			Name:        "Found Wallet",
 			Description: "Gain 50 points.",
 			Rarity:      "Common",
@@ -110,6 +123,7 @@ func registerCommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:          15,
+			Code:        "CHA",
 			Name:        "Charity Case",
 			Description: "If you are in the bottom 50% of players, gain 75 points.",
 			Rarity:      "Common",
@@ -118,6 +132,7 @@ func registerCommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:          16,
+			Code:        "TAX",
 			Name:        "Tax Season",
 			Description: "If you are in the top 50% of players, lose 75 points.",
 			Rarity:      "Common",
@@ -126,6 +141,7 @@ func registerCommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:             17,
+			Code:           "LHS",
 			Name:           "Lucky Horseshoe",
 			Description:    "The next card you buy costs half price.",
 			Rarity:         "Common",
@@ -135,6 +151,7 @@ func registerCommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:             18,
+			Code:           "CAT",
 			Name:           "Unlucky Cat",
 			Description:    "The next card you buy costs double.",
 			Rarity:         "Common",
@@ -144,6 +161,7 @@ func registerCommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:          19,
+			Code:        "PCK",
 			Name:        "Pickpocket",
 			Description: "Steal 50 points from a random active user.",
 			Rarity:      "Common",
@@ -152,6 +170,7 @@ func registerCommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:          20,
+			Code:        "DRO",
 			Name:        "Dropped Loot",
 			Description: "Give 50 points to a random active user.",
 			Rarity:      "Common",
@@ -160,6 +179,7 @@ func registerCommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:          21,
+			Code:        "SCR",
 			Name:        "Scraping By",
 			Description: "Gain 20 points.",
 			Rarity:      "Common",
@@ -168,6 +188,7 @@ func registerCommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:          22,
+			Code:        "RUS",
 			Name:        "Rust",
 			Description: "Lose 20 points.",
 			Rarity:      "Common",
@@ -176,6 +197,7 @@ func registerCommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:          23,
+			Code:        "MGL",
 			Name:        "Minor Glitch",
 			Description: "Gain 1-100 points (randomized).",
 			Rarity:      "Common",
@@ -184,6 +206,7 @@ func registerCommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:          54,
+			Code:        "HIF",
 			Name:        "High Five",
 			Description: "You and a random active user high-five. You both gain 10 points.",
 			Rarity:      "Common",
@@ -192,6 +215,7 @@ func registerCommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:          59,
+			Code:        "ROL",
 			Name:        "The Rick Roll",
 			Description: "Never gonna give you up... never gonna give you points. Lose 5 points for getting rolled.",
 			Rarity:      "Common",
@@ -200,6 +224,7 @@ func registerCommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:          61,
+			Code:        "SND",
 			Name:        "Pocket Sand",
 			Description: "Sha-sha! You threw sand in the dealer's eyes. You get away without paying for the card (Refund cost).",
 			Rarity:      "Common",
@@ -208,6 +233,7 @@ func registerCommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:             118,
+			Code:           "KEY",
 			Name:           "Spare Key",
 			Description:    "Use this to ignore your next 'Timeout' or card-buying restriction.",
 			Rarity:         "Common",
@@ -217,6 +243,7 @@ func registerCommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:             123,
+			Code:           "COU",
 			Name:           "Coupon",
 			Description:    "The next card you buy is 25% off.",
 			Rarity:         "Common",
@@ -226,6 +253,7 @@ func registerCommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:          210,
+			Code:        "POT",
 			Name:        "Hot Potato",
 			Description: "You lose 50 points. Pass this effect to a random user who also loses 50 points.",
 			Rarity:      "Common",
@@ -234,8 +262,9 @@ func registerCommonCards(deck *[]models.Card) {
 		},
 		{
 			ID:          211,
+			Code:        "GOO",
 			Name:        "The Gossip",
-			Description: "Choose a user. Thier current point balance is displayed in the server.",
+			Description: "Choose a user. Their current point balance is displayed in the server.",
 			Rarity:      "Common",
 			Weight:      W_Common,
 			Handler:     handleTheGossip,

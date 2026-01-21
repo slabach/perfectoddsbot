@@ -15,7 +15,7 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-type CardConsumer func(db *gorm.DB, user models.User, cardID int) error
+type CardConsumer func(db *gorm.DB, user models.User, cardID uint) error
 
 func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
 	userID := i.Member.User.ID
@@ -547,7 +547,7 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	}
 }
 
-func showUserSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, cardID int, cardName string, cardDescription string, userID string, guildID string, db *gorm.DB) {
+func showUserSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, cardID uint, cardName string, cardDescription string, userID string, guildID string, db *gorm.DB) {
 	minValues := 1
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -574,7 +574,7 @@ func showUserSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, ca
 	}
 }
 
-func showFilteredUserSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, cardID int, cardName string, cardDescription string, userID string, guildID string, db *gorm.DB, maxPointDifference float64) {
+func showFilteredUserSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, cardID uint, cardName string, cardDescription string, userID string, guildID string, db *gorm.DB, maxPointDifference float64) {
 	var drawer models.User
 	if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&drawer).Error; err != nil {
 		common.SendError(s, i, err, db)
@@ -667,7 +667,7 @@ func showFilteredUserSelectMenu(s *discordgo.Session, i *discordgo.InteractionCr
 	}
 }
 
-func showBetSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, cardID int, cardName string, cardDescription string, userID string, guildID string, db *gorm.DB) {
+func showBetSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, cardID uint, cardName string, cardDescription string, userID string, guildID string, db *gorm.DB) {
 	var results []struct {
 		BetID       uint
 		Description string
@@ -747,7 +747,7 @@ func showBetSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, car
 	}
 }
 
-func showCardOptionsMenu(s *discordgo.Session, i *discordgo.InteractionCreate, cardID int, cardName string, cardDescription string, userID string, guildID string, db *gorm.DB, options []models.CardOption) {
+func showCardOptionsMenu(s *discordgo.Session, i *discordgo.InteractionCreate, cardID uint, cardName string, cardDescription string, userID string, guildID string, db *gorm.DB, options []models.CardOption) {
 	var selectOptions []discordgo.SelectMenuOption
 	for _, opt := range options {
 		label := opt.Name
@@ -1265,7 +1265,7 @@ func processRoyaltyPayment(tx *gorm.DB, card *models.Card, royaltyGuildID string
 	return nil
 }
 
-func addCardToInventory(db *gorm.DB, userID uint, guildID string, cardID int) error {
+func addCardToInventory(db *gorm.DB, userID uint, guildID string, cardID uint) error {
 	inventory := models.UserInventory{
 		UserID:  userID,
 		GuildID: guildID,
@@ -1351,7 +1351,7 @@ func MyInventory(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.
 		return
 	}
 
-	cardCounts := make(map[int]int)
+	cardCounts := make(map[uint]int)
 	for _, item := range inventory {
 		cardCounts[item.CardID]++
 	}
@@ -1497,7 +1497,7 @@ func MyInventory(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.
 	})
 
 	for cardID, count := range cardCounts {
-		card := GetCardByID(cardID)
+		card := GetCardByID(uint(cardID))
 		if card == nil {
 			continue
 		}
@@ -1632,7 +1632,7 @@ func showPlayableCardSelectMenu(s *discordgo.Session, i *discordgo.InteractionCr
 		return
 	}
 
-	inventoryMap := make(map[int]int)
+	inventoryMap := make(map[uint]int)
 	for _, item := range inventory {
 		inventoryMap[item.CardID]++
 	}
@@ -1643,7 +1643,7 @@ func showPlayableCardSelectMenu(s *discordgo.Session, i *discordgo.InteractionCr
 	}
 
 	for cardID, count := range inventoryMap {
-		card := GetCardByID(cardID)
+		card := GetCardByID(uint(cardID))
 		if card != nil && card.UserPlayable {
 			playableCards = append(playableCards, struct {
 				Card  *models.Card

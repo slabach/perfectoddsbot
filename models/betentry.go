@@ -6,7 +6,7 @@ type BetEntry struct {
 	gorm.Model
 	ID           uint `gorm:"primaryKey"`
 	User         User `gorm:"foreignKey:UserID"`
-	UserID       uint `gorm:"foreignKey:"`
+	UserID       uint
 	BetID        uint
 	Bet          Bet `gorm:"foreignKey:BetID"`
 	Option       int

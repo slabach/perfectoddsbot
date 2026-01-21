@@ -98,17 +98,14 @@ func runApp() {
 	}(db)
 
 	err = db.AutoMigrate(
-		&models.Bet{}, &models.BetEntry{}, &models.BetMessage{}, &models.ErrorLog{},
-		&models.Guild{}, &models.User{}, &models.Migration{},
+		&models.Migration{}, &models.Guild{}, &models.User{},
+		&models.CardRarity{}, &models.Card{}, &models.CardOption{},
+		&models.Bet{}, &models.BetEntry{}, &models.BetMessage{},
 		&models.Parlay{}, &models.ParlayEntry{}, &models.UserInventory{},
+		&models.ErrorLog{},
 	)
 	if err != nil {
 		log.Fatalf("Error migrating database: %v", err)
-	}
-
-	err = services.ReRunHistoricalStatsMigration(db)
-	if err != nil {
-		log.Printf("Error running historical stats migration: %v", err)
 	}
 
 	token := os.Getenv("DISCORD_BOT_TOKEN")
@@ -138,9 +135,9 @@ func runApp() {
 		log.Fatalf("Error opening Discord session: %v", err)
 	}
 
-	err = services.FixParlayResolutionMigration(dg, db)
+	err = services.RunCardMigration(db)
 	if err != nil {
-		log.Printf("Error running parlay resolution migration: %v", err)
+		log.Printf("Error running card migration: %v", err)
 	}
 	defer func(dg *discordgo.Session) {
 		err := dg.Close()

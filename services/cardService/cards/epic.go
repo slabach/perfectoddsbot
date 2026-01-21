@@ -6,6 +6,7 @@ func registerEpicCards(deck *[]models.Card) {
 	epicCards := []models.Card{
 		{
 			ID:                   38,
+			Code:                 "BLU",
 			Name:                 "The Blue Shell",
 			Description:          "The player in 1st place loses 500 points to the Pool.",
 			Rarity:               "Epic",
@@ -15,6 +16,7 @@ func registerEpicCards(deck *[]models.Card) {
 		},
 		{
 			ID:          46,
+			Code:        "NUK",
 			Name:        "The Nuke",
 			Description: "Everyone (including you and the pool) loses 25% of their points.",
 			Rarity:      "Epic",
@@ -23,6 +25,7 @@ func registerEpicCards(deck *[]models.Card) {
 		},
 		{
 			ID:          47,
+			Code:        "DIV",
 			Name:        "Divine Intervention",
 			Description: "Your points balance is set to exactly the average of all players.",
 			Rarity:      "Epic",
@@ -31,6 +34,7 @@ func registerEpicCards(deck *[]models.Card) {
 		},
 		{
 			ID:          48,
+			Code:        "HOS",
 			Name:        "Hostile Takeover",
 			Description: "Swap your point balance with a user of your choice (Max swap 500 points (players must be within 500 points of you)).",
 			Rarity:      "Epic",
@@ -39,6 +43,7 @@ func registerEpicCards(deck *[]models.Card) {
 		},
 		{
 			ID:          49,
+			Code:        "WHA",
 			Name:        "The Whale",
 			Description: "Gain 750 points immediately.",
 			Rarity:      "Epic",
@@ -47,6 +52,7 @@ func registerEpicCards(deck *[]models.Card) {
 		},
 		{
 			ID:                   53,
+			Code:                 "GUI",
 			Name:                 "Guillotine",
 			Description:          "You lose 15% of your points.",
 			Rarity:               "Epic",
@@ -56,6 +62,7 @@ func registerEpicCards(deck *[]models.Card) {
 		},
 		{
 			ID:                   62,
+			Code:                 "EMO",
 			Name:                 "Emotional Hedge",
 			Description:          "Your next bet on your server's subscribed team, if they lose straight up, you get 50% of your bet refunded.",
 			Rarity:               "Epic",
@@ -67,6 +74,7 @@ func registerEpicCards(deck *[]models.Card) {
 		},
 		{
 			ID:          72,
+			Code:        "GAM",
 			Name:        "The Gambler",
 			Description: "**CHOICE CARD** You choose one of the following options:",
 			Options: []models.CardOption{
@@ -89,6 +97,7 @@ func registerEpicCards(deck *[]models.Card) {
 		},
 		{
 			ID:                   70,
+			Code:                 "STP",
 			Name:                 "STOP THE STEAL",
 			Description:          "**PLAYABLE CARD** Play this card at any point to choose any active bet you have open and cancel it.",
 			Rarity:               "Epic",
@@ -99,6 +108,7 @@ func registerEpicCards(deck *[]models.Card) {
 		},
 		{
 			ID:                   66,
+			Code:                 "SNP",
 			Name:                 "Snip Snap Snip Snap",
 			Description:          "If you have any active bets, one of them randomly gets their option reversed.",
 			Rarity:               "Epic",
@@ -108,6 +118,7 @@ func registerEpicCards(deck *[]models.Card) {
 		},
 		{
 			ID:          71,
+			Code:        "RTH",
 			Name:        "Robbing the Hood",
 			Description: "Steal 10% of the poorest player's points and give it to yourself.",
 			Rarity:      "Epic",
@@ -116,6 +127,7 @@ func registerEpicCards(deck *[]models.Card) {
 		},
 		{
 			ID:          74,
+			Code:        "LEH",
 			Name:        "Lehman Brothers Insider",
 			Description: "You penetrated the banks internal systems and brought them down from the inside. The pool loses 20% of its total points.",
 			Rarity:      "Epic",

@@ -928,7 +928,7 @@ func handleGenerousDonation(s *discordgo.Session, db *gorm.DB, userID string, gu
 	}, nil
 }
 
-func removeCardFromInventory(db *gorm.DB, userID uint, guildID string, cardID int) error {
+func removeCardFromInventory(db *gorm.DB, userID uint, guildID string, cardID uint) error {
 	var item models.UserInventory
 	result := db.Where("user_id = ? AND guild_id = ? AND card_id = ?", userID, guildID, cardID).First(&item)
 	if result.Error != nil {

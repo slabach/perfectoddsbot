@@ -6,6 +6,7 @@ func registerRareCards(deck *[]models.Card) {
 	rareCards := []models.Card{
 		{
 			ID:          40,
+			Code:        "UNO",
 			Name:        "Uno Reverse",
 			Description: "Select an active bet you placed. If it loses, you win (and vice versa).",
 			Rarity:      "Rare",
@@ -14,6 +15,7 @@ func registerRareCards(deck *[]models.Card) {
 		},
 		{
 			ID:          41,
+			Code:        "SOC",
 			Name:        "Socialism",
 			Description: "Take 90 from each of the Top 3 players and distribute it evenly among the Bottom 3 (includes you).",
 			Rarity:      "Rare",
@@ -22,6 +24,7 @@ func registerRareCards(deck *[]models.Card) {
 		},
 		{
 			ID:          42,
+			Code:        "RBH",
 			Name:        "Robin Hood",
 			Description: "Steal 200 points from the richest player; keep 50 for yourself, give 150 to the poorest player.",
 			Rarity:      "Rare",
@@ -30,6 +33,7 @@ func registerRareCards(deck *[]models.Card) {
 		},
 		{
 			ID:             44,
+			Code:           "VAM",
 			Name:           "The Vampire",
 			Description:    "For the next 24 hours, earn 1% of every bet won by other players (up to 500 points per payout).",
 			Rarity:         "Rare",
@@ -47,6 +51,7 @@ func registerRareCards(deck *[]models.Card) {
 		// },
 		{
 			ID:                   64,
+			Code:                 "RSH",
 			Name:                 "Red Shells",
 			Description:          "The 3 people directly in front of you on the leaderboard randomly lose between 25-50 points.",
 			Rarity:               "Rare",
@@ -56,6 +61,7 @@ func registerRareCards(deck *[]models.Card) {
 		},
 		{
 			ID:                   67,
+			Code:                 "FAC",
 			Name:                 "Factory Reset",
 			Description:          "If you have less than 1000 points, you are reset to 1000 points.",
 			Rarity:               "Rare",
@@ -65,6 +71,7 @@ func registerRareCards(deck *[]models.Card) {
 		},
 		{
 			ID:                   68,
+			Code:                 "ANT",
 			Name:                 "Anti-Anti-Bet",
 			Description:          "Choose a user. You place a new bet (even odds) that that user will lose their next bet they place. (Bet will be 100 points (if possible)).",
 			Rarity:               "Rare",
@@ -74,6 +81,7 @@ func registerRareCards(deck *[]models.Card) {
 		},
 		{
 			ID:          31,
+			Code:        "GLN",
 			Name:        "Grand Larceny",
 			Description: "Steal 150 points from a chosen user.",
 			Rarity:      "Rare",
@@ -82,6 +90,7 @@ func registerRareCards(deck *[]models.Card) {
 		},
 		{
 			ID:          73,
+			Code:        "BHE",
 			Name:        "Bank Heist",
 			Description: "Steal 300 points from the pool (if possible).",
 			Rarity:      "Rare",
@@ -90,6 +99,7 @@ func registerRareCards(deck *[]models.Card) {
 		},
 		{
 			ID:          84,
+			Code:        "EMP",
 			Name:        "EMP",
 			Description: "Everyone (including you and the pool) loses 5% of their points.",
 			Rarity:      "Rare",
@@ -98,6 +108,7 @@ func registerRareCards(deck *[]models.Card) {
 		},
 		{
 			ID:          85,
+			Code:        "ALG",
 			Name:        "Algae Bloom",
 			Description: "Algae has taken over the pool! For the next 24 hours, every card drawn drains 100 points from the pool.",
 			Rarity:      "Rare",
@@ -106,6 +117,7 @@ func registerRareCards(deck *[]models.Card) {
 		},
 		{
 			ID:             86,
+			Code:           "POB",
 			Name:           "Pool Boy",
 			Description:    "**PLAYABLE CARD** Play this card at any point to clean the algae from the pool and stop the drain.",
 			Rarity:         "Rare",
