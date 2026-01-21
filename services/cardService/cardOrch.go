@@ -631,9 +631,17 @@ func showFilteredUserSelectMenu(s *discordgo.Session, i *discordgo.InteractionCr
 			description = description[:97] + "..."
 		}
 
+		value := u.DiscordID
+		if len(value) == 0 {
+			continue
+		}
+		if len(value) > 25 {
+			value = value[:25]
+		}
+
 		selectOptions = append(selectOptions, discordgo.SelectMenuOption{
 			Label:       displayName,
-			Value:       u.DiscordID,
+			Value:       value,
 			Description: description,
 			Emoji:       nil,
 			Default:     false,
@@ -714,9 +722,17 @@ func showBetSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, car
 			label = label[:97] + "..."
 		}
 
+		value := fmt.Sprintf("%d", res.BetID)
+		if len(value) == 0 {
+			continue
+		}
+		if len(value) > 25 {
+			value = value[:25]
+		}
+
 		options = append(options, discordgo.SelectMenuOption{
 			Label: label,
-			Value: fmt.Sprintf("%d", res.BetID),
+			Value: value,
 		})
 	}
 
@@ -760,13 +776,35 @@ func showCardOptionsMenu(s *discordgo.Session, i *discordgo.InteractionCreate, c
 			description = description[:97] + "..."
 		}
 
+		value := fmt.Sprintf("%d", opt.ID)
+		if len(value) == 0 {
+			continue
+		}
+		if len(value) > 25 {
+			value = value[:25]
+		}
+
 		selectOptions = append(selectOptions, discordgo.SelectMenuOption{
 			Label:       label,
-			Value:       fmt.Sprintf("%d", opt.ID),
+			Value:       value,
 			Description: description,
 			Emoji:       nil,
 			Default:     false,
 		})
+	}
+
+	if len(selectOptions) == 0 {
+		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: fmt.Sprintf("🎴 <@%s> drew **%s**!\n%s\n\nNo valid options available for this card.", userID, cardName, cardDescription),
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
 	}
 
 	var optionsList strings.Builder
