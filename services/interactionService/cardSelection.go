@@ -18,9 +18,20 @@ import (
 
 func HandleCardUserSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) error {
 	customID := i.MessageComponentData().CustomID
+	var err error
+
+	if !cardService.TryMarkSelectorUsed(customID) {
+		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "❌ This card has already been played. You can only use each card once.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+	}
 
 	parts := strings.Split(customID, "_")
-	if len(parts) != 5 {
+	if len(parts) != 6 {
 		return fmt.Errorf("invalid card selection custom ID format")
 	}
 
@@ -33,7 +44,7 @@ func HandleCardUserSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 	guildID := parts[4]
 
 	if i.Member.User.ID != userID {
-		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
 				Content: "You can only select a target for your own card draw.",
@@ -52,7 +63,7 @@ func HandleCardUserSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 	targetUserID := i.MessageComponentData().Values[0]
 
 	if targetUserID == userID {
-		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
 				Content: "You cannot target yourself!",
@@ -64,33 +75,39 @@ func HandleCardUserSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 		}
 		return nil
 	}
-
 	switch cardID {
 	case cards.PettyTheftCardID:
-		return handlePettyTheftSelection(s, i, db, userID, targetUserID, guildID)
+		err = handlePettyTheftSelection(s, i, db, userID, targetUserID, guildID)
 	case cards.JesterCardID:
-		return handleJesterSelection(s, i, db, userID, targetUserID, guildID)
+		err = handleJesterSelection(s, i, db, userID, targetUserID, guildID)
 	case cards.BetFreezeCardID:
-		return handleBetFreezeSelection(s, i, db, userID, targetUserID, guildID)
+		err = handleBetFreezeSelection(s, i, db, userID, targetUserID, guildID)
 	case cards.GrandLarcenyCardID:
-		return handleGrandLarcenySelection(s, i, db, userID, targetUserID, guildID)
+		err = handleGrandLarcenySelection(s, i, db, userID, targetUserID, guildID)
 	case cards.AntiAntiBetCardID:
-		return handleAntiAntiBetSelection(s, i, db, userID, targetUserID, guildID)
+		err = handleAntiAntiBetSelection(s, i, db, userID, targetUserID, guildID)
 	case cards.HostileTakeoverCardID:
-		return handleHostileTakeoverSelection(s, i, db, userID, targetUserID, guildID)
+		err = handleHostileTakeoverSelection(s, i, db, userID, targetUserID, guildID)
 	case cards.TheGossipCardID:
-		return handleTheGossipSelection(s, i, db, userID, targetUserID, guildID)
+		err = handleTheGossipSelection(s, i, db, userID, targetUserID, guildID)
 	case cards.DuelCardID:
-		return handleDuelSelection(s, i, db, userID, targetUserID, guildID)
+		err = handleDuelSelection(s, i, db, userID, targetUserID, guildID)
 	case cards.TagCardID:
-		return handleTagSelection(s, i, db, userID, targetUserID, guildID)
+		err = handleTagSelection(s, i, db, userID, targetUserID, guildID)
 	case cards.BountyHunterCardID:
-		return handleBountyHunterSelection(s, i, db, userID, targetUserID, guildID)
+		err = handleBountyHunterSelection(s, i, db, userID, targetUserID, guildID)
 	case cards.SocialDistancingCardID:
-		return handleSocialDistancingSelection(s, i, db, userID, targetUserID, guildID)
+		err = handleSocialDistancingSelection(s, i, db, userID, targetUserID, guildID)
 	default:
+		cardService.UnmarkSelectorUsed(customID)
 		return fmt.Errorf("card %d does not support user selection", cardID)
 	}
+
+	if err != nil {
+		cardService.UnmarkSelectorUsed(customID)
+	}
+
+	return err
 }
 
 func handlePettyTheftSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, userID string, targetUserID string, guildID string) error {
@@ -635,8 +652,19 @@ func buildCardResultEmbed(card *models.Card, result *models.CardResult, user mod
 
 func HandleCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) error {
 	customID := i.MessageComponentData().CustomID
+
+	if !cardService.TryMarkSelectorUsed(customID) {
+		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "❌ This card has already been played. You can only use each card once.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+	}
+
 	parts := strings.Split(customID, "_")
-	if len(parts) != 5 {
+	if len(parts) != 6 {
 		return fmt.Errorf("invalid card bet selection custom ID format")
 	}
 
@@ -669,7 +697,7 @@ func HandleCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCreate
 	}
 	targetBetID := uint(targetBetIDVal)
 
-	return db.Transaction(func(tx *gorm.DB) error {
+	err = db.Transaction(func(tx *gorm.DB) error {
 		var user models.User
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			Where("discord_id = ? AND guild_id = ?", userID, guildID).
@@ -716,12 +744,30 @@ func HandleCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCreate
 			},
 		})
 	})
+
+	// If there was an error, rollback the selector mark
+	if err != nil {
+		cardService.UnmarkSelectorUsed(customID)
+	}
+
+	return err
 }
 
 func HandleCardOptionSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) error {
 	customID := i.MessageComponentData().CustomID
+
+	if !cardService.TryMarkSelectorUsed(customID) {
+		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "❌ This card has already been played. You can only use each card once.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+	}
+
 	parts := strings.Split(customID, "_")
-	if len(parts) != 5 {
+	if len(parts) != 6 {
 		return fmt.Errorf("invalid card option selection custom ID format")
 	}
 
@@ -743,7 +789,7 @@ func HandleCardOptionSelection(s *discordgo.Session, i *discordgo.InteractionCre
 		return fmt.Errorf("invalid option ID: %v", err)
 	}
 
-	return db.Transaction(func(tx *gorm.DB) error {
+	err = db.Transaction(func(tx *gorm.DB) error {
 		var user models.User
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			Where("discord_id = ? AND guild_id = ?", userID, guildID).
@@ -797,6 +843,13 @@ func HandleCardOptionSelection(s *discordgo.Session, i *discordgo.InteractionCre
 			},
 		})
 	})
+
+	// If there was an error, rollback the selector mark
+	if err != nil {
+		cardService.UnmarkSelectorUsed(customID)
+	}
+
+	return err
 }
 
 func HandlePlayCardSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) error {

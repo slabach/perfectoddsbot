@@ -8,6 +8,7 @@ import (
 	"perfectOddsBot/services/common"
 	"perfectOddsBot/services/guildService"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -16,6 +17,74 @@ import (
 )
 
 type CardConsumer func(db *gorm.DB, user models.User, cardID uint) error
+
+const (
+	selectorTTL             = 3600
+	selectorCleanupInterval = 900
+)
+
+var (
+	usedCardSelectors = make(map[string]int64)
+	usedSelectorsMu   sync.RWMutex
+)
+
+func init() {
+	go startSelectorCleanup()
+}
+
+func IsSelectorUsed(customID string) bool {
+	usedSelectorsMu.RLock()
+	defer usedSelectorsMu.RUnlock()
+	timestamp, exists := usedCardSelectors[customID]
+	if !exists {
+		return false
+	}
+	now := time.Now().Unix()
+	return (now - timestamp) < selectorTTL
+}
+
+func MarkSelectorUsed(customID string) {
+	usedSelectorsMu.Lock()
+	defer usedSelectorsMu.Unlock()
+	usedCardSelectors[customID] = time.Now().Unix()
+}
+
+func TryMarkSelectorUsed(customID string) bool {
+	usedSelectorsMu.Lock()
+	defer usedSelectorsMu.Unlock()
+
+	now := time.Now().Unix()
+	timestamp, exists := usedCardSelectors[customID]
+
+	if exists && (now-timestamp) < selectorTTL {
+		return false
+	}
+
+	usedCardSelectors[customID] = now
+	return true
+}
+
+func UnmarkSelectorUsed(customID string) {
+	usedSelectorsMu.Lock()
+	defer usedSelectorsMu.Unlock()
+	delete(usedCardSelectors, customID)
+}
+
+func startSelectorCleanup() {
+	ticker := time.NewTicker(time.Duration(selectorCleanupInterval) * time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		now := time.Now().Unix()
+		usedSelectorsMu.Lock()
+		for key, timestamp := range usedCardSelectors {
+			if (now - timestamp) >= selectorTTL {
+				delete(usedCardSelectors, key)
+			}
+		}
+		usedSelectorsMu.Unlock()
+	}
+}
 
 func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
 	userID := i.Member.User.ID
@@ -541,6 +610,7 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 
 func showUserSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, cardID uint, cardName string, cardDescription string, userID string, guildID string, db *gorm.DB) {
 	minValues := 1
+	selectorID := i.Interaction.ID
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
@@ -550,7 +620,7 @@ func showUserSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, ca
 					Components: []discordgo.MessageComponent{
 						discordgo.SelectMenu{
 							MenuType:    discordgo.UserSelectMenu,
-							CustomID:    fmt.Sprintf("card_%d_select_%s_%s", cardID, userID, guildID),
+							CustomID:    fmt.Sprintf("card_%d_select_%s_%s_%s", cardID, userID, guildID, selectorID),
 							Placeholder: "Choose a user...",
 							MinValues:   &minValues,
 							MaxValues:   1,
@@ -640,6 +710,7 @@ func showFilteredUserSelectMenu(s *discordgo.Session, i *discordgo.InteractionCr
 		})
 	}
 
+	selectorID := i.Interaction.ID
 	minValues := 1
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -650,7 +721,7 @@ func showFilteredUserSelectMenu(s *discordgo.Session, i *discordgo.InteractionCr
 					Components: []discordgo.MessageComponent{
 						discordgo.SelectMenu{
 							MenuType:    discordgo.StringSelectMenu,
-							CustomID:    fmt.Sprintf("card_%d_select_%s_%s", cardID, userID, guildID),
+							CustomID:    fmt.Sprintf("card_%d_select_%s_%s_%s", cardID, userID, guildID, selectorID),
 							Placeholder: "Choose a user...",
 							MinValues:   &minValues,
 							MaxValues:   1,
@@ -728,6 +799,7 @@ func showBetSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, car
 		})
 	}
 
+	selectorID := i.Interaction.ID
 	minValues := 1
 	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -738,7 +810,7 @@ func showBetSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, car
 					Components: []discordgo.MessageComponent{
 						discordgo.SelectMenu{
 							MenuType:    discordgo.StringSelectMenu,
-							CustomID:    fmt.Sprintf("card_%d_selectbet_%s_%s", cardID, userID, guildID),
+							CustomID:    fmt.Sprintf("card_%d_selectbet_%s_%s_%s", cardID, userID, guildID, selectorID),
 							Placeholder: "Choose a bet...",
 							MinValues:   &minValues,
 							MaxValues:   1,
@@ -807,6 +879,7 @@ func showCardOptionsMenu(s *discordgo.Session, i *discordgo.InteractionCreate, c
 		optionsList.WriteString(fmt.Sprintf("**%s**: %s", opt.Name, opt.Description))
 	}
 
+	selectorID := i.Interaction.ID
 	minValues := 1
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -817,7 +890,7 @@ func showCardOptionsMenu(s *discordgo.Session, i *discordgo.InteractionCreate, c
 					Components: []discordgo.MessageComponent{
 						discordgo.SelectMenu{
 							MenuType:    discordgo.StringSelectMenu,
-							CustomID:    fmt.Sprintf("card_%d_option_%s_%s", cardID, userID, guildID),
+							CustomID:    fmt.Sprintf("card_%d_option_%s_%s_%s", cardID, userID, guildID, selectorID),
 							Placeholder: "Choose an option...",
 							MinValues:   &minValues,
 							MaxValues:   1,

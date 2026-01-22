@@ -21,4 +21,6 @@ type User struct {
 	CardDrawCount        int `gorm:"default:0"`
 	CardDrawTimeoutUntil *time.Time
 	BetLockoutUntil      *time.Time
+	LastActiveAt         *time.Time
+	TotalCardsDrawn      int `gorm:"default:0"`
 }

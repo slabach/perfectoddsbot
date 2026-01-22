@@ -191,6 +191,8 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if result.RowsAffected == 1 {
 		user.Points = guild.StartingPoints
 	}
+	now := time.Now()
+	user.LastActiveAt = &now
 
 	username := common.GetUsernameFromUser(m.Author)
 	common.UpdateUserUsername(db, &user, username)
