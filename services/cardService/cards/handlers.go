@@ -416,7 +416,7 @@ func handleCharityCase(s *discordgo.Session, db *gorm.DB, userID string, guildID
 	}
 
 	var allUsers []models.User
-	if err := db.Where("guild_id = ?", guildID).Order("points DESC").Find(&allUsers).Error; err != nil {
+	if err := db.Where("guild_id = ? and deleted_at is null", guildID).Order("points DESC").Find(&allUsers).Error; err != nil {
 		return nil, err
 	}
 
@@ -474,7 +474,7 @@ func handleTaxSeason(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 	}
 
 	var allUsers []models.User
-	if err := db.Where("guild_id = ?", guildID).Order("points DESC").Find(&allUsers).Error; err != nil {
+	if err := db.Where("guild_id = ? and deleted_at is null", guildID).Order("points DESC").Find(&allUsers).Error; err != nil {
 		return nil, err
 	}
 
@@ -556,7 +556,7 @@ func handleCoupon(s *discordgo.Session, db *gorm.DB, userID string, guildID stri
 
 func handlePickpocketCommon(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
 	var allUsers []models.User
-	if err := db.Where("guild_id = ? AND discord_id != ?", guildID, userID).Find(&allUsers).Error; err != nil {
+	if err := db.Where("guild_id = ? AND discord_id != ? and deleted_at is null", guildID, userID).Find(&allUsers).Error; err != nil {
 		return nil, err
 	}
 
@@ -593,7 +593,7 @@ func handleDroppedLoot(s *discordgo.Session, db *gorm.DB, userID string, guildID
 	}
 
 	var allUsers []models.User
-	if err := db.Where("guild_id = ? AND discord_id != ?", guildID, userID).Find(&allUsers).Error; err != nil {
+	if err := db.Where("guild_id = ? AND discord_id != ? and deleted_at is null", guildID, userID).Find(&allUsers).Error; err != nil {
 		return nil, err
 	}
 
@@ -1328,7 +1328,7 @@ func handleSocialism(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 	var result *models.CardResult
 	if err := db.Transaction(func(tx *gorm.DB) error {
 		var allUsers []models.User
-		if err := tx.Where("guild_id = ?", guildID).Order("points DESC").Find(&allUsers).Error; err != nil {
+		if err := tx.Where("guild_id = ? and deleted_at is null", guildID).Order("points DESC").Find(&allUsers).Error; err != nil {
 			return err
 		}
 
@@ -1481,7 +1481,7 @@ func handleRobinHood(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 	var result *models.CardResult
 	if err := db.Transaction(func(tx *gorm.DB) error {
 		var allUsers []models.User
-		if err := tx.Where("guild_id = ?", guildID).Order("points DESC").Find(&allUsers).Error; err != nil {
+		if err := tx.Where("guild_id = ? and deleted_at is null", guildID).Order("points DESC").Find(&allUsers).Error; err != nil {
 			return err
 		}
 
@@ -1597,7 +1597,7 @@ func handleRedShells(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 	var result *models.CardResult
 	if err := db.Transaction(func(tx *gorm.DB) error {
 		var allUsers []models.User
-		if err := tx.Where("guild_id = ?", guildID).Order("points DESC").Find(&allUsers).Error; err != nil {
+		if err := tx.Where("guild_id = ? and deleted_at is null", guildID).Order("points DESC").Find(&allUsers).Error; err != nil {
 			return err
 		}
 
@@ -1942,7 +1942,7 @@ func handleBlueShell(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 
 func handleNuke(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
 	var allUsers []models.User
-	if err := db.Where("guild_id = ?", guildID).Find(&allUsers).Error; err != nil {
+	if err := db.Where("guild_id = ? and deleted_at is null", guildID).Find(&allUsers).Error; err != nil {
 		return nil, err
 	}
 
@@ -1976,7 +1976,7 @@ func handleNuke(s *discordgo.Session, db *gorm.DB, userID string, guildID string
 
 func handleEMP(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
 	var allUsers []models.User
-	if err := db.Where("guild_id = ?", guildID).Find(&allUsers).Error; err != nil {
+	if err := db.Where("guild_id = ? and deleted_at is null", guildID).Find(&allUsers).Error; err != nil {
 		return nil, err
 	}
 
@@ -2010,7 +2010,7 @@ func handleEMP(s *discordgo.Session, db *gorm.DB, userID string, guildID string)
 
 func handleDivineIntervention(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
 	var allUsers []models.User
-	if err := db.Where("guild_id = ?", guildID).Find(&allUsers).Error; err != nil {
+	if err := db.Where("guild_id = ? and deleted_at is null", guildID).Find(&allUsers).Error; err != nil {
 		return nil, err
 	}
 
@@ -2282,7 +2282,7 @@ func handleHotPotato(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 		}
 
 		var allUsers []models.User
-		if err := tx.Where("guild_id = ? AND discord_id != ?", guildID, userID).Find(&allUsers).Error; err != nil {
+		if err := tx.Where("guild_id = ? AND discord_id != ? and deleted_at is null", guildID, userID).Find(&allUsers).Error; err != nil {
 			return err
 		}
 
@@ -2509,7 +2509,7 @@ func ExecuteTag(db *gorm.DB, userID string, targetUserID string, guildID string)
 
 func handleCrowdfund(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
 	var allUsers []models.User
-	if err := db.Where("guild_id = ?", guildID).Find(&allUsers).Error; err != nil {
+	if err := db.Where("guild_id = ? and deleted_at is null", guildID).Find(&allUsers).Error; err != nil {
 		return nil, err
 	}
 
@@ -2533,7 +2533,7 @@ func handleReversePickpocket(s *discordgo.Session, db *gorm.DB, userID string, g
 		}
 
 		var allUsers []models.User
-		if err := tx.Where("guild_id = ? AND discord_id != ?", guildID, userID).Find(&allUsers).Error; err != nil {
+		if err := tx.Where("guild_id = ? AND discord_id != ? and deleted_at is null", guildID, userID).Find(&allUsers).Error; err != nil {
 			return err
 		}
 
