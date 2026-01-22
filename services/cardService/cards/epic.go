@@ -8,7 +8,7 @@ func registerEpicCards(deck *[]models.Card) {
 			ID:                   38,
 			Code:                 "BLU",
 			Name:                 "The Blue Shell",
-			Description:          "The player in 1st place loses 500 points to the Pool.",
+			Description:          "The player in 1st place loses 5% of their points to the Pool.",
 			Rarity:               "Epic",
 			Weight:               W_Epic,
 			Handler:              handleBlueShell,

@@ -1904,7 +1904,8 @@ func handleBlueShell(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 			return nil
 		}
 
-		deductAmount := 500.0
+		percentage := 0.05
+		deductAmount := firstPlaceUser.Points * percentage
 		if firstPlaceUser.Points < deductAmount {
 			deductAmount = firstPlaceUser.Points
 		}

@@ -20,7 +20,7 @@ func HandleCardUserSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 	customID := i.MessageComponentData().CustomID
 	var err error
 
-	if cardService.IsSelectorUsed(customID) {
+	if !cardService.TryMarkSelectorUsed(customID) {
 		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
@@ -99,11 +99,12 @@ func HandleCardUserSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 	case cards.SocialDistancingCardID:
 		err = handleSocialDistancingSelection(s, i, db, userID, targetUserID, guildID)
 	default:
+		cardService.UnmarkSelectorUsed(customID)
 		return fmt.Errorf("card %d does not support user selection", cardID)
 	}
 
-	if err == nil {
-		cardService.MarkSelectorUsed(customID)
+	if err != nil {
+		cardService.UnmarkSelectorUsed(customID)
 	}
 
 	return err
@@ -652,7 +653,7 @@ func buildCardResultEmbed(card *models.Card, result *models.CardResult, user mod
 func HandleCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) error {
 	customID := i.MessageComponentData().CustomID
 
-	if cardService.IsSelectorUsed(customID) {
+	if !cardService.TryMarkSelectorUsed(customID) {
 		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
@@ -744,8 +745,9 @@ func HandleCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCreate
 		})
 	})
 
-	if err == nil {
-		cardService.MarkSelectorUsed(customID)
+	// If there was an error, rollback the selector mark
+	if err != nil {
+		cardService.UnmarkSelectorUsed(customID)
 	}
 
 	return err
@@ -754,7 +756,7 @@ func HandleCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCreate
 func HandleCardOptionSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) error {
 	customID := i.MessageComponentData().CustomID
 
-	if cardService.IsSelectorUsed(customID) {
+	if !cardService.TryMarkSelectorUsed(customID) {
 		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
@@ -842,8 +844,9 @@ func HandleCardOptionSelection(s *discordgo.Session, i *discordgo.InteractionCre
 		})
 	})
 
-	if err == nil {
-		cardService.MarkSelectorUsed(customID)
+	// If there was an error, rollback the selector mark
+	if err != nil {
+		cardService.UnmarkSelectorUsed(customID)
 	}
 
 	return err
