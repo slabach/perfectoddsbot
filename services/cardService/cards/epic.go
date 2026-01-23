@@ -73,27 +73,15 @@ func registerEpicCards(deck *[]models.Card) {
 			RequiredSubscription: true,
 		},
 		{
-			ID:          72,
-			Code:        "GAM",
-			Name:        "The Gambler",
-			Description: "**CHOICE CARD** You choose one of the following options:",
-			Options: []models.CardOption{
-				{
-					ID:          1,
-					Name:        "Yes",
-					Description: "50/50 chance to win 2x your next bet that gets resolved, or double your loss.",
-				},
-				{
-					ID:          2,
-					Name:        "No",
-					Description: "Nothing happens.",
-				},
-			},
+			ID:                   27,
+			Code:                 "DDN",
+			Name:                 "Double Down",
+			Description:          "The payout of your next winning bet is increased by 2x",
 			Rarity:               "Epic",
 			Weight:               W_Epic,
-			Handler:              handleGambler,
-			RoyaltyDiscordUserID: &[]string{"447827835797766144"}[0],
+			Handler:              handleDoubleDown,
 			AddToInventory:       true,
+			RoyaltyDiscordUserID: &[]string{"130863485969104896"}[0],
 		},
 		{
 			ID:                   70,
