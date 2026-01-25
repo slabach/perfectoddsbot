@@ -8,7 +8,7 @@ func registerEpicCards(deck *[]models.Card) {
 			ID:                   38,
 			Code:                 "BLU",
 			Name:                 "The Blue Shell",
-			Description:          "The player in 1st place loses 5% of their points to the Pool.",
+			Description:          "The player in 1st place loses 10%.",
 			Rarity:               "Epic",
 			Weight:               W_Epic,
 			Handler:              handleBlueShell,
@@ -131,6 +131,29 @@ func registerEpicCards(deck *[]models.Card) {
 		// 	Handler:              handleHotHand,
 		// 	RoyaltyDiscordUserID: &[]string{"698712210515558432"}[0],
 		// },
+		{
+			ID:             78,
+			Code:           "LCH",
+			Name:           "Leech",
+			Description:    "You attach yourself to the richest player in the pool and siphon 1% of their points every hour for the next 12 hours.",
+			Rarity:         "Epic",
+			Weight:         W_Epic,
+			Handler:        handleLeech,
+			AddToInventory: true,
+		},
+
+		{
+			ID:                   86,
+			Code:                 "POB",
+			Name:                 "Pool Boy",
+			Description:          "**PLAYABLE CARD** Play this card at any point to clean the algae from the pool and stop the drain.",
+			Rarity:               "Epic",
+			Weight:               W_Epic,
+			Handler:              handlePoolBoy,
+			UserPlayable:         true,
+			AddToInventory:       true,
+			RoyaltyDiscordUserID: &[]string{"313553928115716097"}[0],
+		},
 	}
 
 	*deck = append(*deck, epicCards...)

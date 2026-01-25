@@ -58,6 +58,7 @@ const (
 	BountyHunterCardID     = 214
 	SocialDistancingCardID = 215
 	PoolBoyCardID          = 86
+	LeechCardID            = 78
 
 	RoyaltyGuildID = "761721066959667220"
 )

@@ -1151,7 +1151,7 @@ func ApplyVampireIfApplicable(db *gorm.DB, guildID string, totalWinningPayouts f
 			continue
 		}
 
-		vampirePayout := totalOtherWinnings * 0.01
+		vampirePayout := totalOtherWinnings * 0.05
 
 		if vampirePayout > 500.0 {
 			vampirePayout = 500.0

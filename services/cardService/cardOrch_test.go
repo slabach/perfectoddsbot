@@ -945,7 +945,7 @@ func TestApplyAntiAntiBetIfApplicable(t *testing.T) {
 }
 
 func TestApplyVampireIfApplicable(t *testing.T) {
-	t.Run("Single vampire card exists, multiple winners (vampire holder gets 1% of total)", func(t *testing.T) {
+	t.Run("Single vampire card exists, multiple winners (vampire holder gets 5% of total)", func(t *testing.T) {
 		db, mock, err := newMockDB()
 		if err != nil {
 			t.Fatalf("Failed to create mock DB: %v", err)
@@ -957,7 +957,7 @@ func TestApplyVampireIfApplicable(t *testing.T) {
 
 		guildID := "guild1"
 		totalWinningPayouts := 1000.0
-		expectedVampirePayout := 10.0
+		expectedVampirePayout := 50.0
 
 		vampireHolderID := uint(2)
 		vampireHolderDiscordID := "vampire123"
@@ -1006,7 +1006,7 @@ func TestApplyVampireIfApplicable(t *testing.T) {
 		}
 	})
 
-	t.Run("Multiple vampire cards exist for different holders (each gets 1% independently)", func(t *testing.T) {
+	t.Run("Multiple vampire cards exist for different holders (each gets 5% independently)", func(t *testing.T) {
 		db, mock, err := newMockDB()
 		if err != nil {
 			t.Fatalf("Failed to create mock DB: %v", err)
@@ -1018,7 +1018,7 @@ func TestApplyVampireIfApplicable(t *testing.T) {
 
 		guildID := "guild1"
 		totalWinningPayouts := 350.0
-		expectedVampirePayout := 3.5
+		expectedVampirePayout := 17.5
 
 		vampireHolder1ID := uint(2)
 		vampireHolder1DiscordID := "vampire123"

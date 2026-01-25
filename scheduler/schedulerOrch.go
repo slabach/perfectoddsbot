@@ -96,6 +96,12 @@ func SetupCron(s *discordgo.Session, db *gorm.DB) {
 		if err != nil {
 			fmt.Println(err)
 		}
+
+		// Runs every hour to process active Leech cards and expire them after 12 hours
+		err = scheduler_jobs.CheckLeech(s, db)
+		if err != nil {
+			fmt.Println(err)
+		}
 	})
 
 	if err != nil {

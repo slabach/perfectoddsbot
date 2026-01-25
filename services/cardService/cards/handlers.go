@@ -1807,7 +1807,15 @@ func handleAntiAntiBet(s *discordgo.Session, db *gorm.DB, userID string, guildID
 
 func handleVampire(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
 	return &models.CardResult{
-		Message:     "You've drawn The Vampire! For the next 24 hours, you'll earn 1% of every bet won by other players.",
+		Message:     "You've drawn The Vampire! For the next 24 hours, you'll earn 5% of every bet won by other players.",
+		PointsDelta: 0,
+		PoolDelta:   0,
+	}, nil
+}
+
+func handleLeech(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	return &models.CardResult{
+		Message:     "You've drawn The Leech! For the next 12 hours, you'll siphon 1% of the richest player's points every hour.",
 		PointsDelta: 0,
 		PoolDelta:   0,
 	}, nil
@@ -1904,7 +1912,7 @@ func handleBlueShell(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 			return nil
 		}
 
-		percentage := 0.05
+		percentage := 0.1
 		deductAmount := firstPlaceUser.Points * percentage
 		if firstPlaceUser.Points < deductAmount {
 			deductAmount = firstPlaceUser.Points
@@ -1929,9 +1937,9 @@ func handleBlueShell(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 		}
 
 		result = &models.CardResult{
-			Message:     fmt.Sprintf("The Blue Shell hit %s! They lost %.0f points to the Pool.", displayName, deductAmount),
+			Message:     fmt.Sprintf("The Blue Shell hit %s! They lost %.0f points.", displayName, deductAmount),
 			PointsDelta: 0,
-			PoolDelta:   deductAmount,
+			PoolDelta:   0,
 		}
 		return nil
 	}); err != nil {
