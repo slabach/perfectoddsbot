@@ -35,7 +35,7 @@ func registerRareCards(deck *[]models.Card) {
 			ID:             44,
 			Code:           "VAM",
 			Name:           "The Vampire",
-			Description:    "For the next 24 hours, earn 1% of every bet won by other players (up to 500 points per payout).",
+			Description:    "For the next 24 hours, earn 5% of every bet won by other players (up to 500 points per payout).",
 			Rarity:         "Rare",
 			Weight:         W_Rare,
 			Handler:        handleVampire,

@@ -555,3 +555,236 @@ func RunCardMigration(db *gorm.DB) error {
 	log.Println("Card migration completed.")
 	return nil
 }
+
+// SyncCards compares cards in code with cards in the database and updates the database if changes are detected.
+// This function runs on every startup to ensure the database stays in sync with code changes.
+func SyncCards(db *gorm.DB) error {
+	log.Println("Starting card sync from code...")
+
+	rarityMap := make(map[string]uint)
+	var rarities []models.CardRarity
+	if err := db.Find(&rarities).Error; err != nil {
+		return fmt.Errorf("error fetching rarities: %v", err)
+	}
+	for _, rarity := range rarities {
+		rarityMap[rarity.Name] = rarity.ID
+	}
+
+	var codeDeck []models.Card
+	cards.RegisterAllCards(&codeDeck)
+
+	extractHandlerName := func(handler models.CardHandler) string {
+		if handler == nil {
+			return ""
+		}
+		funcValue := reflect.ValueOf(handler)
+		if !funcValue.IsValid() || funcValue.IsNil() {
+			return ""
+		}
+		funcPtr := funcValue.Pointer()
+		if funcPtr == 0 {
+			return ""
+		}
+		fn := runtime.FuncForPC(funcPtr)
+		if fn == nil {
+			return ""
+		}
+		fullName := fn.Name()
+		parts := strings.Split(fullName, ".")
+		if len(parts) > 0 {
+			return parts[len(parts)-1]
+		}
+		return fullName
+	}
+
+	updatedCount := 0
+	createdCount := 0
+	optionsUpdatedCount := 0
+
+	for _, codeCard := range codeDeck {
+		codeCardOptions := codeCard.Options
+		codeCard.HandlerName = extractHandlerName(codeCard.Handler)
+
+		if rarityID, exists := rarityMap[codeCard.Rarity]; exists {
+			codeCard.RarityID = rarityID
+		} else {
+			log.Printf("Warning: Rarity '%s' not found in map for card %d (%s), skipping", codeCard.Rarity, codeCard.ID, codeCard.Name)
+			continue
+		}
+
+		codeCard.Active = true
+
+		var dbCard models.Card
+		result := db.Where("id = ?", codeCard.ID).First(&dbCard)
+
+		if result.Error != nil {
+			cardToCreate := codeCard
+			cardToCreate.Options = []models.CardOption{}
+
+			if err := db.Create(&cardToCreate).Error; err != nil {
+				log.Printf("Error creating card %d (%s): %v", codeCard.ID, codeCard.Name, err)
+				continue
+			}
+			createdCount++
+			log.Printf("Created new card %d (%s)", codeCard.ID, codeCard.Name)
+
+			if len(codeCardOptions) > 0 {
+				for _, option := range codeCardOptions {
+					cardOption := models.CardOption{
+						ID:          option.ID,
+						CardID:      codeCard.ID,
+						Name:        option.Name,
+						Description: option.Description,
+					}
+					if err := db.Create(&cardOption).Error; err != nil {
+						log.Printf("Error creating option %d for card %d: %v", option.ID, codeCard.ID, err)
+					} else {
+						optionsUpdatedCount++
+						log.Printf("Created new option %d (%s) for card %d", option.ID, option.Name, codeCard.ID)
+					}
+				}
+			}
+			continue
+		}
+
+		needsUpdate := false
+		updateFields := make(map[string]interface{})
+
+		if dbCard.Code != codeCard.Code {
+			updateFields["code"] = codeCard.Code
+			needsUpdate = true
+		}
+		if dbCard.Name != codeCard.Name {
+			updateFields["name"] = codeCard.Name
+			needsUpdate = true
+		}
+		if dbCard.Description != codeCard.Description {
+			updateFields["description"] = codeCard.Description
+			needsUpdate = true
+		}
+		if dbCard.Rarity != codeCard.Rarity {
+			updateFields["rarity"] = codeCard.Rarity
+			needsUpdate = true
+		}
+		if dbCard.RarityID != codeCard.RarityID {
+			updateFields["rarity_id"] = codeCard.RarityID
+			needsUpdate = true
+		}
+		if dbCard.Weight != codeCard.Weight {
+			updateFields["weight"] = codeCard.Weight
+			needsUpdate = true
+		}
+		if dbCard.HandlerName != codeCard.HandlerName {
+			updateFields["handler_name"] = codeCard.HandlerName
+			needsUpdate = true
+		}
+		if dbCard.AddToInventory != codeCard.AddToInventory {
+			updateFields["add_to_inventory"] = codeCard.AddToInventory
+			needsUpdate = true
+		}
+		if (dbCard.RoyaltyDiscordUserID == nil && codeCard.RoyaltyDiscordUserID != nil) ||
+			(dbCard.RoyaltyDiscordUserID != nil && codeCard.RoyaltyDiscordUserID == nil) ||
+			(dbCard.RoyaltyDiscordUserID != nil && codeCard.RoyaltyDiscordUserID != nil && *dbCard.RoyaltyDiscordUserID != *codeCard.RoyaltyDiscordUserID) {
+			updateFields["royalty_discord_user_id"] = codeCard.RoyaltyDiscordUserID
+			needsUpdate = true
+		}
+		if dbCard.RequiredSubscription != codeCard.RequiredSubscription {
+			updateFields["required_subscription"] = codeCard.RequiredSubscription
+			needsUpdate = true
+		}
+		if dbCard.UserPlayable != codeCard.UserPlayable {
+			updateFields["user_playable"] = codeCard.UserPlayable
+			needsUpdate = true
+		}
+		if dbCard.Active != codeCard.Active {
+			updateFields["active"] = codeCard.Active
+			needsUpdate = true
+		}
+
+		if needsUpdate {
+			if err := db.Model(&dbCard).Updates(updateFields).Error; err != nil {
+				log.Printf("Error updating card %d (%s): %v", codeCard.ID, codeCard.Name, err)
+				continue
+			}
+			updatedCount++
+			log.Printf("Updated card %d (%s) with fields: %v", codeCard.ID, codeCard.Name, updateFields)
+		}
+
+		if len(codeCardOptions) > 0 {
+			var dbOptions []models.CardOption
+			if err := db.Where("card_id = ?", codeCard.ID).Find(&dbOptions).Error; err != nil {
+				log.Printf("Error fetching options for card %d: %v", codeCard.ID, err)
+			} else {
+				dbOptionsMap := make(map[uint]models.CardOption)
+				for _, opt := range dbOptions {
+					dbOptionsMap[opt.ID] = opt
+				}
+
+				codeOptionsMap := make(map[uint]bool)
+				for _, codeOption := range codeCardOptions {
+					codeOptionsMap[codeOption.ID] = true
+
+					var existingOption models.CardOption
+					optionResult := db.Where("id = ?", codeOption.ID).First(&existingOption)
+
+					if optionResult.Error != nil {
+						cardOption := models.CardOption{
+							ID:          codeOption.ID,
+							CardID:      codeCard.ID,
+							Name:        codeOption.Name,
+							Description: codeOption.Description,
+						}
+						if err := db.Create(&cardOption).Error; err != nil {
+							log.Printf("Error creating option %d for card %d: %v", codeOption.ID, codeCard.ID, err)
+						} else {
+							optionsUpdatedCount++
+							log.Printf("Created new option %d (%s) for card %d", codeOption.ID, codeOption.Name, codeCard.ID)
+						}
+					} else {
+						optionNeedsUpdate := false
+						optionUpdateFields := make(map[string]interface{})
+
+						if existingOption.Name != codeOption.Name {
+							optionUpdateFields["name"] = codeOption.Name
+							optionNeedsUpdate = true
+						}
+						if existingOption.Description != codeOption.Description {
+							optionUpdateFields["description"] = codeOption.Description
+							optionNeedsUpdate = true
+						}
+						if existingOption.CardID != codeCard.ID {
+							optionUpdateFields["card_id"] = codeCard.ID
+							optionNeedsUpdate = true
+						}
+
+						if optionNeedsUpdate {
+							if err := db.Model(&existingOption).Updates(optionUpdateFields).Error; err != nil {
+								log.Printf("Error updating option %d for card %d: %v", codeOption.ID, codeCard.ID, err)
+							} else {
+								optionsUpdatedCount++
+								log.Printf("Updated option %d (%s) for card %d", codeOption.ID, codeOption.Name, codeCard.ID)
+							}
+						}
+					}
+				}
+
+				// Delete options that exist in DB but not in code (optional - you may want to skip this)
+				// Uncomment if you want to remove options that are no longer in code
+				/*
+					for _, dbOption := range dbOptions {
+						if !codeOptionsMap[dbOption.ID] {
+							if err := db.Delete(&dbOption).Error; err != nil {
+								log.Printf("Error deleting option %d for card %d: %v", dbOption.ID, codeCard.ID, err)
+							} else {
+								log.Printf("Deleted option %d (%s) for card %d (no longer in code)", dbOption.ID, dbOption.Name, codeCard.ID)
+							}
+						}
+					}
+				*/
+			}
+		}
+	}
+
+	log.Printf("Card sync completed. Created: %d, Updated: %d, Options updated: %d (out of %d total cards)", createdCount, updatedCount, optionsUpdatedCount, len(codeDeck))
+	return nil
+}

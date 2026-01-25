@@ -139,6 +139,11 @@ func runApp() {
 	if err != nil {
 		log.Printf("Error running card migration: %v", err)
 	}
+
+	err = services.SyncCards(db)
+	if err != nil {
+		log.Printf("Error syncing cards from code: %v", err)
+	}
 	defer func(dg *discordgo.Session) {
 		err := dg.Close()
 		if err != nil {
