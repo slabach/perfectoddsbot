@@ -115,17 +115,6 @@ func registerRareCards(deck *[]models.Card) {
 			Weight:      W_Rare,
 			Handler:     handleAlgaeBloom,
 		},
-		{
-			ID:             86,
-			Code:           "POB",
-			Name:           "Pool Boy",
-			Description:    "**PLAYABLE CARD** Play this card at any point to clean the algae from the pool and stop the drain.",
-			Rarity:         "Rare",
-			Weight:         W_Rare,
-			Handler:        handlePoolBoy,
-			UserPlayable:   true,
-			AddToInventory: true,
-		},
 	}
 
 	*deck = append(*deck, rareCards...)
