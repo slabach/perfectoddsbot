@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
+	"sync"
 
 	"gorm.io/gorm"
 )
@@ -16,6 +17,7 @@ var (
 	Deck            []models.Card
 	cardMap         map[uint]*models.Card
 	handlerRegistry map[string]models.CardHandler
+	deckMu          sync.RWMutex
 )
 
 func init() {
@@ -67,7 +69,9 @@ func RegisterAllCards() {
 }
 
 func PickRandomCard(hasSubscription bool) *models.Card {
+	deckMu.RLock()
 	if len(Deck) == 0 {
+		deckMu.RUnlock()
 		return nil
 	}
 
@@ -81,6 +85,7 @@ func PickRandomCard(hasSubscription bool) *models.Card {
 			eligibleCards = append(eligibleCards, &Deck[i])
 		}
 	}
+	deckMu.RUnlock()
 
 	if len(eligibleCards) == 0 {
 		return nil
@@ -109,6 +114,8 @@ func PickRandomCard(hasSubscription bool) *models.Card {
 }
 
 func GetCardByID(id uint) *models.Card {
+	deckMu.RLock()
+	defer deckMu.RUnlock()
 	return cardMap[id]
 }
 
@@ -123,6 +130,9 @@ func LoadDeckFromDB(db *gorm.DB) error {
 		log.Printf("Error loading cards from database: %v", err)
 		return err
 	}
+
+	deckMu.Lock()
+	defer deckMu.Unlock()
 
 	Deck = make([]models.Card, 0, len(dbCards))
 	cardMap = make(map[uint]*models.Card, len(dbCards))

@@ -124,6 +124,14 @@ func registerEpicCards(deck *[]models.Card) {
 			AddToInventory:       true,
 			RoyaltyDiscordUserID: &[]string{"313553928115716097"}[0],
 		},
+		{
+			ID:                   87,
+			Code:                 "BHO",
+			Name:                 "Black Hole",
+			Description:          "25% of the pool is evenly distruted evenly among the bottom 5 players.",
+			Handler:              handleBlackHole,
+			RoyaltyDiscordUserID: &[]string{"130863485969104896"}[0],
+		},
 	}
 
 	*deck = append(*deck, epicCards...)

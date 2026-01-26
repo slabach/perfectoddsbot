@@ -602,14 +602,7 @@ func handleHostileTakeoverSelection(s *discordgo.Session, i *discordgo.Interacti
 func buildCardResultEmbed(card *models.Card, result *models.CardResult, user models.User, targetUsername string, poolBalance float64) *discordgo.MessageEmbed {
 	var color int
 	if card.CardRarity.ID != 0 {
-		colorStr := card.CardRarity.Color
-		if len(colorStr) > 2 && colorStr[0:2] == "0x" {
-			colorStr = colorStr[2:]
-		}
-		_, err := fmt.Sscanf(colorStr, "%x", &color)
-		if err != nil {
-			color = 0x95A5A6
-		}
+		color = cardService.ParseHexColor(card.CardRarity.Color)
 	} else {
 		color = 0x95A5A6
 	}

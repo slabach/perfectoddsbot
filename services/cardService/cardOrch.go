@@ -907,11 +907,13 @@ func showCardOptionsMenu(s *discordgo.Session, i *discordgo.InteractionCreate, c
 	}
 }
 
-func parseHexColor(colorStr string) int {
+func ParseHexColor(colorStr string) int {
 	if colorStr == "" {
 		return 0x95A5A6
 	}
-	if len(colorStr) > 2 && colorStr[0:2] == "0x" {
+	// Normalize to lowercase for case-insensitive prefix matching
+	colorStrLower := strings.ToLower(colorStr)
+	if len(colorStrLower) > 2 && colorStrLower[0:2] == "0x" {
 		colorStr = colorStr[2:]
 	}
 	var color int
@@ -925,7 +927,7 @@ func parseHexColor(colorStr string) int {
 func buildCardEmbed(card *models.Card, result *models.CardResult, user models.User, username string, targetUsername string, poolBalance float64, drawCardCost float64) *discordgo.MessageEmbed {
 	var color int
 	if card.CardRarity.ID != 0 {
-		color = parseHexColor(card.CardRarity.Color)
+		color = ParseHexColor(card.CardRarity.Color)
 	} else {
 		color = 0x95A5A6 // Default to Common color
 	}
