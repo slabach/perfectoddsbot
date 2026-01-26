@@ -128,7 +128,7 @@ func registerEpicCards(deck *[]models.Card) {
 			ID:                   87,
 			Code:                 "BHO",
 			Name:                 "Black Hole",
-			Description:          "25% of the pool is evenly distruted evenly among the bottom 5 players.",
+			Description:          "25% of the pool is distruted evenly among the bottom 5 players.",
 			Handler:              handleBlackHole,
 			RoyaltyDiscordUserID: &[]string{"130863485969104896"}[0],
 		},
