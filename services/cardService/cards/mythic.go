@@ -40,6 +40,15 @@ func registerMythicCards(deck *[]models.Card) {
 			Description: "You win 50% of the current Pool.",
 			Handler:     handleJackpot,
 		},
+		// {
+		// 	ID:                   55,
+		// 	Code:                 "SSW",
+		// 	Name:                 "Supermarket Sweep",
+		// 	Description:          "For the next 30 seconds, you can draw as many cards as you want without paying for them.",
+		// 	Handler:              handleSupermarketSweep,
+		// 	AddToInventory:       true,
+		// 	RoyaltyDiscordUserID: &[]string{"313553928115716097"}[0],
+		// },
 	}
 
 	*deck = append(*deck, mythicCards...)
