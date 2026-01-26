@@ -211,6 +211,13 @@ func registerCommonCards(deck *[]models.Card) {
 			Description: "Choose a user. Their current point balance is displayed in the server.",
 			Handler:     handleTheGossip,
 		},
+		{
+			ID:          217,
+			Code:        "SK3",
+			Name:        "Spy Kids 3D",
+			Description: "You're now a super spy. You view the number of cards until the next Epic or Mythic card is guaranteed",
+			Handler:     handleSpyKids,
+		},
 	}
 
 	*deck = append(*deck, commonCards...)

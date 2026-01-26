@@ -4,13 +4,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/bwmarrin/discordgo"
-	"gorm.io/gorm"
 	"log"
 	"perfectOddsBot/models/external"
 	"perfectOddsBot/services/common"
 	"perfectOddsBot/services/guildService"
 	"runtime/debug"
+
+	"github.com/bwmarrin/discordgo"
+	"gorm.io/gorm"
 )
 
 func ListCFBGames(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
@@ -47,6 +48,15 @@ func ListCFBGames(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 	err = json.NewDecoder(weekResp.Body).Decode(&calendar)
 	if err != nil {
 		common.SendError(s, i, err, db)
+		return
+	}
+
+	if calendar.Week == nil {
+		common.SendError(s, i, fmt.Errorf("API did not return week data"), db)
+		return
+	}
+	if calendar.Season == nil {
+		common.SendError(s, i, fmt.Errorf("API did not return season data"), db)
 		return
 	}
 
@@ -136,6 +146,13 @@ func GetCFBGames() (_ []external.CFBD_BettingLines, err error) {
 		return []external.CFBD_BettingLines{}, err
 	}
 
+	if calendar.Week == nil {
+		return []external.CFBD_BettingLines{}, fmt.Errorf("GetCFBGames: calendar.Week is nil - API did not return week data")
+	}
+	if calendar.Season == nil {
+		return []external.CFBD_BettingLines{}, fmt.Errorf("GetCFBGames: calendar.Season is nil - API did not return season data")
+	}
+
 	var weekNum = calendar.Week.WeekNum
 	if weekNum > calendar.MaxRegWeek {
 		weekNum = 1
@@ -187,6 +204,13 @@ func GetCfbdBet(betid int) (_ external.CFBD_BettingLines, err error) {
 	if err != nil {
 		fmt.Printf("error parsing json err: %v", err)
 		return external.CFBD_BettingLines{}, err
+	}
+
+	if calendar.Week == nil {
+		return external.CFBD_BettingLines{}, fmt.Errorf("GetCfbdBet: calendar.Week is nil - API did not return week data")
+	}
+	if calendar.Season == nil {
+		return external.CFBD_BettingLines{}, fmt.Errorf("GetCfbdBet: calendar.Season is nil - API did not return season data")
 	}
 
 	var weekNum = calendar.Week.WeekNum

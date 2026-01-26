@@ -25,6 +25,7 @@ const (
 	CouponCardID           = 123
 	TheGossipCardID        = 211
 	DuelCardID             = 216
+	SpyKids3DCardID        = 217
 	SpareKeyCardID         = 118
 	TagCardID              = 212
 	ShoppingSpreeCardID    = 208

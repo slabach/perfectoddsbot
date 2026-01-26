@@ -2920,3 +2920,11 @@ func handleBlackHole(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 
 	return result, nil
 }
+
+func handleSpyKids(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	return &models.CardResult{
+		Message:     "View your super secret spy message to receive further instructions.",
+		PointsDelta: 0,
+		PoolDelta:   0,
+	}, nil
+}
