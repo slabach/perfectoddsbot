@@ -215,7 +215,7 @@ func registerCommonCards(deck *[]models.Card) {
 			ID:          217,
 			Code:        "SK3",
 			Name:        "Spy Kids 3D",
-			Description: "You're now a super spy. You view the number of cards until the next Epic or Mythic card is guanteed",
+			Description: "You're now a super spy. You view the number of cards until the next Epic or Mythic card is guaranteed",
 			Handler:     handleSpyKids,
 		},
 	}

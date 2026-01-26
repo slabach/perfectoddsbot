@@ -399,8 +399,8 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	hasSubscription := guild.SubscribedTeam != nil && *guild.SubscribedTeam != ""
 
 	var card *models.Card
-	needsMythic := guild.LastMythicDrawAt == 0 || (guild.TotalCardDraws-guild.LastMythicDrawAt) >= 1000
-	needsEpic := guild.LastEpicDrawAt == 0 || (guild.TotalCardDraws-guild.LastEpicDrawAt) >= 100
+	needsMythic := guild.TotalCardDraws >= 1000 && (guild.LastMythicDrawAt == 0 || (guild.TotalCardDraws-guild.LastMythicDrawAt) >= 1000)
+	needsEpic := guild.TotalCardDraws >= 100 && (guild.LastEpicDrawAt == 0 || (guild.TotalCardDraws-guild.LastEpicDrawAt) >= 100)
 
 	if needsMythic {
 		card = PickCardByRarity(hasSubscription, "Mythic")
