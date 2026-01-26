@@ -713,7 +713,7 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 					Inline: true,
 				},
 			},
-			Color: 0x3498db,
+			Color: 0x95A5A6,
 		}
 
 		_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
