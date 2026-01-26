@@ -907,21 +907,27 @@ func showCardOptionsMenu(s *discordgo.Session, i *discordgo.InteractionCreate, c
 	}
 }
 
+func parseHexColor(colorStr string) int {
+	if colorStr == "" {
+		return 0x95A5A6
+	}
+	if len(colorStr) > 2 && colorStr[0:2] == "0x" {
+		colorStr = colorStr[2:]
+	}
+	var color int
+	_, err := fmt.Sscanf(colorStr, "%x", &color)
+	if err != nil {
+		return 0x95A5A6
+	}
+	return color
+}
+
 func buildCardEmbed(card *models.Card, result *models.CardResult, user models.User, username string, targetUsername string, poolBalance float64, drawCardCost float64) *discordgo.MessageEmbed {
 	var color int
-	switch card.Rarity {
-	case "Common":
-		color = cards.C_Common
-	case "Uncommon":
-		color = cards.C_Uncommon
-	case "Rare":
-		color = cards.C_Rare
-	case "Epic":
-		color = cards.C_Epic
-	case "Mythic":
-		color = cards.C_Mythic
-	default:
-		color = cards.C_Common
+	if card.CardRarity.ID != 0 {
+		color = parseHexColor(card.CardRarity.Color)
+	} else {
+		color = 0x95A5A6 // Default to Common color
 	}
 
 	embed := &discordgo.MessageEmbed{
@@ -931,9 +937,13 @@ func buildCardEmbed(card *models.Card, result *models.CardResult, user models.Us
 		Fields:      []*discordgo.MessageEmbedField{},
 	}
 
+	rarityName := "Common"
+	if card.CardRarity.ID != 0 {
+		rarityName = card.CardRarity.Name
+	}
 	embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
 		Name:   "Rarity",
-		Value:  card.Rarity,
+		Value:  rarityName,
 		Inline: true,
 	})
 
@@ -1332,19 +1342,10 @@ func processRoyaltyPayment(tx *gorm.DB, card *models.Card, royaltyGuildID string
 	}
 
 	var royaltyAmount float64
-	switch card.Rarity {
-	case "Common":
-		royaltyAmount = cards.R_Common
-	case "Uncommon":
-		royaltyAmount = cards.R_Uncommon
-	case "Rare":
-		royaltyAmount = cards.R_Rare
-	case "Epic":
-		royaltyAmount = cards.R_Epic
-	case "Mythic":
-		royaltyAmount = cards.R_Mythic
-	default:
-		royaltyAmount = cards.R_Common
+	if card.CardRarity.ID != 0 {
+		royaltyAmount = card.CardRarity.Royalty
+	} else {
+		royaltyAmount = 0.5 // Default to Common royalty
 	}
 
 	var royaltyGuild models.Guild
@@ -1603,13 +1604,17 @@ func MyInventory(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.
 		if card == nil {
 			continue
 		}
-		if cardsByRarity[card.Rarity] == nil {
-			cardsByRarity[card.Rarity] = []struct {
+		rarityName := "Common"
+		if card.CardRarity.ID != 0 {
+			rarityName = card.CardRarity.Name
+		}
+		if cardsByRarity[rarityName] == nil {
+			cardsByRarity[rarityName] = []struct {
 				Card  *models.Card
 				Count int
 			}{}
 		}
-		cardsByRarity[card.Rarity] = append(cardsByRarity[card.Rarity], struct {
+		cardsByRarity[rarityName] = append(cardsByRarity[rarityName], struct {
 			Card  *models.Card
 			Count int
 		}{Card: card, Count: count})
@@ -1637,20 +1642,10 @@ func MyInventory(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.
 			fieldValue += fmt.Sprintf("**%s**%s\n%s\n\n", cardInfo.Card.Name, quantityText, cardInfo.Card.Description)
 		}
 
-		var rarityEmoji string
-		switch rarity {
-		case "Mythic":
-			rarityEmoji = cards.E_Mythic
-		case "Epic":
-			rarityEmoji = cards.E_Epic
-		case "Rare":
-			rarityEmoji = cards.E_Rare
-		case "Uncommon":
-			rarityEmoji = cards.E_Uncommon
-		case "Common":
-			rarityEmoji = cards.E_Common
-		default:
-			rarityEmoji = cards.E_Common
+		// Get emoji from first card in this rarity group
+		var rarityEmoji string = "🤍" // Default to Common emoji
+		if len(cardsHeld) > 0 && cardsHeld[0].Card.CardRarity.ID != 0 {
+			rarityEmoji = cardsHeld[0].Card.CardRarity.Icon
 		}
 
 		embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{

@@ -2780,3 +2780,61 @@ func ExecuteSocialDistancing(db *gorm.DB, userID string, targetUserID string, gu
 		TargetPointsDelta: 0,
 	}, nil
 }
+
+// func handleMarketCrash(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+// 	var result *models.CardResult
+// 	if err := db.Transaction(func(tx *gorm.DB) error {
+// 		var activeBets []models.Bet
+// 		if err := tx.Where("guild_id = ? AND paid = ?", guildID, false).Find(&activeBets).Error; err != nil {
+// 			return err
+// 		}
+
+// 		if len(activeBets) == 0 {
+// 			result = &models.CardResult{
+// 				Message:     "Market Crash! No active bets to cancel.",
+// 				PointsDelta: 0,
+// 				PoolDelta:   0,
+// 			}
+// 			return nil
+// 		}
+
+// 		betIDs := make([]uint, len(activeBets))
+// 		for i, bet := range activeBets {
+// 			betIDs[i] = bet.ID
+// 		}
+
+// 		var entries []models.BetEntry
+// 		if err := tx.Where("bet_id IN ?", betIDs).Find(&entries).Error; err != nil {
+// 			return err
+// 		}
+
+// 		totalPoolDelta := 0.0
+// 		for _, entry := range entries {
+// 			totalPoolDelta += float64(entry.Amount)
+// 		}
+
+// 		if err := tx.Model(&models.Bet{}).
+// 			Where("id IN ?", betIDs).
+// 			Updates(map[string]interface{}{
+// 				"active": false,
+// 				"paid":   true,
+// 			}).Error; err != nil {
+// 			return err
+// 		}
+
+// 		if err := tx.Where("bet_id IN ?", betIDs).Delete(&models.BetEntry{}).Error; err != nil {
+// 			return err
+// 		}
+
+// 		result = &models.CardResult{
+// 			Message:     fmt.Sprintf("Market Crash! All active bets currently placed are cancelled; All money bet on them goes to the Pool. %.1f points have been added to the pool.", totalPoolDelta),
+// 			PointsDelta: 0,
+// 			PoolDelta:   totalPoolDelta,
+// 		}
+// 		return nil
+// 	}); err != nil {
+// 		return nil, err
+// 	}
+
+// 	return result, nil
+// }

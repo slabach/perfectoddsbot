@@ -605,28 +605,35 @@ func SyncCards(db *gorm.DB) error {
 		codeCardOptions := codeCard.Options
 		codeCard.HandlerName = extractHandlerName(codeCard.Handler)
 
-		if rarityID, exists := rarityMap[codeCard.Rarity]; exists {
-			codeCard.RarityID = rarityID
-		} else {
-			log.Printf("Warning: Rarity '%s' not found in map for card %d (%s), skipping", codeCard.Rarity, codeCard.ID, codeCard.Name)
-			continue
-		}
-
-		codeCard.Active = true
-
 		var dbCard models.Card
 		result := db.Where("id = ?", codeCard.ID).First(&dbCard)
 
 		if result.Error != nil {
 			cardToCreate := codeCard
 			cardToCreate.Options = []models.CardOption{}
+			// set rarity id to common by default since one is required to be set
+			cardToCreate.RarityID = 1
+			cardToCreate.Weight = 0
+			cardToCreate.Rarity = ""
+			cardToCreate.HandlerName = codeCard.HandlerName
+			cardToCreate.AddToInventory = codeCard.AddToInventory
+			cardToCreate.RequiredSubscription = codeCard.RequiredSubscription
+			cardToCreate.UserPlayable = codeCard.UserPlayable
+			cardToCreate.RoyaltyDiscordUserID = codeCard.RoyaltyDiscordUserID
 
+			// Create the card first
 			if err := db.Create(&cardToCreate).Error; err != nil {
 				log.Printf("Error creating card %d (%s): %v", codeCard.ID, codeCard.Name, err)
 				continue
 			}
+
+			// Explicitly set Active to false after creation to override database default
+			if err := db.Model(&cardToCreate).Update("active", false).Error; err != nil {
+				log.Printf("Error setting Active=false for card %d (%s): %v", codeCard.ID, codeCard.Name, err)
+				continue
+			}
 			createdCount++
-			log.Printf("Created new card %d (%s)", codeCard.ID, codeCard.Name)
+			log.Printf("Created new card %d (%s) with Active=false (configure in database to activate)", codeCard.ID, codeCard.Name)
 
 			if len(codeCardOptions) > 0 {
 				for _, option := range codeCardOptions {
@@ -662,18 +669,7 @@ func SyncCards(db *gorm.DB) error {
 			updateFields["description"] = codeCard.Description
 			needsUpdate = true
 		}
-		if dbCard.Rarity != codeCard.Rarity {
-			updateFields["rarity"] = codeCard.Rarity
-			needsUpdate = true
-		}
-		if dbCard.RarityID != codeCard.RarityID {
-			updateFields["rarity_id"] = codeCard.RarityID
-			needsUpdate = true
-		}
-		if dbCard.Weight != codeCard.Weight {
-			updateFields["weight"] = codeCard.Weight
-			needsUpdate = true
-		}
+		// Rarity, RarityID, Weight, and Active are now DB-controlled, not synced from code
 		if dbCard.HandlerName != codeCard.HandlerName {
 			updateFields["handler_name"] = codeCard.HandlerName
 			needsUpdate = true
@@ -696,10 +692,7 @@ func SyncCards(db *gorm.DB) error {
 			updateFields["user_playable"] = codeCard.UserPlayable
 			needsUpdate = true
 		}
-		if dbCard.Active != codeCard.Active {
-			updateFields["active"] = codeCard.Active
-			needsUpdate = true
-		}
+		// Active is DB-controlled, not synced from code
 
 		if needsUpdate {
 			if err := db.Model(&dbCard).Updates(updateFields).Error; err != nil {
