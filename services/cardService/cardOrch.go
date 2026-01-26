@@ -125,26 +125,6 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	common.UpdateUserUsername(db, &user, username)
 
 	now := time.Now()
-	if user.CardDrawTimeoutUntil != nil && now.Before(*user.CardDrawTimeoutUntil) {
-		timeRemaining := user.CardDrawTimeoutUntil.Sub(now)
-		minutesRemaining := int(timeRemaining.Minutes())
-		secondsRemaining := int(timeRemaining.Seconds()) % 60
-		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Content: fmt.Sprintf("You are timed out from drawing cards. Time remaining: %d minutes and %d seconds.", minutesRemaining, secondsRemaining),
-				Flags:   discordgo.MessageFlagsEphemeral,
-			},
-		})
-		if err != nil {
-			common.SendError(s, i, err, db)
-		}
-		return
-	}
-
-	if user.CardDrawTimeoutUntil != nil && now.After(*user.CardDrawTimeoutUntil) {
-		user.CardDrawTimeoutUntil = nil
-	}
 
 	resetPeriod := time.Duration(guild.CardDrawCooldownMinutes) * time.Minute
 
@@ -281,6 +261,29 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		tx.Rollback()
 		common.SendError(s, i, fmt.Errorf("error locking user: %v", err), db)
 		return
+	}
+
+	// Check timeout after locking user to ensure we have the most up-to-date value
+	if lockedUser.CardDrawTimeoutUntil != nil && now.Before(*lockedUser.CardDrawTimeoutUntil) {
+		tx.Rollback()
+		timeRemaining := lockedUser.CardDrawTimeoutUntil.Sub(now)
+		minutesRemaining := int(timeRemaining.Minutes())
+		secondsRemaining := int(timeRemaining.Seconds()) % 60
+		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: fmt.Sprintf("You are timed out from drawing cards. Time remaining: %d minutes and %d seconds.", minutesRemaining, secondsRemaining),
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
+
+	if lockedUser.CardDrawTimeoutUntil != nil && now.After(*lockedUser.CardDrawTimeoutUntil) {
+		lockedUser.CardDrawTimeoutUntil = nil
 	}
 
 	if lockedUser.Points < drawCardCost {
