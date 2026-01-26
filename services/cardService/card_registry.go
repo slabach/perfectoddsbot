@@ -68,7 +68,7 @@ func RegisterAllCards() {
 	populateHandlerRegistry()
 }
 
-func PickRandomCard(hasSubscription bool) *models.Card {
+func PickRandomCard(hasSubscription bool, rarityMultiplier float64) *models.Card {
 	deckMu.RLock()
 	if len(Deck) == 0 {
 		deckMu.RUnlock()
@@ -82,6 +82,72 @@ func PickRandomCard(hasSubscription bool) *models.Card {
 		}
 
 		if Deck[i].CardRarity.ID != 0 {
+			eligibleCards = append(eligibleCards, &Deck[i])
+		}
+	}
+	deckMu.RUnlock()
+
+	if len(eligibleCards) == 0 {
+		return nil
+	}
+
+	higherRarities := map[string]bool{
+		"Mythic": true,
+		"Epic":   true,
+		"Rare":   true,
+	}
+
+	totalWeight := 0
+	for _, card := range eligibleCards {
+		baseWeight := card.CardRarity.Weight
+
+		if rarityMultiplier > 1.0 && higherRarities[card.CardRarity.Name] {
+			adjustedWeight := int(float64(baseWeight) * rarityMultiplier)
+			totalWeight += adjustedWeight
+		} else {
+			totalWeight += baseWeight
+		}
+	}
+
+	if totalWeight == 0 {
+		return nil
+	}
+
+	random := rand.Intn(totalWeight)
+
+	cumulativeWeight := 0
+	for _, card := range eligibleCards {
+		baseWeight := card.CardRarity.Weight
+
+		if rarityMultiplier > 1.0 && higherRarities[card.CardRarity.Name] {
+			adjustedWeight := int(float64(baseWeight) * rarityMultiplier)
+			cumulativeWeight += adjustedWeight
+		} else {
+			cumulativeWeight += baseWeight
+		}
+
+		if random < cumulativeWeight {
+			return card
+		}
+	}
+
+	return eligibleCards[0]
+}
+
+func PickCardByRarity(hasSubscription bool, rarityName string) *models.Card {
+	deckMu.RLock()
+	if len(Deck) == 0 {
+		deckMu.RUnlock()
+		return nil
+	}
+
+	var eligibleCards []*models.Card
+	for i := range Deck {
+		if Deck[i].RequiredSubscription && !hasSubscription {
+			continue
+		}
+
+		if Deck[i].CardRarity.ID != 0 && Deck[i].CardRarity.Name == rarityName {
 			eligibleCards = append(eligibleCards, &Deck[i])
 		}
 	}
@@ -117,6 +183,55 @@ func GetCardByID(id uint) *models.Card {
 	deckMu.RLock()
 	defer deckMu.RUnlock()
 	return cardMap[id]
+}
+
+func GetUserRankFromTop5(db *gorm.DB, userID uint, guildID string) (rank int, distanceFromTop5 int, err error) {
+	var user models.User
+	if err := db.Where("id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
+		return 6, 1, nil
+	}
+
+	var allUsers []models.User
+	if err := db.Where("guild_id = ?", guildID).Order("points desc").Find(&allUsers).Error; err != nil {
+		return 0, 0, err
+	}
+
+	if len(allUsers) < 5 {
+		return 1, 0, nil
+	}
+
+	for i, u := range allUsers {
+		if u.ID == userID {
+			rank = i + 1
+			break
+		}
+	}
+
+	if rank == 0 {
+		return 6, 1, nil
+	}
+
+	if rank <= 5 {
+		distanceFromTop5 = 0
+	} else {
+		distanceFromTop5 = rank - 5
+	}
+
+	return rank, distanceFromTop5, nil
+}
+
+func calculateRarityMultiplier(distanceFromTop5 int) float64 {
+	if distanceFromTop5 <= 0 {
+		return 1.0
+	}
+
+	multiplier := 1.0 + (float64(distanceFromTop5) * 0.1)
+
+	if multiplier > 2.0 {
+		multiplier = 2.0
+	}
+
+	return multiplier
 }
 
 func LoadDeckFromDB(db *gorm.DB) error {
