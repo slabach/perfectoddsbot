@@ -9,6 +9,7 @@ import (
 	"perfectOddsBot/models"
 	"perfectOddsBot/scheduler"
 	"perfectOddsBot/services"
+	cardService "perfectOddsBot/services/cardService"
 	"perfectOddsBot/services/common"
 	"perfectOddsBot/services/guildService"
 	"perfectOddsBot/services/interactionService"
@@ -143,6 +144,11 @@ func runApp() {
 	err = services.SyncCards(db)
 	if err != nil {
 		log.Printf("Error syncing cards from code: %v", err)
+	}
+
+	err = cardService.LoadDeckFromDB(db)
+	if err != nil {
+		log.Printf("Error loading deck from database: %v", err)
 	}
 	defer func(dg *discordgo.Session) {
 		err := dg.Close()

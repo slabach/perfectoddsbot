@@ -1918,16 +1918,6 @@ func handleBlueShell(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 			deductAmount = firstPlaceUser.Points
 		}
 
-		if deductAmount > 0 {
-			firstPlaceUser.Points -= deductAmount
-			if firstPlaceUser.Points < 0 {
-				firstPlaceUser.Points = 0
-			}
-			if err := tx.Save(&firstPlaceUser).Error; err != nil {
-				return err
-			}
-		}
-
 		firstPlaceUsername := firstPlaceUser.Username
 		displayName := ""
 		if firstPlaceUsername == nil || *firstPlaceUsername == "" {
@@ -1937,9 +1927,11 @@ func handleBlueShell(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 		}
 
 		result = &models.CardResult{
-			Message:     fmt.Sprintf("The Blue Shell hit %s! They lost %.0f points.", displayName, deductAmount),
-			PointsDelta: 0,
-			PoolDelta:   0,
+			Message:           fmt.Sprintf("The Blue Shell hit %s! They lost %.0f points.", displayName, deductAmount),
+			PointsDelta:       0,
+			PoolDelta:         0,
+			TargetUserID:      &firstPlaceUser.DiscordID,
+			TargetPointsDelta: -deductAmount,
 		}
 		return nil
 	}); err != nil {
@@ -2779,4 +2771,152 @@ func ExecuteSocialDistancing(db *gorm.DB, userID string, targetUserID string, gu
 		TargetUserID:      &targetID,
 		TargetPointsDelta: 0,
 	}, nil
+}
+
+// func handleMarketCrash(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+// 	var result *models.CardResult
+// 	if err := db.Transaction(func(tx *gorm.DB) error {
+// 		var activeBets []models.Bet
+// 		if err := tx.Where("guild_id = ? AND paid = ?", guildID, false).Find(&activeBets).Error; err != nil {
+// 			return err
+// 		}
+
+// 		if len(activeBets) == 0 {
+// 			result = &models.CardResult{
+// 				Message:     "Market Crash! No active bets to cancel.",
+// 				PointsDelta: 0,
+// 				PoolDelta:   0,
+// 			}
+// 			return nil
+// 		}
+
+// 		betIDs := make([]uint, len(activeBets))
+// 		for i, bet := range activeBets {
+// 			betIDs[i] = bet.ID
+// 		}
+
+// 		var entries []models.BetEntry
+// 		if err := tx.Where("bet_id IN ?", betIDs).Find(&entries).Error; err != nil {
+// 			return err
+// 		}
+
+// 		totalPoolDelta := 0.0
+// 		for _, entry := range entries {
+// 			totalPoolDelta += float64(entry.Amount)
+// 		}
+
+// 		if err := tx.Model(&models.Bet{}).
+// 			Where("id IN ?", betIDs).
+// 			Updates(map[string]interface{}{
+// 				"active": false,
+// 				"paid":   true,
+// 			}).Error; err != nil {
+// 			return err
+// 		}
+
+// 		if err := tx.Where("bet_id IN ?", betIDs).Delete(&models.BetEntry{}).Error; err != nil {
+// 			return err
+// 		}
+
+// 		result = &models.CardResult{
+// 			Message:     fmt.Sprintf("Market Crash! All active bets currently placed are cancelled; All money bet on them goes to the Pool. %.1f points have been added to the pool.", totalPoolDelta),
+// 			PointsDelta: 0,
+// 			PoolDelta:   totalPoolDelta,
+// 		}
+// 		return nil
+// 	}); err != nil {
+// 		return nil, err
+// 	}
+
+// 	return result, nil
+// }
+
+func handleBlackHole(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	var result *models.CardResult
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		var guild models.Guild
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("guild_id = ?", guildID).
+			First(&guild).Error; err != nil {
+			return err
+		}
+
+		var allUsers []models.User
+		if err := tx.Where("guild_id = ? and deleted_at is null", guildID).Order("points ASC").Find(&allUsers).Error; err != nil {
+			return err
+		}
+
+		if len(allUsers) == 0 {
+			result = &models.CardResult{
+				Message:     "No players found in the server. The Black Hole has no one to distribute to.",
+				PointsDelta: 0,
+				PoolDelta:   0,
+			}
+			return nil
+		}
+
+		poolAmount := guild.Pool * 0.25
+		if poolAmount <= 0 {
+			result = &models.CardResult{
+				Message:     "The pool is empty. The Black Hole has nothing to distribute.",
+				PointsDelta: 0,
+				PoolDelta:   0,
+			}
+			return nil
+		}
+
+		numBottomPlayers := 5
+		if len(allUsers) < numBottomPlayers {
+			numBottomPlayers = len(allUsers)
+		}
+
+		bottomPlayers := allUsers[:numBottomPlayers]
+		amountPerPlayer := poolAmount / float64(numBottomPlayers)
+
+		var message string
+		var affectedUsers []string
+
+		for _, bottomPlayer := range bottomPlayers {
+			var lockedPlayer models.User
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&lockedPlayer, bottomPlayer.ID).Error; err != nil {
+				return err
+			}
+
+			lockedPlayer.Points += amountPerPlayer
+			if err := tx.Save(&lockedPlayer).Error; err != nil {
+				return err
+			}
+
+			playerName := lockedPlayer.Username
+			displayName := ""
+			if playerName == nil || *playerName == "" {
+				displayName = fmt.Sprintf("<@%s>", lockedPlayer.DiscordID)
+			} else {
+				displayName = *playerName
+			}
+			affectedUsers = append(affectedUsers, displayName)
+		}
+
+		guild.Pool -= poolAmount
+		if err := tx.Save(&guild).Error; err != nil {
+			return err
+		}
+
+		if len(affectedUsers) == 1 {
+			message = fmt.Sprintf("Black Hole activated! 25%% of the pool (%.0f points) was distributed to %s.", poolAmount, affectedUsers[0])
+		} else {
+			message = fmt.Sprintf("Black Hole activated! 25%% of the pool (%.0f points) was evenly distributed among the bottom %d players: %s.", poolAmount, numBottomPlayers, strings.Join(affectedUsers, ", "))
+		}
+
+		result = &models.CardResult{
+			Message:     message,
+			PointsDelta: 0,
+			PoolDelta:   -poolAmount,
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }

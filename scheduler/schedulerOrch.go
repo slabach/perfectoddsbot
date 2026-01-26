@@ -102,6 +102,12 @@ func SetupCron(s *discordgo.Session, db *gorm.DB) {
 		if err != nil {
 			fmt.Println(err)
 		}
+
+		// Runs every hour to refresh the deck from the database
+		err = scheduler_jobs.RefreshDeck(s, db)
+		if err != nil {
+			fmt.Println(err)
+		}
 	})
 
 	if err != nil {
