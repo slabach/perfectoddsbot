@@ -14,6 +14,7 @@ import (
 	"perfectOddsBot/services/guildService"
 	"perfectOddsBot/services/interactionService"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -231,7 +232,12 @@ func interactionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 func messageReactionAdd(s *discordgo.Session, r *discordgo.MessageReactionAdd) {
 	m, err := s.ChannelMessage(r.ChannelID, r.MessageID)
 	if err != nil {
-		log.Printf("Error fetching message for reaction: %v", err)
+		errStr := err.Error()
+		if strings.Contains(errStr, "invalid character") {
+			log.Printf("Error fetching message for reaction (API error): %v", err)
+		} else {
+			log.Printf("Error fetching message for reaction: %v", err)
+		}
 		return
 	}
 

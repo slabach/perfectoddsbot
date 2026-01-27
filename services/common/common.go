@@ -64,7 +64,18 @@ func SendError(s *discordgo.Session, i *discordgo.InteractionCreate, err error, 
 			},
 		})
 		if localErr != nil {
-			log.Printf("Error sending interaction: %v", localErr)
+			errStr := localErr.Error()
+			if strings.Contains(errStr, "expired") || strings.Contains(errStr, "invalid character") {
+				_, followUpErr := s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+					Content: fmt.Sprintf("An error occured: %v", err),
+					Flags:   discordgo.MessageFlagsEphemeral,
+				})
+				if followUpErr != nil {
+					log.Printf("Error sending interaction (expired): %v", localErr)
+				}
+			} else {
+				log.Printf("Error sending interaction: %v", localErr)
+			}
 		}
 	}
 	errLog := models.ErrorLog{
