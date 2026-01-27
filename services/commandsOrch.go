@@ -284,10 +284,33 @@ func RegisterCommands(s *discordgo.Session) error {
 		},
 	}
 
+	// map of commands to keep
+	regCommands := make(map[string]bool)
+	for _, cmd := range commands {
+		regCommands[cmd.Name] = true
+	}
+
+	// Fetch all existing commands
+	appID := s.State.User.ID
+	existingCommands, err := s.ApplicationCommands(appID, "")
+	if err != nil {
+		return fmt.Errorf("cannot fetch existing commands: %v", err)
+	}
+
+	// Delete any commands that aren't in our keep list
+	for _, existingCmd := range existingCommands {
+		if !regCommands[existingCmd.Name] {
+			err := s.ApplicationCommandDelete(appID, "", existingCmd.ID)
+			if err != nil {
+				return fmt.Errorf("cannot delete '%v' command: %v", existingCmd.Name, err)
+			}
+		}
+	}
+
 	registeredCommands := make([]*discordgo.ApplicationCommand, len(commands))
 
 	for i, cmd := range commands {
-		rcmd, err := s.ApplicationCommandCreate(s.State.User.ID, "", cmd)
+		rcmd, err := s.ApplicationCommandCreate(appID, "", cmd)
 		if err != nil {
 			return fmt.Errorf("cannot create '%v' command: %v", cmd.Name, err)
 		}
