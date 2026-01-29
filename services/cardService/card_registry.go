@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -275,6 +276,7 @@ func LoadDeckFromDB(db *gorm.DB) error {
 		cardMap[card.ID] = &Deck[len(Deck)-1]
 	}
 
+	rand.Seed(time.Now().UnixNano())
 	log.Printf("Loaded %d cards from database into deck (skipped %d cards without handlers)", len(Deck), skippedCount)
 	return nil
 }
