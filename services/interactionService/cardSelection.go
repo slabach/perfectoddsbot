@@ -1631,6 +1631,8 @@ func HandleCardOptionSelection(s *discordgo.Session, i *discordgo.InteractionCre
 				}
 
 				messageDetails := ""
+				shown := 0
+				const maxLines = 25
 
 				for i := range allUsers {
 					pointsChange := float64(rand.Intn(500) + 1)
@@ -1647,19 +1649,26 @@ func HandleCardOptionSelection(s *discordgo.Session, i *discordgo.InteractionCre
 						return err
 					}
 
-					username := allUsers[i].Username
-					displayName := ""
-					if username == nil || *username == "" {
-						displayName = fmt.Sprintf("<@%s>", allUsers[i].DiscordID)
-					} else {
-						displayName = *username
-					}
+					if shown < maxLines {
+						username := allUsers[i].Username
+						displayName := ""
+						if username == nil || *username == "" {
+							displayName = fmt.Sprintf("<@%s>", allUsers[i].DiscordID)
+						} else {
+							displayName = *username
+						}
 
-					sign := "+"
-					if pointsChange < 0 {
-						sign = ""
+						sign := "+"
+						if pointsChange < 0 {
+							sign = ""
+						}
+						messageDetails += fmt.Sprintf("%s: %s%.0f points\n", displayName, sign, pointsChange)
+						shown++
 					}
-					messageDetails += fmt.Sprintf("%s: %s%.0f points\n", displayName, sign, pointsChange)
+				}
+
+				if len(allUsers) > maxLines {
+					messageDetails += fmt.Sprintf("\n...and %d more.", len(allUsers)-maxLines)
 				}
 
 				result = &models.CardResult{
