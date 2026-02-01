@@ -419,6 +419,21 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 				}
 			}
 		}
+
+		emperorDiverted, emperorDivertedList, emperorApplied, err := cardService.ApplyTheEmperorIfApplicable(db, bet.GuildID, winnerDiscordIDs)
+		if err != nil {
+			common.SendError(s, i, fmt.Errorf("error checking The Emperor: %v", err), db)
+			return
+		}
+		if emperorApplied && emperorDiverted > 0 {
+			totalPayout -= emperorDiverted
+			if len(emperorDivertedList) > 0 {
+				for _, diverted := range emperorDivertedList {
+					username := common.GetUsernameWithDB(db, s, bet.GuildID, diverted.DiscordID)
+					winnersList += fmt.Sprintf("%s - $%.1f diverted to pool (The Emperor)\n", username, diverted.Diverted)
+				}
+			}
+		}
 	}
 
 	if lostPoolAmount > 0 {

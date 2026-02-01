@@ -2252,3 +2252,154 @@ func TestApplyTheDevilIfApplicable(t *testing.T) {
 		}
 	})
 }
+
+func TestApplyTheEmperorIfApplicable(t *testing.T) {
+	t.Run("Emperor active, one non-holder winner (10% diverted to pool)", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		guildID := "guild1"
+		emperorHolderDiscordID := "emperor123"
+		winnerDiscordID := "winner456"
+		winnerWinnings := 1000.0
+		expectedDiverted := 100.0
+
+		oneHourLater := time.Now().Add(1 * time.Hour)
+		mock.ExpectQuery("SELECT \\* FROM `guilds`").
+			WithArgs(guildID, 1).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "created_at", "updated_at", "deleted_at", "guild_id", "guild_name", "bet_channel_id", "points_per_message", "starting_points", "premium_enabled", "subscribed_team", "pool", "card_draw_cost", "card_draw_cooldown_minutes", "card_drawing_enabled", "pool_drain_until", "emperor_active_until", "emperor_holder_discord_id", "total_card_draws", "last_epic_draw_at", "last_mythic_draw_at"}).
+				AddRow(1, time.Now(), time.Now(), nil, guildID, "", "", 0, 0, false, nil, 500.0, 10, 60, true, nil, oneHourLater, emperorHolderDiscordID, 0, 0, 0))
+
+		winnerUserID := uint(3)
+		mock.ExpectQuery("SELECT \\* FROM `users`").
+			WithArgs(winnerDiscordID, guildID, 1).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "discord_id", "guild_id", "points"}).
+				AddRow(winnerUserID, winnerDiscordID, guildID, 600.0))
+
+		mock.ExpectBegin()
+		mock.ExpectExec("UPDATE `users` SET `points`=").
+			WithArgs(sqlmock.AnyArg(), winnerUserID).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectCommit()
+
+		mock.ExpectBegin()
+		mock.ExpectExec("UPDATE `guilds` SET `pool`=").
+			WithArgs(sqlmock.AnyArg(), 1).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectCommit()
+
+		winnerDiscordIDs := make(map[string]float64)
+		winnerDiscordIDs[winnerDiscordID] = winnerWinnings
+		totalDiverted, divertedList, applied, err := ApplyTheEmperorIfApplicable(db, guildID, winnerDiscordIDs)
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if !applied {
+			t.Error("Expected The Emperor to be applied")
+		}
+		if totalDiverted != expectedDiverted {
+			t.Errorf("Expected total diverted %.2f, got %.2f", expectedDiverted, totalDiverted)
+		}
+		if len(divertedList) != 1 {
+			t.Errorf("Expected 1 diverted entry, got %d", len(divertedList))
+		}
+		if len(divertedList) > 0 && divertedList[0].DiscordID != winnerDiscordID {
+			t.Errorf("Expected diverted DiscordID '%s', got '%s'", winnerDiscordID, divertedList[0].DiscordID)
+		}
+		if len(divertedList) > 0 && divertedList[0].Diverted != expectedDiverted {
+			t.Errorf("Expected diverted amount %.2f, got %.2f", expectedDiverted, divertedList[0].Diverted)
+		}
+		if winnerDiscordIDs[winnerDiscordID] != winnerWinnings-expectedDiverted {
+			t.Errorf("Expected winnerDiscordIDs to be reduced to %.2f, got %.2f", winnerWinnings-expectedDiverted, winnerDiscordIDs[winnerDiscordID])
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+
+	t.Run("Emperor active, holder is winner (holder excluded from diversion)", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		guildID := "guild1"
+		emperorHolderDiscordID := "emperor123"
+		oneHourLater := time.Now().Add(1 * time.Hour)
+		mock.ExpectQuery("SELECT \\* FROM `guilds`").
+			WithArgs(guildID, 1).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "created_at", "updated_at", "deleted_at", "guild_id", "guild_name", "bet_channel_id", "points_per_message", "starting_points", "premium_enabled", "subscribed_team", "pool", "card_draw_cost", "card_draw_cooldown_minutes", "card_drawing_enabled", "pool_drain_until", "emperor_active_until", "emperor_holder_discord_id", "total_card_draws", "last_epic_draw_at", "last_mythic_draw_at"}).
+				AddRow(1, time.Now(), time.Now(), nil, guildID, "", "", 0, 0, false, nil, 500.0, 10, 60, true, nil, oneHourLater, emperorHolderDiscordID, 0, 0, 0))
+
+		winnerDiscordIDs := make(map[string]float64)
+		winnerDiscordIDs[emperorHolderDiscordID] = 1000.0
+		totalDiverted, divertedList, applied, err := ApplyTheEmperorIfApplicable(db, guildID, winnerDiscordIDs)
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if !applied {
+			t.Error("Expected The Emperor to be applied (even if no diversion)")
+		}
+		if totalDiverted != 0 {
+			t.Errorf("Expected total diverted 0 (holder excluded), got %.2f", totalDiverted)
+		}
+		if len(divertedList) != 0 {
+			t.Errorf("Expected 0 diverted entries, got %d", len(divertedList))
+		}
+		if winnerDiscordIDs[emperorHolderDiscordID] != 1000.0 {
+			t.Errorf("Expected holder winnings unchanged at 1000, got %.2f", winnerDiscordIDs[emperorHolderDiscordID])
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+
+	t.Run("Emperor not active (nil state), no diversion", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		guildID := "guild1"
+		mock.ExpectQuery("SELECT \\* FROM `guilds`").
+			WithArgs(guildID, 1).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "created_at", "updated_at", "deleted_at", "guild_id", "pool", "emperor_active_until", "emperor_holder_discord_id"}).
+				AddRow(1, time.Now(), time.Now(), nil, guildID, 500.0, nil, nil))
+
+		winnerDiscordIDs := make(map[string]float64)
+		winnerDiscordIDs["winner456"] = 1000.0
+		totalDiverted, divertedList, applied, err := ApplyTheEmperorIfApplicable(db, guildID, winnerDiscordIDs)
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if applied {
+			t.Error("Expected The Emperor NOT to be applied (no active state)")
+		}
+		if totalDiverted != 0 {
+			t.Errorf("Expected total diverted 0, got %.2f", totalDiverted)
+		}
+		if len(divertedList) != 0 {
+			t.Errorf("Expected 0 diverted entries, got %d", len(divertedList))
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+}

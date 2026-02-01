@@ -13,6 +13,7 @@ import (
 	"perfectOddsBot/services/guildService"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"gorm.io/gorm"
@@ -1763,6 +1764,10 @@ func HandlePlayCardSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 		return handlePoolBoyPlay(s, i, db, selectedCardID, userID, guildID)
 	}
 
+	if selectedCardID == cards.TheEmperorCardID {
+		return handleEmperorPlay(s, i, db, selectedCardID, userID, guildID)
+	}
+
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
@@ -1957,6 +1962,54 @@ func HandlePlayCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCr
 		embed := buildCardResultEmbed(card, &models.CardResult{
 			Message:     fmt.Sprintf("You cancelled your bet: **%s** and received a refund of **%d** points.", bet.Description, refundAmount),
 			PointsDelta: float64(refundAmount),
+			PoolDelta:   0,
+		}, user, "", guild.Pool)
+
+		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Embeds: []*discordgo.MessageEmbed{embed},
+				Flags:  discordgo.MessageFlagsEphemeral,
+			},
+		})
+	})
+}
+
+func handleEmperorPlay(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, cardID uint, userID string, guildID string) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		var user models.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("discord_id = ? AND guild_id = ?", userID, guildID).
+			First(&user).Error; err != nil {
+			return fmt.Errorf("user not found: %v", err)
+		}
+
+		var guild models.Guild
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("guild_id = ?", guildID).
+			First(&guild).Error; err != nil {
+			return fmt.Errorf("guild not found: %v", err)
+		}
+
+		card := cardService.GetCardByID(cardID)
+		if card == nil {
+			return fmt.Errorf("card not found: %d", cardID)
+		}
+
+		oneHourLater := time.Now().Add(1 * time.Hour)
+		guild.EmperorActiveUntil = &oneHourLater
+		guild.EmperorHolderDiscordID = &userID
+		if err := tx.Save(&guild).Error; err != nil {
+			return fmt.Errorf("error setting Emperor state: %v", err)
+		}
+
+		if err := cardService.PlayCardFromInventoryWithMessage(s, tx, user, cardID, fmt.Sprintf("<@%s> played **%s** and gained Authority! For the next hour, 10%% of all points won by other players will be diverted to the pool.", userID, card.Name)); err != nil {
+			return fmt.Errorf("error consuming card: %v", err)
+		}
+
+		embed := buildCardResultEmbed(card, &models.CardResult{
+			Message:     "You gained Authority for 1 hour! 10% of all points won by other players will be diverted to the pool.",
+			PointsDelta: 0,
 			PoolDelta:   0,
 		}, user, "", guild.Pool)
 

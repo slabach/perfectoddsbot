@@ -415,6 +415,17 @@ func handleTimeout(s *discordgo.Session, db *gorm.DB, userID string, guildID str
 	if moonRedirected {
 		randomUserID, err := GetRandomUserForMoon(db, guildID, []uint{user.ID})
 		if err != nil {
+			spareKeyBlocked, err := checkAndConsumeSpareKey(db, user.ID, guildID)
+			if err != nil {
+				return nil, err
+			}
+			if spareKeyBlocked {
+				return &models.CardResult{
+					Message:     fmt.Sprintf("<@%s>'s Moon illusion tried to redirect, but no eligible users found. Spare Key blocked the Timeout instead!", userID),
+					PointsDelta: 0,
+					PoolDelta:   0,
+				}, nil
+			}
 			shieldBlocked, err := checkAndConsumeShield(db, user.ID, guildID)
 			if err != nil {
 				return nil, err
@@ -2687,6 +2698,14 @@ func handleVampire(s *discordgo.Session, db *gorm.DB, userID string, guildID str
 	}, nil
 }
 
+func handleTheEmperor(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	return &models.CardResult{
+		Message:     fmt.Sprintf("<@%s> drew The Emperor! Use /play-card to play this card and gain Authority for 1 hour: 10%% of all points won by other players will be diverted to the pool.", userID),
+		PointsDelta: 0,
+		PoolDelta:   0,
+	}, nil
+}
+
 func handleLeech(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
 	return &models.CardResult{
 		Message:     "You've drawn The Leech! For the next 12 hours, you'll siphon 1% of the richest player's points every hour.",
@@ -4003,16 +4022,11 @@ func handleTheEmpress(s *discordgo.Session, db *gorm.DB, userID string, guildID 
 		}
 
 		gainAmount := 200.0
-		poorestUser.Points += gainAmount
-		if err := tx.Save(&poorestUser).Error; err != nil {
-			return err
-		}
-
 		poorestUserMention := "<@" + poorestUser.DiscordID + ">"
 		result = &models.CardResult{
 			Message:           fmt.Sprintf("The Empress blesses the poor! %s (in last place) gained %.0f points.", poorestUserMention, gainAmount),
 			PointsDelta:       0,
-			PoolDelta:         0,
+			PoolDelta:         -gainAmount,
 			TargetUserID:      &poorestUser.DiscordID,
 			TargetPointsDelta: gainAmount,
 		}

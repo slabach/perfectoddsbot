@@ -40,6 +40,7 @@ const (
 	TheStarCardID           = 93
 	TheMoonCardID           = 94
 	TheMagicianCardID       = 95
+	TheEmperorCardID        = 96
 	TheWheelOfFortuneCardID = 97
 	TheSunCardID            = 100
 	JudgementCardID         = 101

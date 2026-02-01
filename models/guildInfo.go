@@ -21,6 +21,8 @@ type Guild struct {
 	CardDrawCooldownMinutes int     `gorm:"default:60"`
 	CardDrawingEnabled      bool    `gorm:"default:true"`
 	PoolDrainUntil          *time.Time
+	EmperorActiveUntil      *time.Time
+	EmperorHolderDiscordID  *string
 	TotalCardDraws          int `gorm:"default:0"`
 	LastEpicDrawAt         int `gorm:"default:0"`
 	LastMythicDrawAt        int `gorm:"default:0"`

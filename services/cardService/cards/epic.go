@@ -143,15 +143,15 @@ func registerEpicCards(deck *[]models.Card) {
 			Description: "Choose a user. You 'borrow' one of their cards (excluding Mythics) from their inventory and play it for yourself immediately instead (removed from their inventory)",
 			Handler:     handleTheMagician,
 		},
-		// {
-		// 	ID:          96,
-		// 	Code:        "ROR",
-		// 	Name:        "The Emperor",
-		// 	Description: "**User Playable Card** Play this card at any point to gain Authority. For the next hour, 10% of all points won by other players are diverted into the pool.",
-		// 	Handler:     handleTheEmperor,
-		// 	AddToInventory: true,
-		//  UserPlayable: true,
-		// },
+		{
+			ID:             96,
+			Code:           "ROR",
+			Name:           "The Emperor",
+			Description:    "**User Playable Card** Play this card at any point to gain Authority. For the next hour, 10% of all points won by other players are diverted into the pool.",
+			Handler:        handleTheEmperor,
+			AddToInventory: true,
+			UserPlayable:   true,
+		},
 		{
 			ID:          97,
 			Code:        "FOT",
@@ -170,13 +170,6 @@ func registerEpicCards(deck *[]models.Card) {
 				},
 			},
 			Handler: handleTheWheelOfFortune,
-		},
-		{
-			ID:          98,
-			Code:        "DTH",
-			Name:        "Death",
-			Description: "Transformation. Every 'positive' inventory card (eg. Shield/Double Down/etc) currently held by any player (except Mythics) is destroyed. 100 points are drained from the pool for each card destroyed.",
-			Handler:     handleDeath,
 		},
 		{
 			ID:             99,

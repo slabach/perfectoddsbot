@@ -49,6 +49,13 @@ func registerMythicCards(deck *[]models.Card) {
 		// 	AddToInventory:       true,
 		// 	RoyaltyDiscordUserID: &[]string{"313553928115716097"}[0],
 		// },
+		{
+			ID:          98,
+			Code:        "DTH",
+			Name:        "Death",
+			Description: "Transformation. Every 'positive' inventory card (eg. Shield/Double Down/etc) currently held by any player (except Mythics) is destroyed. 100 points are drained from the pool for each card destroyed.",
+			Handler:     handleDeath,
+		},
 		// {
 		// 	ID:          102,
 		// 	Code:        "TOW",

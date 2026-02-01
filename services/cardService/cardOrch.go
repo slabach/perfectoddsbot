@@ -582,6 +582,11 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 			return
 		}
 		if hasMoon {
+			if err := PlayCardFromInventory(s, tx, user, cards.TheMoonCardID); err != nil {
+				tx.Rollback()
+				common.SendError(s, i, err, db)
+				return
+			}
 			randomUserID, err := getRandomUserForMoonFromCards(tx, guildID, []uint{user.ID})
 			if err != nil {
 				hasShield, err := hasShieldInInventory(tx, user.ID, guildID)
@@ -622,12 +627,6 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 				redirectedLoss := -cardResult.PointsDelta
 				if randomUser.Points < redirectedLoss {
 					redirectedLoss = randomUser.Points
-				}
-
-				if err := PlayCardFromInventory(s, tx, user, cards.TheMoonCardID); err != nil {
-					tx.Rollback()
-					common.SendError(s, i, err, db)
-					return
 				}
 
 				randomMention := "<@" + randomUserID + ">"
@@ -683,6 +682,11 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 					return
 				}
 				if hasMoon {
+					if err := PlayCardFromInventory(s, tx, targetUser, cards.TheMoonCardID); err != nil {
+						tx.Rollback()
+						common.SendError(s, i, err, db)
+						return
+					}
 					randomUserID, err := getRandomUserForMoonFromCards(tx, guildID, []uint{targetUser.ID, user.ID})
 					if err != nil {
 						hasShield, err := hasShieldInInventory(tx, targetUser.ID, guildID)
@@ -723,12 +727,6 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 						redirectedLoss := -cardResult.TargetPointsDelta
 						if randomUser.Points < redirectedLoss {
 							redirectedLoss = randomUser.Points
-						}
-
-						if err := PlayCardFromInventory(s, tx, targetUser, cards.TheMoonCardID); err != nil {
-							tx.Rollback()
-							common.SendError(s, i, err, db)
-							return
 						}
 
 						randomMention := "<@" + randomUserID + ">"
@@ -952,7 +950,7 @@ func ShowFilteredUserSelectMenu(s *discordgo.Session, i *discordgo.InteractionCr
 		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
-				Content: fmt.Sprintf("🎴 <@%s> drew **%s**!\n%s\n\nNo users found within %.0f points of you (you have %.1f points). Hostile Takeover fizzles out.", userID, cardName, cardDescription, maxPointDifference, drawer.Points),
+				Content: fmt.Sprintf("🎴 <@%s> drew **%s**!\n%s\n\nNo users found within %.0f points of you (you have %.1f points). This card fizzles out.", userID, cardName, cardDescription, maxPointDifference, drawer.Points),
 				Flags:   discordgo.MessageFlagsEphemeral,
 			},
 		})
@@ -1557,10 +1555,71 @@ func ApplyTheDevilIfApplicable(db *gorm.DB, guildID string, winnerDiscordIDs map
 	return totalDiverted, diverted, applied, nil
 }
 
+type EmperorDiverted struct {
+	DiscordID string
+	Diverted  float64
+}
+
+func ApplyTheEmperorIfApplicable(db *gorm.DB, guildID string, winnerDiscordIDs map[string]float64) (totalDiverted float64, diverted []EmperorDiverted, applied bool, err error) {
+	var guild models.Guild
+	if err := db.Where("guild_id = ?", guildID).First(&guild).Error; err != nil {
+		return 0, nil, false, err
+	}
+
+	now := time.Now()
+	if guild.EmperorActiveUntil == nil || now.After(*guild.EmperorActiveUntil) {
+		if guild.EmperorActiveUntil != nil || guild.EmperorHolderDiscordID != nil {
+			_ = db.Model(&guild).Updates(map[string]interface{}{
+				"emperor_active_until":      nil,
+				"emperor_holder_discord_id": nil,
+			})
+		}
+		return 0, nil, false, nil
+	}
+	if guild.EmperorHolderDiscordID == nil {
+		return 0, nil, false, nil
+	}
+
+	holderDiscordID := *guild.EmperorHolderDiscordID
+	totalDiverted = 0.0
+	applied = true
+	diverted = []EmperorDiverted{}
+
+	for discordID, winnings := range winnerDiscordIDs {
+		if discordID == holderDiscordID || winnings <= 0 {
+			continue
+		}
+		divertedAmount := winnings * 0.10
+		totalDiverted += divertedAmount
+		winnerDiscordIDs[discordID] = winnings - divertedAmount
+
+		var user models.User
+		if err := db.Where("discord_id = ? AND guild_id = ?", discordID, guildID).First(&user).Error; err != nil {
+			return totalDiverted, diverted, applied, err
+		}
+		if err := db.Model(&user).UpdateColumn("points", gorm.Expr("points - ?", divertedAmount)).Error; err != nil {
+			return totalDiverted, diverted, applied, err
+		}
+
+		diverted = append(diverted, EmperorDiverted{
+			DiscordID: discordID,
+			Diverted:  divertedAmount,
+		})
+	}
+
+	if totalDiverted > 0 {
+		if err := db.Model(&guild).UpdateColumn("pool", gorm.Expr("pool + ?", totalDiverted)).Error; err != nil {
+			return totalDiverted, diverted, applied, err
+		}
+	}
+
+	return totalDiverted, diverted, applied, nil
+}
+
 func ApplyTheLoversIfApplicable(db *gorm.DB, guildID string, winnerDiscordIDs map[string]float64) (totalLoversPayout float64, winners []LoversWinner, applied bool, err error) {
 	twentyFourHoursAgo := time.Now().Add(-24 * time.Hour)
 	var loversCards []models.UserInventory
-	err = db.Where("guild_id = ? AND card_id = ? AND created_at >= ? AND target_user_id IS NOT NULL", guildID, cards.TheLoversCardID, twentyFourHoursAgo).
+	err = db.Where("guild_id = ? AND card_id = ? AND created_at >= ? AND target_user_id IS NOT NULL AND deleted_at IS NULL", guildID, cards.TheLoversCardID, twentyFourHoursAgo).
 		Find(&loversCards).Error
 
 	if err != nil {
