@@ -389,6 +389,59 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 				}
 			}
 		}
+
+		loversPayout, loversWinners, loversApplied, err := cardService.ApplyTheLoversIfApplicable(db, bet.GuildID, winnerDiscordIDs)
+		if err != nil {
+			common.SendError(s, i, fmt.Errorf("error checking The Lovers: %v", err), db)
+			return
+		}
+		if loversApplied && loversPayout > 0 {
+			totalPayout += loversPayout
+			if len(loversWinners) > 0 {
+				for _, winner := range loversWinners {
+					username := common.GetUsernameWithDB(db, s, bet.GuildID, winner.DiscordID)
+					winnersList += fmt.Sprintf("%s - Won $%.1f (The Lovers)\n", username, winner.Payout)
+				}
+			}
+		}
+
+		devilDiverted, devilDivertedList, devilApplied, err := cardService.ApplyTheDevilIfApplicable(db, bet.GuildID, winnerDiscordIDs)
+		if err != nil {
+			common.SendError(s, i, fmt.Errorf("error checking The Devil: %v", err), db)
+			return
+		}
+		if devilApplied && devilDiverted > 0 {
+			totalPayout -= devilDiverted
+			if len(devilDivertedList) > 0 {
+				for _, diverted := range devilDivertedList {
+					username := common.GetUsernameWithDB(db, s, bet.GuildID, diverted.DiscordID)
+					netAmount := winnerDiscordIDs[diverted.DiscordID]
+					grossAmount := netAmount + diverted.Diverted
+					oldStr := fmt.Sprintf("%s - Won $%.1f", username, grossAmount)
+					newStr := fmt.Sprintf("%s - Won $%.1f ($%.1f diverted to pool via The Devil)", username, netAmount, diverted.Diverted)
+					winnersList = strings.Replace(winnersList, oldStr, newStr, 1)
+				}
+			}
+		}
+
+		emperorDiverted, emperorDivertedList, emperorApplied, err := cardService.ApplyTheEmperorIfApplicable(db, bet.GuildID, winnerDiscordIDs)
+		if err != nil {
+			common.SendError(s, i, fmt.Errorf("error checking The Emperor: %v", err), db)
+			return
+		}
+		if emperorApplied && emperorDiverted > 0 {
+			totalPayout -= emperorDiverted
+			if len(emperorDivertedList) > 0 {
+				for _, diverted := range emperorDivertedList {
+					username := common.GetUsernameWithDB(db, s, bet.GuildID, diverted.DiscordID)
+					netAmount := winnerDiscordIDs[diverted.DiscordID]
+					grossAmount := netAmount + diverted.Diverted
+					oldStr := fmt.Sprintf("%s - Won $%.1f", username, grossAmount)
+					newStr := fmt.Sprintf("%s - Won $%.1f ($%.1f diverted to pool via The Emperor)", username, netAmount, diverted.Diverted)
+					winnersList = strings.Replace(winnersList, oldStr, newStr, 1)
+				}
+			}
+		}
 	}
 
 	if lostPoolAmount > 0 {

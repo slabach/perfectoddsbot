@@ -110,6 +110,11 @@ func runApp() {
 		log.Fatalf("Error migrating database: %v", err)
 	}
 
+	err = services.RunUserInventoryTimesAppliedBackfill(db)
+	if err != nil {
+		log.Fatalf("Error running user inventory times_applied backfill: %v", err)
+	}
+
 	token := os.Getenv("DISCORD_BOT_TOKEN")
 	if token == "" {
 		log.Fatalf("DISCORD_BOT_TOKEN not set in environment variables")

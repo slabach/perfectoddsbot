@@ -597,6 +597,53 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 				}
 			}
 		}
+
+		loversPayout, loversWinners, loversApplied, err := cardService.ApplyTheLoversIfApplicable(db, bet.GuildID, winnerDiscordIDs)
+		if err != nil {
+			log.Printf("Error checking The Lovers: %v", err)
+		} else if loversApplied && loversPayout > 0 {
+			totalPayout += loversPayout
+			if len(loversWinners) > 0 {
+				for _, winner := range loversWinners {
+					cardHolderUsername := common.GetUsernameWithDB(db, s, bet.GuildID, winner.DiscordID)
+					winnersList += fmt.Sprintf("%s - **Won $%.1f** (The Lovers)\n", cardHolderUsername, winner.Payout)
+				}
+			}
+		}
+
+		devilDiverted, devilDivertedList, devilApplied, err := cardService.ApplyTheDevilIfApplicable(db, bet.GuildID, winnerDiscordIDs)
+		if err != nil {
+			log.Printf("Error checking The Devil: %v", err)
+		} else if devilApplied && devilDiverted > 0 {
+			totalPayout -= devilDiverted
+			if len(devilDivertedList) > 0 {
+				for _, diverted := range devilDivertedList {
+					cardHolderUsername := common.GetUsernameWithDB(db, s, bet.GuildID, diverted.DiscordID)
+					netAmount := winnerDiscordIDs[diverted.DiscordID]
+					grossAmount := netAmount + diverted.Diverted
+					oldStr := fmt.Sprintf("**Won $%.1f**", grossAmount)
+					newStr := fmt.Sprintf("**Won $%.1f** ($%.1f diverted to pool via The Devil)", netAmount, diverted.Diverted)
+					winnersList = replaceWonAmountInUserLine(winnersList, cardHolderUsername, oldStr, newStr)
+				}
+			}
+		}
+
+		emperorDiverted, emperorDivertedList, emperorApplied, err := cardService.ApplyTheEmperorIfApplicable(db, bet.GuildID, winnerDiscordIDs)
+		if err != nil {
+			log.Printf("Error checking The Emperor: %v", err)
+		} else if emperorApplied && emperorDiverted > 0 {
+			totalPayout -= emperorDiverted
+			if len(emperorDivertedList) > 0 {
+				for _, diverted := range emperorDivertedList {
+					cardHolderUsername := common.GetUsernameWithDB(db, s, bet.GuildID, diverted.DiscordID)
+					netAmount := winnerDiscordIDs[diverted.DiscordID]
+					grossAmount := netAmount + diverted.Diverted
+					oldStr := fmt.Sprintf("**Won $%.1f**", grossAmount)
+					newStr := fmt.Sprintf("**Won $%.1f** ($%.1f diverted to pool via The Emperor)", netAmount, diverted.Diverted)
+					winnersList = replaceWonAmountInUserLine(winnersList, cardHolderUsername, oldStr, newStr)
+				}
+			}
+		}
 	}
 
 	if lostPoolAmount > 0 {
@@ -629,4 +676,18 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 	}
 
 	return nil
+}
+
+// replaceWonAmountInUserLine finds the line for the given username that contains oldStr and replaces oldStr with newStr.
+// Winner lines may be bet-based (e.g. "username - Bet: ... - **Won $X**") or card-based (e.g. "username - **Won $X** (Vampire)").
+func replaceWonAmountInUserLine(winnersList, username, oldStr, newStr string) string {
+	prefix := username + " - "
+	lines := strings.Split(winnersList, "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(line, prefix) && strings.Contains(line, oldStr) {
+			lines[i] = strings.Replace(line, oldStr, newStr, 1)
+			break
+		}
+	}
+	return strings.Join(lines, "\n")
 }

@@ -103,6 +103,18 @@ func SetupCron(s *discordgo.Session, db *gorm.DB) {
 			fmt.Println(err)
 		}
 
+		// Runs every hour to process The Hanged Man cards after 24 hours
+		err = scheduler_jobs.CheckHangedMan(s, db)
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		// Runs every hour to expire The Devil cards after 7 days
+		err = scheduler_jobs.CheckTheDevil(s, db)
+		if err != nil {
+			fmt.Println(err)
+		}
+
 		// Runs every hour to refresh the deck from the database
 		err = scheduler_jobs.RefreshDeck(s, db)
 		if err != nil {

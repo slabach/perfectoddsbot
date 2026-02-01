@@ -20,6 +20,7 @@ func registerUncommonCards(deck *[]models.Card) {
 			Description:    "Blocks the next 'Steal' or negative effect played against you.",
 			Handler:        handleShield,
 			AddToInventory: true,
+			IsPositive:     true,
 		},
 		{
 			ID:                   26,
@@ -73,6 +74,7 @@ func registerUncommonCards(deck *[]models.Card) {
 			Description:    "If you lose your next bet, get 25% of your wager back.",
 			Handler:        handleBetInsurance,
 			AddToInventory: true,
+			IsPositive:     true,
 		},
 		{
 			ID:          36,
@@ -141,6 +143,7 @@ func registerUncommonCards(deck *[]models.Card) {
 			Description:    "Reduces all your card-buying costs by 50% for 12 hours.",
 			Handler:        handleShoppingSpree,
 			AddToInventory: true,
+			IsPositive:     true,
 		},
 		// // {
 		// // 	ID:          209,
@@ -206,6 +209,39 @@ func registerUncommonCards(deck *[]models.Card) {
 			Handler:              handleGambler,
 			RoyaltyDiscordUserID: &[]string{"447827835797766144"}[0],
 			AddToInventory:       true,
+			IsPositive:           true,
+		},
+		{
+			ID:          219,
+			Code:        "TLO",
+			Name:        "The Lovers (🔮)",
+			Description: "Choose another user. For the next 24 hours, you'll earn 25% of every bet won by them.",
+			Handler:     handleTheLovers,
+			IsPositive:  true,
+		},
+		{
+			ID:          220,
+			Code:        "TRE",
+			Name:        "The Hierophant (🔮)",
+			Description: "A group blessing. Everyone in the server gains 50 points. but 500 points are drained from the pool to fund it.",
+			Handler:     handleTheHierophant,
+			Expansion:   "Tarot",
+		},
+		{
+			ID:          221,
+			Code:        "HER",
+			Name:        "The Hermit (🔮)",
+			Description: "You go into seclusion. You gain a shield, but you cannot buy any new cards for 12 hours.",
+			Handler:     handleTheHermit,
+			Expansion:   "Tarot",
+		},
+		{
+			ID:          222,
+			Code:        "STR",
+			Name:        "Strength (🔮)",
+			Description: "You block the next 'Steal' or negative effect played against you with your strength. (Gain a shield)",
+			Handler:     handleStrength,
+			Expansion:   "Tarot",
 		},
 	}
 
