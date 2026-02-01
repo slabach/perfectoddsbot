@@ -14,4 +14,5 @@ type UserInventory struct {
 	TargetUserID *string `gorm:"size:64"`
 	BetAmount    float64
 	User         User `gorm:"foreignKey:UserID; constraint:OnDelete:CASCADE"`
+	TimesApplied int  `gorm:"default:0"`
 }

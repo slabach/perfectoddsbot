@@ -49,6 +49,20 @@ func registerMythicCards(deck *[]models.Card) {
 		// 	AddToInventory:       true,
 		// 	RoyaltyDiscordUserID: &[]string{"313553928115716097"}[0],
 		// },
+		// {
+		// 	ID:          102,
+		// 	Code:        "TOW",
+		// 	Name:        "The Tower",
+		// 	Description: "Sudden Collapse. The pool is instantly reduced by 75%. Every player loses 50 points as the debris settles.",
+		// 	Handler:     handleTheTower,
+		// },
+		// {
+		// 	ID:          103,
+		// 	Code:        "WOR",
+		// 	Name:        "The World",
+		// 	Description: "Completion. Win 5% of the pool and immediately resolve one of your open bets as a win.",
+		// 	Handler:     handleTheWorld,
+		// },
 	}
 
 	*deck = append(*deck, mythicCards...)

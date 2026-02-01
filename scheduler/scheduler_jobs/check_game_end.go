@@ -597,6 +597,32 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 				}
 			}
 		}
+
+		loversPayout, loversWinners, loversApplied, err := cardService.ApplyTheLoversIfApplicable(db, bet.GuildID, winnerDiscordIDs)
+		if err != nil {
+			log.Printf("Error checking The Lovers: %v", err)
+		} else if loversApplied && loversPayout > 0 {
+			totalPayout += loversPayout
+			if len(loversWinners) > 0 {
+				for _, winner := range loversWinners {
+					cardHolderUsername := common.GetUsernameWithDB(db, s, bet.GuildID, winner.DiscordID)
+					winnersList += fmt.Sprintf("%s - **Won $%.1f** (The Lovers)\n", cardHolderUsername, winner.Payout)
+				}
+			}
+		}
+
+		devilDiverted, devilDivertedList, devilApplied, err := cardService.ApplyTheDevilIfApplicable(db, bet.GuildID, winnerDiscordIDs)
+		if err != nil {
+			log.Printf("Error checking The Devil: %v", err)
+		} else if devilApplied && devilDiverted > 0 {
+			totalPayout -= devilDiverted
+			if len(devilDivertedList) > 0 {
+				for _, diverted := range devilDivertedList {
+					cardHolderUsername := common.GetUsernameWithDB(db, s, bet.GuildID, diverted.DiscordID)
+					winnersList += fmt.Sprintf("%s - **$%.1f diverted to pool** (The Devil)\n", cardHolderUsername, diverted.Diverted)
+				}
+			}
+		}
 	}
 
 	if lostPoolAmount > 0 {

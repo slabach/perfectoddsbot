@@ -116,6 +116,7 @@ func registerCommonCards(deck *[]models.Card) {
 			Description:    "The next card you buy costs half price.",
 			Handler:        handleLuckyHorseshoe,
 			AddToInventory: true,
+			IsPositive:     true,
 		},
 		{
 			ID:             18,
@@ -188,6 +189,7 @@ func registerCommonCards(deck *[]models.Card) {
 			Description:    "Use this to ignore your next 'Timeout' or card-buying restriction.",
 			Handler:        handleSpareKey,
 			AddToInventory: true,
+			IsPositive:     true,
 		},
 		{
 			ID:             123,
@@ -196,6 +198,7 @@ func registerCommonCards(deck *[]models.Card) {
 			Description:    "The next card you buy is 25% off.",
 			Handler:        handleCoupon,
 			AddToInventory: true,
+			IsPositive:     true,
 		},
 		{
 			ID:          210,
@@ -217,6 +220,13 @@ func registerCommonCards(deck *[]models.Card) {
 			Name:        "Spy Kids 3D",
 			Description: "You're now a super spy. You view the number of cards until the next Epic or Mythic card is guaranteed",
 			Handler:     handleSpyKids,
+		},
+		{
+			ID:          218,
+			Code:        "TFO",
+			Name:        "The Fool",
+			Description: "You take a leap of faith. Gain or lose 1-100 points at random.",
+			Handler:     handleTheFool,
 		},
 	}
 

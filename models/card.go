@@ -25,6 +25,7 @@ type Card struct {
 	Options              []CardOption
 	UserPlayable         bool `gorm:"default:false"`
 	Active               bool `gorm:"default:true"`
+	IsPositive           bool `gorm:"default:false"`
 }
 
 type CardOption struct {

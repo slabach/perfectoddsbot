@@ -2,6 +2,7 @@ package cardService
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/cardService/cards"
@@ -178,6 +179,35 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 
 			drawCardCost = 0
 		}
+	}
+
+	var chariotInventory models.UserInventory
+	err = tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("user_id = ? AND guild_id = ? AND card_id = ? AND deleted_at IS NULL",
+			user.ID, guildID, cards.TheChariotCardID).
+		First(&chariotInventory).Error
+	if err == nil {
+		if chariotInventory.TimesApplied < 3 {
+			drawCardCost = 0
+			chariotInventory.TimesApplied++
+			if chariotInventory.TimesApplied == 3 {
+				if err := tx.Delete(&chariotInventory).Error; err != nil {
+					tx.Rollback()
+					common.SendError(s, i, fmt.Errorf("error deleting The Chariot after 3 uses: %v", err), db)
+					return
+				}
+			} else {
+				if err := tx.Save(&chariotInventory).Error; err != nil {
+					tx.Rollback()
+					common.SendError(s, i, fmt.Errorf("error updating The Chariot: %v", err), db)
+					return
+				}
+			}
+		}
+	} else if err != gorm.ErrRecordNotFound {
+		tx.Rollback()
+		common.SendError(s, i, fmt.Errorf("error checking The Chariot inventory: %v", err), db)
+		return
 	}
 
 	var inventoryItems []models.UserInventory
@@ -466,10 +496,10 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 
 	if cardResult.RequiresSelection {
 		if cardResult.SelectionType == "user" {
-			if card.ID == cards.HostileTakeoverCardID {
-				showFilteredUserSelectMenu(s, i, card.ID, card.Name, card.Description, userID, guildID, db, 500.0)
+			if card.ID == cards.HostileTakeoverCardID || card.ID == cards.JusticeCardID {
+				ShowFilteredUserSelectMenu(s, i, card.ID, card.Name, card.Description, userID, guildID, tx, 500.0)
 			} else {
-				showUserSelectMenu(s, i, card.ID, card.Name, card.Description, userID, guildID, db)
+				ShowUserSelectMenu(s, i, card.ID, card.Name, card.Description, userID, guildID, db)
 			}
 
 			if err := tx.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
@@ -498,7 +528,7 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 			tx.Commit()
 			return
 		} else if cardResult.SelectionType == "bet" {
-			showBetSelectMenu(s, i, card.ID, card.Name, card.Description, userID, guildID, db)
+			ShowBetSelectMenu(s, i, card.ID, card.Name, card.Description, userID, guildID, db)
 
 			user.Points += cardResult.PointsDelta
 			if user.Points < 0 {
@@ -523,7 +553,7 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	}
 
 	if len(card.Options) > 0 {
-		showCardOptionsMenu(s, i, card.ID, card.Name, card.Description, userID, guildID, db, card.Options)
+		ShowCardOptionsMenu(s, i, card.ID, card.Name, card.Description, userID, guildID, db, card.Options)
 
 		user.Points += cardResult.PointsDelta
 		if user.Points < 0 {
@@ -547,24 +577,99 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	}
 
 	if cardResult.PointsDelta < 0 {
-		hasShield, err := hasShieldInInventory(tx, user.ID, guildID)
+		hasMoon, err := hasMoonInInventory(tx, user.ID, guildID)
 		if err != nil {
 			tx.Rollback()
 			common.SendError(s, i, err, db)
 			return
 		}
-		if hasShield {
-			if err := PlayCardFromInventory(s, tx, user, cards.ShieldCardID); err != nil {
+		if hasMoon {
+			randomUserID, err := getRandomUserForMoonFromCards(tx, guildID, []uint{user.ID})
+			if err != nil {
+				// Fall back to shield if no eligible users
+				hasShield, err := hasShieldInInventory(tx, user.ID, guildID)
+				if err != nil {
+					tx.Rollback()
+					common.SendError(s, i, err, db)
+					return
+				}
+				if hasShield {
+					if err := PlayCardFromInventory(s, tx, user, cards.ShieldCardID); err != nil {
+						tx.Rollback()
+						common.SendError(s, i, err, db)
+						return
+					}
+					cardResult.PointsDelta = 0
+					if cardResult.Message == "" {
+						cardResult.Message = "Your Moon illusion tried to redirect, but no eligible users found. Shield blocked the hit!"
+					} else {
+						cardResult.Message += " (Your Moon illusion tried to redirect, but no eligible users found. Shield blocked the hit!)"
+					}
+				} else {
+					if cardResult.Message == "" {
+						cardResult.Message = "Your Moon illusion tried to redirect, but no eligible users found."
+					} else {
+						cardResult.Message += " (Your Moon illusion tried to redirect, but no eligible users found.)"
+					}
+				}
+			} else {
+				var randomUser models.User
+				if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+					Where("discord_id = ? AND guild_id = ?", randomUserID, guildID).
+					First(&randomUser).Error; err != nil {
+					tx.Rollback()
+					common.SendError(s, i, err, db)
+					return
+				}
+
+				redirectedLoss := -cardResult.PointsDelta
+				if randomUser.Points < redirectedLoss {
+					redirectedLoss = randomUser.Points
+				}
+
+				randomUser.Points -= redirectedLoss
+				if err := tx.Save(&randomUser).Error; err != nil {
+					tx.Rollback()
+					common.SendError(s, i, err, db)
+					return
+				}
+
+				if err := PlayCardFromInventory(s, tx, user, cards.TheMoonCardID); err != nil {
+					tx.Rollback()
+					common.SendError(s, i, err, db)
+					return
+				}
+
+				randomMention := "<@" + randomUserID + ">"
+				cardResult.PointsDelta = 0
+				cardResult.TargetUserID = &randomUserID
+				cardResult.TargetPointsDelta = -redirectedLoss
+				if cardResult.Message == "" {
+					cardResult.Message = fmt.Sprintf("Your Moon illusion redirected the hit! %s lost %.0f points instead!", randomMention, redirectedLoss)
+				} else {
+					cardResult.Message += fmt.Sprintf(" (Your Moon illusion redirected the hit! %s lost %.0f points instead!)", randomMention, redirectedLoss)
+				}
+			}
+		} else {
+			hasShield, err := hasShieldInInventory(tx, user.ID, guildID)
+			if err != nil {
 				tx.Rollback()
 				common.SendError(s, i, err, db)
 				return
 			}
+			if hasShield {
+				if err := PlayCardFromInventory(s, tx, user, cards.ShieldCardID); err != nil {
+					tx.Rollback()
+					common.SendError(s, i, err, db)
+					return
+				}
 
-			cardResult.PointsDelta = 0
-			if cardResult.Message == "" {
-				cardResult.Message = "Your Shield blocked the hit!"
-			} else {
-				cardResult.Message += " (Your Shield blocked the hit!)"
+				cardResult.PointsDelta = 0
+				if cardResult.Message == "" {
+					cardResult.Message = "Your Shield blocked the hit!"
+				} else {
+					cardResult.Message += " (Your Shield blocked the hit!)"
+				}
 			}
 		}
 	}
@@ -581,24 +686,98 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		if err := tx.Where("discord_id = ? AND guild_id = ?", *cardResult.TargetUserID, guildID).First(&targetUser).Error; err == nil {
 			if cardResult.TargetPointsDelta < 0 {
 				targetMention := "<@" + *cardResult.TargetUserID + ">"
-				hasShield, err := hasShieldInInventory(tx, targetUser.ID, guildID)
+				hasMoon, err := hasMoonInInventory(tx, targetUser.ID, guildID)
 				if err != nil {
 					tx.Rollback()
 					common.SendError(s, i, err, db)
 					return
 				}
-				if hasShield {
-					if err := PlayCardFromInventory(s, tx, targetUser, cards.ShieldCardID); err != nil {
+				if hasMoon {
+					randomUserID, err := getRandomUserForMoonFromCards(tx, guildID, []uint{targetUser.ID, user.ID})
+					if err != nil {
+						// Fall back to shield if no eligible users
+						hasShield, err := hasShieldInInventory(tx, targetUser.ID, guildID)
+						if err != nil {
+							tx.Rollback()
+							common.SendError(s, i, err, db)
+							return
+						}
+						if hasShield {
+							if err := PlayCardFromInventory(s, tx, targetUser, cards.ShieldCardID); err != nil {
+								tx.Rollback()
+								common.SendError(s, i, err, db)
+								return
+							}
+							cardResult.TargetPointsDelta = 0
+							if cardResult.Message == "" {
+								cardResult.Message = fmt.Sprintf("%s's Moon illusion tried to redirect, but no eligible users found. Shield blocked the hit!", targetMention)
+							} else {
+								cardResult.Message += fmt.Sprintf(" (%s's Moon illusion tried to redirect, but no eligible users found. Shield blocked the hit!)", targetMention)
+							}
+						} else {
+							if cardResult.Message == "" {
+								cardResult.Message = fmt.Sprintf("%s's Moon illusion tried to redirect, but no eligible users found.", targetMention)
+							} else {
+								cardResult.Message += fmt.Sprintf(" (%s's Moon illusion tried to redirect, but no eligible users found.)", targetMention)
+							}
+						}
+					} else {
+						var randomUser models.User
+						if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+							Where("discord_id = ? AND guild_id = ?", randomUserID, guildID).
+							First(&randomUser).Error; err != nil {
+							tx.Rollback()
+							common.SendError(s, i, err, db)
+							return
+						}
+
+						redirectedLoss := -cardResult.TargetPointsDelta
+						if randomUser.Points < redirectedLoss {
+							redirectedLoss = randomUser.Points
+						}
+
+						randomUser.Points -= redirectedLoss
+						if err := tx.Save(&randomUser).Error; err != nil {
+							tx.Rollback()
+							common.SendError(s, i, err, db)
+							return
+						}
+
+						if err := PlayCardFromInventory(s, tx, targetUser, cards.TheMoonCardID); err != nil {
+							tx.Rollback()
+							common.SendError(s, i, err, db)
+							return
+						}
+
+						randomMention := "<@" + randomUserID + ">"
+						cardResult.TargetUserID = &randomUserID
+						cardResult.TargetPointsDelta = -redirectedLoss
+						if cardResult.Message == "" {
+							cardResult.Message = fmt.Sprintf("%s's Moon illusion redirected the hit! %s lost %.0f points instead!", targetMention, randomMention, redirectedLoss)
+						} else {
+							cardResult.Message += fmt.Sprintf(" (%s's Moon illusion redirected the hit! %s lost %.0f points instead!)", targetMention, randomMention, redirectedLoss)
+						}
+					}
+				} else {
+					hasShield, err := hasShieldInInventory(tx, targetUser.ID, guildID)
+					if err != nil {
 						tx.Rollback()
 						common.SendError(s, i, err, db)
 						return
 					}
+					if hasShield {
+						if err := PlayCardFromInventory(s, tx, targetUser, cards.ShieldCardID); err != nil {
+							tx.Rollback()
+							common.SendError(s, i, err, db)
+							return
+						}
 
-					cardResult.TargetPointsDelta = 0
-					if cardResult.Message == "" {
-						cardResult.Message = fmt.Sprintf("%s's Shield blocked the hit!", targetMention)
-					} else {
-						cardResult.Message += fmt.Sprintf(" (%s's Shield blocked the hit!)", targetMention)
+						cardResult.TargetPointsDelta = 0
+						if cardResult.Message == "" {
+							cardResult.Message = fmt.Sprintf("%s's Shield blocked the hit!", targetMention)
+						} else {
+							cardResult.Message += fmt.Sprintf(" (%s's Shield blocked the hit!)", targetMention)
+						}
 					}
 				}
 			}
@@ -730,7 +909,7 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	}
 }
 
-func showUserSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, cardID uint, cardName string, cardDescription string, userID string, guildID string, db *gorm.DB) {
+func ShowUserSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, cardID uint, cardName string, cardDescription string, userID string, guildID string, db *gorm.DB) {
 	minValues := 1
 	selectorID := i.Interaction.ID
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -758,7 +937,7 @@ func showUserSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, ca
 	}
 }
 
-func showFilteredUserSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, cardID uint, cardName string, cardDescription string, userID string, guildID string, db *gorm.DB, maxPointDifference float64) {
+func ShowFilteredUserSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, cardID uint, cardName string, cardDescription string, userID string, guildID string, db *gorm.DB, maxPointDifference float64) {
 	var drawer models.User
 	if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&drawer).Error; err != nil {
 		common.SendError(s, i, err, db)
@@ -773,10 +952,7 @@ func showFilteredUserSelectMenu(s *discordgo.Session, i *discordgo.InteractionCr
 
 	var eligibleUsers []models.User
 	for _, u := range allUsers {
-		pointDiff := drawer.Points - u.Points
-		if pointDiff < 0 {
-			pointDiff = -pointDiff
-		}
+		pointDiff := math.Abs(drawer.Points - u.Points)
 		if pointDiff <= maxPointDifference {
 			eligibleUsers = append(eligibleUsers, u)
 		}
@@ -860,7 +1036,7 @@ func showFilteredUserSelectMenu(s *discordgo.Session, i *discordgo.InteractionCr
 	}
 }
 
-func showBetSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, cardID uint, cardName string, cardDescription string, userID string, guildID string, db *gorm.DB) {
+func ShowBetSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, cardID uint, cardName string, cardDescription string, userID string, guildID string, db *gorm.DB) {
 	var results []struct {
 		BetID       uint
 		Description string
@@ -949,7 +1125,7 @@ func showBetSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, car
 	}
 }
 
-func showCardOptionsMenu(s *discordgo.Session, i *discordgo.InteractionCreate, cardID uint, cardName string, cardDescription string, userID string, guildID string, db *gorm.DB, options []models.CardOption) {
+func ShowCardOptionsMenu(s *discordgo.Session, i *discordgo.InteractionCreate, cardID uint, cardName string, cardDescription string, userID string, guildID string, db *gorm.DB, options []models.CardOption) {
 	var selectOptions []discordgo.SelectMenuOption
 	for _, opt := range options {
 		label := opt.Name
@@ -1140,6 +1316,19 @@ func hasShieldInInventory(db *gorm.DB, userID uint, guildID string) (bool, error
 	return count > 0, err
 }
 
+func hasMoonInInventory(db *gorm.DB, userID uint, guildID string) (bool, error) {
+	var count int64
+	err := db.Model(&models.UserInventory{}).
+		Where("user_id = ? AND guild_id = ? AND card_id = ?", userID, guildID, cards.TheMoonCardID).
+		Count(&count).Error
+	return count > 0, err
+}
+
+// getRandomUserForMoonFromCards is a wrapper to access GetRandomUserForMoon from cards package
+func getRandomUserForMoonFromCards(db *gorm.DB, guildID string, excludeUserIDs []uint) (string, error) {
+	return cards.GetRandomUserForMoon(db, guildID, excludeUserIDs)
+}
+
 func hasGenerousDonationInInventory(db *gorm.DB, guildID string) (uint, error) {
 	var inventory models.UserInventory
 	err := db.Model(&models.UserInventory{}).
@@ -1303,6 +1492,132 @@ func ApplyVampireIfApplicable(db *gorm.DB, guildID string, totalWinningPayouts f
 	}
 
 	return totalVampirePayout, winners, applied, nil
+}
+
+type LoversWinner struct {
+	DiscordID string
+	Payout    float64
+}
+
+type DevilDiverted struct {
+	DiscordID string
+	Diverted  float64
+}
+
+func ApplyTheDevilIfApplicable(db *gorm.DB, guildID string, winnerDiscordIDs map[string]float64) (totalDiverted float64, diverted []DevilDiverted, applied bool, err error) {
+	sevenDaysAgo := time.Now().Add(-7 * 24 * time.Hour)
+	var devilCards []models.UserInventory
+	err = db.Where("guild_id = ? AND card_id = ? AND created_at >= ? AND deleted_at IS NULL", guildID, cards.TheDevilCardID, sevenDaysAgo).
+		Find(&devilCards).Error
+
+	if err != nil {
+		return 0, nil, false, err
+	}
+
+	if len(devilCards) == 0 {
+		return 0, nil, false, nil
+	}
+
+	devilCardHolders := make(map[string]uint)
+	for _, card := range devilCards {
+		var user models.User
+		if err := db.First(&user, card.UserID).Error; err != nil {
+			continue
+		}
+		devilCardHolders[user.DiscordID] = user.ID
+	}
+
+	if len(devilCardHolders) == 0 {
+		return 0, nil, false, nil
+	}
+
+	totalDiverted = 0.0
+	applied = true
+	diverted = []DevilDiverted{}
+
+	var guild models.Guild
+	if err := db.Where("guild_id = ?", guildID).First(&guild).Error; err != nil {
+		return 0, nil, false, err
+	}
+
+	for discordID, winnings := range winnerDiscordIDs {
+		userID, hasDevilCard := devilCardHolders[discordID]
+		if !hasDevilCard || winnings <= 0 {
+			continue
+		}
+
+		divertedAmount := winnings * 0.20
+		totalDiverted += divertedAmount
+		winnerDiscordIDs[discordID] = winnings - divertedAmount
+
+		if err := db.Model(&models.User{}).Where("id = ?", userID).UpdateColumn("points", gorm.Expr("points - ?", divertedAmount)).Error; err != nil {
+			return totalDiverted, diverted, applied, err
+		}
+
+		diverted = append(diverted, DevilDiverted{
+			DiscordID: discordID,
+			Diverted:  divertedAmount,
+		})
+	}
+
+	if totalDiverted > 0 {
+		if err := db.Model(&guild).UpdateColumn("pool", gorm.Expr("pool + ?", totalDiverted)).Error; err != nil {
+			return totalDiverted, diverted, applied, err
+		}
+	}
+
+	return totalDiverted, diverted, applied, nil
+}
+
+func ApplyTheLoversIfApplicable(db *gorm.DB, guildID string, winnerDiscordIDs map[string]float64) (totalLoversPayout float64, winners []LoversWinner, applied bool, err error) {
+	twentyFourHoursAgo := time.Now().Add(-24 * time.Hour)
+	var loversCards []models.UserInventory
+	err = db.Where("guild_id = ? AND card_id = ? AND created_at >= ? AND target_user_id IS NOT NULL", guildID, cards.TheLoversCardID, twentyFourHoursAgo).
+		Find(&loversCards).Error
+
+	if err != nil {
+		return 0, nil, false, err
+	}
+
+	if len(loversCards) == 0 {
+		return 0, nil, false, nil
+	}
+
+	totalLoversPayout = 0.0
+	applied = true
+	winners = []LoversWinner{}
+
+	for _, card := range loversCards {
+		if card.TargetUserID == nil {
+			continue
+		}
+
+		targetUserID := *card.TargetUserID
+		targetWinnings, targetWon := winnerDiscordIDs[targetUserID]
+
+		if !targetWon || targetWinnings <= 0 {
+			continue
+		}
+
+		var loversHolder models.User
+		if err := db.First(&loversHolder, card.UserID).Error; err != nil {
+			continue
+		}
+
+		loversPayout := targetWinnings * 0.25
+
+		if err := db.Model(&loversHolder).UpdateColumn("points", gorm.Expr("points + ?", loversPayout)).Error; err != nil {
+			return totalLoversPayout, winners, applied, err
+		}
+
+		totalLoversPayout += loversPayout
+		winners = append(winners, LoversWinner{
+			DiscordID: loversHolder.DiscordID,
+			Payout:    loversPayout,
+		})
+	}
+
+	return totalLoversPayout, winners, applied, nil
 }
 
 func ApplyDoubleDownIfAvailable(db *gorm.DB, consumer CardConsumer, user models.User, originalPayout float64) (float64, bool, error) {

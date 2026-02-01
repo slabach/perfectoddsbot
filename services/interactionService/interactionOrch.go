@@ -187,6 +187,30 @@ func HandleComponentInteraction(s *discordgo.Session, i *discordgo.InteractionCr
 		}
 		return
 	}
+
+	if strings.HasPrefix(customID, "magician_card_select_") {
+		err := HandleMagicianCardSelection(s, i, db, customID)
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
+
+	if strings.HasPrefix(customID, "magician_card_prev_") || strings.HasPrefix(customID, "magician_card_next_") {
+		err := HandleMagicianCardPagination(s, i, db, customID)
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
+
+	if strings.HasPrefix(customID, "magician_card_cancel_") {
+		err := HandleMagicianCardCancel(s, i, db, customID)
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
 }
 
 func HandleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
