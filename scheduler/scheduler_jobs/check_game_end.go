@@ -678,11 +678,13 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 	return nil
 }
 
-// replaceWonAmountInUserLine finds the line for the given username (containing " - Bet:") that has oldStr and replaces oldStr with newStr.
+// replaceWonAmountInUserLine finds the line for the given username that contains oldStr and replaces oldStr with newStr.
+// Winner lines may be bet-based (e.g. "username - Bet: ... - **Won $X**") or card-based (e.g. "username - **Won $X** (Vampire)").
 func replaceWonAmountInUserLine(winnersList, username, oldStr, newStr string) string {
+	prefix := username + " - "
 	lines := strings.Split(winnersList, "\n")
 	for i, line := range lines {
-		if strings.Contains(line, username+" - Bet:") && strings.Contains(line, oldStr) {
+		if strings.HasPrefix(line, prefix) && strings.Contains(line, oldStr) {
 			lines[i] = strings.Replace(line, oldStr, newStr, 1)
 			break
 		}
