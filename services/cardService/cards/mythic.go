@@ -56,20 +56,20 @@ func registerMythicCards(deck *[]models.Card) {
 			Description: "Transformation. Every 'positive' inventory card (eg. Shield/Double Down/etc) currently held by any player (except Mythics) is destroyed. 100 points are drained from the pool for each card destroyed.",
 			Handler:     handleDeath,
 		},
-		// {
-		// 	ID:          102,
-		// 	Code:        "TOW",
-		// 	Name:        "The Tower",
-		// 	Description: "Sudden Collapse. The pool is instantly reduced by 75%. Every player loses 50 points as the debris settles.",
-		// 	Handler:     handleTheTower,
-		// },
-		// {
-		// 	ID:          103,
-		// 	Code:        "WOR",
-		// 	Name:        "The World",
-		// 	Description: "Completion. Win 5% of the pool and immediately resolve one of your open bets as a win.",
-		// 	Handler:     handleTheWorld,
-		// },
+		{
+			ID:          102,
+			Code:        "TOW",
+			Name:        "The Tower",
+			Description: "Sudden Collapse. The pool is instantly reduced by 75%. Every player loses 50 points as the debris settles.",
+			Handler:     handleTheTower,
+		},
+		{
+			ID:          103,
+			Code:        "WOR",
+			Name:        "The World",
+			Description: "Completion. Win 10% of the pool and immediately resolve one of your open bets as a win.",
+			Handler:     handleTheWorld,
+		},
 	}
 
 	*deck = append(*deck, mythicCards...)

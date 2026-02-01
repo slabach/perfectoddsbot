@@ -1009,16 +1009,6 @@ func magicianSelectorID() string {
 }
 
 func HandleMagicianCardSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, customID string) error {
-	if !cardService.TryMarkSelectorUsed(customID) {
-		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Content: "❌ This selection has already been used.",
-				Flags:   discordgo.MessageFlagsEphemeral,
-			},
-		})
-	}
-
 	parts := strings.Split(customID, "_")
 	var drawerUserID, targetUserID, guildID string
 	if len(parts) == 7 {
@@ -1038,6 +1028,16 @@ func HandleMagicianCardSelection(s *discordgo.Session, i *discordgo.InteractionC
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
 				Content: "You can only select a card for your own Magician card.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+	}
+
+	if !cardService.TryMarkSelectorUsed(customID) {
+		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "❌ This selection has already been used.",
 				Flags:   discordgo.MessageFlagsEphemeral,
 			},
 		})

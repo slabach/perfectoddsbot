@@ -2,6 +2,7 @@ package cards
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/common"
@@ -953,8 +954,8 @@ func handleTheSun(s *discordgo.Session, db *gorm.DB, userID string, guildID stri
 
 			result = &models.CardResult{
 				Message:     fmt.Sprintf("The Sun's radiance! You gained %.0f points from the pool. No other players were found to share the blessing.", gainAmount),
-				PointsDelta: gainAmount,
-				PoolDelta:   -gainAmount,
+				PointsDelta: 0,
+				PoolDelta:   0,
 			}
 			return nil
 		}
@@ -989,10 +990,10 @@ func handleTheSun(s *discordgo.Session, db *gorm.DB, userID string, guildID stri
 		randomMention := "<@" + lockedRandomUser.DiscordID + ">"
 		result = &models.CardResult{
 			Message:           fmt.Sprintf("The Sun's radiance! You and %s both gained %.0f points from the pool!", randomMention, gainAmount),
-			PointsDelta:       gainAmount,
-			PoolDelta:         -totalPoolDrain,
+			PointsDelta:       0,
+			PoolDelta:         0,
 			TargetUserID:      &lockedRandomUser.DiscordID,
-			TargetPointsDelta: gainAmount,
+			TargetPointsDelta: 0,
 		}
 		return nil
 	}); err != nil {
@@ -1124,7 +1125,7 @@ func handleJudgement(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 		result = &models.CardResult{
 			Message:     message,
 			PointsDelta: 0,
-			PoolDelta:   totalPointsToPool - totalDistributed,
+			PoolDelta:   0,
 		}
 		return nil
 	}); err != nil {
@@ -4199,7 +4200,7 @@ func handleTheHangedMan(s *discordgo.Session, db *gorm.DB, userID string, guildI
 
 		result = &models.CardResult{
 			Message:     fmt.Sprintf("The Hanged Man! You lost %.0f points immediately. In 24 hours, you'll gain 400 points from the pool.", lossAmount),
-			PointsDelta: -lossAmount,
+			PointsDelta: 0,
 			PoolDelta:   0,
 		}
 		return nil
@@ -4562,7 +4563,9 @@ func handleDeath(s *discordgo.Session, db *gorm.DB, userID string, guildID strin
 			return err
 		}
 
-		guild.Pool -= poolDrain
+		origPool := guild.Pool
+		actualDrain := math.Min(poolDrain, origPool)
+		guild.Pool -= actualDrain
 		if guild.Pool < 0 {
 			guild.Pool = 0
 		}
@@ -4572,12 +4575,97 @@ func handleDeath(s *discordgo.Session, db *gorm.DB, userID string, guildID strin
 		}
 
 		cardsList := strings.Join(destroyedCardNames, ", ")
-		message := fmt.Sprintf("Death's transformation! Destroyed %d positive card(s): %s. %.0f points drained from the pool.", cardsDestroyed, cardsList, poolDrain)
+		message := fmt.Sprintf("Death's transformation! Destroyed %d positive card(s): %s. %.0f points drained from the pool.", cardsDestroyed, cardsList, actualDrain)
 
 		result = &models.CardResult{
 			Message:     message,
 			PointsDelta: 0,
-			PoolDelta:   -poolDrain,
+			PoolDelta:   0,
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func handleTheTower(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	guild, err := guildService.GetGuildInfo(s, db, guildID, "")
+	if err != nil {
+		return nil, err
+	}
+
+	if err := db.Model(&models.User{}).
+		Where("guild_id = ?", guildID).
+		Update("points", gorm.Expr("GREATEST(0, points - ?)", 50)).Error; err != nil {
+		return nil, err
+	}
+
+	poolReduction := guild.Pool * 0.75
+	return &models.CardResult{
+		Message:     "The Tower has fallen! The pool was reduced by 75% and every player lost 50 points as the debris settled.",
+		PointsDelta: 0,
+		PoolDelta:   -poolReduction,
+	}, nil
+}
+
+func handleTheWorld(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+	var result *models.CardResult
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		var user models.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("discord_id = ? AND guild_id = ?", userID, guildID).
+			First(&user).Error; err != nil {
+			return err
+		}
+
+		guild, err := guildService.GetGuildInfo(s, tx, guildID, "")
+		if err != nil {
+			return err
+		}
+
+		poolWin := guild.Pool * 0.10
+
+		var entries []models.BetEntry
+		if err := tx.Preload("Bet").
+			Joins("JOIN bets ON bets.id = bet_entries.bet_id").
+			Where("bet_entries.user_id = ? AND bets.paid = ? AND bet_entries.deleted_at IS NULL", user.ID, false).
+			Find(&entries).Error; err != nil {
+			return err
+		}
+
+		if len(entries) == 0 {
+			result = &models.CardResult{
+				Message:     fmt.Sprintf("The World! You have no open bets to resolve, but you still receive 10%% of the pool (%.0f points).", poolWin),
+				PointsDelta: poolWin,
+				PoolDelta:   -poolWin,
+			}
+			return nil
+		}
+
+		randomIndex := rand.Intn(len(entries))
+		entry := entries[randomIndex]
+		bet := entry.Bet
+
+		basePayout := common.CalculatePayout(entry.Amount, entry.Option, bet)
+		totalWin := basePayout + poolWin
+
+		if err := tx.Model(&user).UpdateColumn("total_bets_won", gorm.Expr("total_bets_won + 1")).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&user).UpdateColumn("total_points_won", gorm.Expr("total_points_won + ?", totalWin)).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Delete(&entry).Error; err != nil {
+			return err
+		}
+
+		betName := bet.Description
+		result = &models.CardResult{
+			Message:     fmt.Sprintf("The World! One of your open bets (**%s**) was resolved as a win. You received %.0f from the bet and 10%% of the pool (%.0f).", betName, basePayout, poolWin),
+			PointsDelta: totalWin,
+			PoolDelta:   -poolWin,
 		}
 		return nil
 	}); err != nil {

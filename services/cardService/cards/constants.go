@@ -46,6 +46,7 @@ const (
 	JudgementCardID         = 101
 	TheDevilCardID          = 99
 	DeathCardID             = 98
+	TheWorldCardID          = 103
 
 	RoyaltyGuildID = "761721066959667220"
 )
