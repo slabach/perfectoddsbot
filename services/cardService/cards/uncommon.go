@@ -196,12 +196,12 @@ func registerUncommonCards(deck *[]models.Card) {
 			Description: "**CHOICE CARD** You choose one of the following options:",
 			Options: []models.CardOption{
 				{
-					ID:          1,
+					ID:          GamblerOptionYes,
 					Name:        "Yes",
 					Description: "50/50 chance to win 2x your next bet that gets resolved, or double your loss.",
 				},
 				{
-					ID:          2,
+					ID:          GamblerOptionNo,
 					Name:        "No",
 					Description: "Nothing happens.",
 				},

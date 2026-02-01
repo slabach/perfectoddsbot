@@ -161,12 +161,12 @@ func registerEpicCards(deck *[]models.Card) {
 			Description: "**CHOICE CARD** You choose one of the following options:",
 			Options: []models.CardOption{
 				{
-					ID:          1,
+					ID:          WheelOptionDeflation,
 					Name:        "Deflation",
 					Description: "The pool loses 50% of its total points.",
 				},
 				{
-					ID:          2,
+					ID:          WheelOptionChaos,
 					Name:        "Chaos",
 					Description: "Every player randomly gains or loses 1-500 points.",
 				},

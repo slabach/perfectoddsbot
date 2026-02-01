@@ -1609,7 +1609,7 @@ func HandleCardOptionSelection(s *discordgo.Session, i *discordgo.InteractionCre
 		if cardID == cards.TheWheelOfFortuneCardID {
 			var result *models.CardResult
 
-			if selectedOptionID == 1 {
+			if selectedOptionID == cards.WheelOptionDeflation {
 				poolLoss := guild.Pool * 0.5
 				guild.Pool -= poolLoss
 				if guild.Pool < 0 {
@@ -1624,7 +1624,7 @@ func HandleCardOptionSelection(s *discordgo.Session, i *discordgo.InteractionCre
 					PointsDelta: 0,
 					PoolDelta:   -poolLoss,
 				}
-			} else if selectedOptionID == 2 {
+			} else if selectedOptionID == cards.WheelOptionChaos {
 				var allUsers []models.User
 				if err := tx.Where("guild_id = ? AND deleted_at IS NULL", guildID).Find(&allUsers).Error; err != nil {
 					return err
@@ -1689,7 +1689,7 @@ func HandleCardOptionSelection(s *discordgo.Session, i *discordgo.InteractionCre
 			})
 		}
 
-		if selectedOptionID == 2 {
+		if selectedOptionID == cards.GamblerOptionNo {
 			var inventory models.UserInventory
 			result := tx.Where("user_id = ? AND guild_id = ? AND card_id = ?", user.ID, guildID, cardID).First(&inventory)
 			if result.Error == nil {

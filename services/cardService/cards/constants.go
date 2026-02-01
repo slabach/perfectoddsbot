@@ -20,6 +20,11 @@ const (
 	HostileTakeoverCardID   = 48
 	StopTheStealCardID      = 70
 	GamblerCardID           = 72
+	GamblerOptionYes        = 7201
+	GamblerOptionNo         = 7202
+	TheWheelOfFortuneCardID = 97
+	WheelOptionDeflation    = 9701
+	WheelOptionChaos        = 9702
 	GetOutOfJailCardID      = 43
 	CouponCardID            = 123
 	TheGossipCardID         = 211
@@ -41,7 +46,6 @@ const (
 	TheMoonCardID           = 94
 	TheMagicianCardID       = 95
 	TheEmperorCardID        = 96
-	TheWheelOfFortuneCardID = 97
 	TheSunCardID            = 100
 	JudgementCardID         = 101
 	TheDevilCardID          = 99
