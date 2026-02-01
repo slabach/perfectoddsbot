@@ -69,7 +69,7 @@ func RegisterAllCards() {
 	populateHandlerRegistry()
 }
 
-func PickRandomCard(hasSubscription bool, rarityMultiplier float64) *models.Card {
+func PickRandomCard(hasSubscription bool, rarityMultiplier float64, tarotExpansion bool) *models.Card {
 	deckMu.RLock()
 	if len(Deck) == 0 {
 		deckMu.RUnlock()
@@ -79,6 +79,9 @@ func PickRandomCard(hasSubscription bool, rarityMultiplier float64) *models.Card
 	var eligibleCards []*models.Card
 	for i := range Deck {
 		if Deck[i].RequiredSubscription && !hasSubscription {
+			continue
+		}
+		if !tarotExpansion && Deck[i].Expansion == "Tarot" {
 			continue
 		}
 

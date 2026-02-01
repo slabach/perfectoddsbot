@@ -2566,7 +2566,7 @@ func handleRedShells(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 func checkAndConsumeShield(db *gorm.DB, userID uint, guildID string) (bool, error) {
 	var count int64
 	err := db.Model(&models.UserInventory{}).
-		Where("user_id = ? AND guild_id = ? AND card_id = ?", userID, guildID, ShieldCardID).
+		Where("user_id = ? AND guild_id = ? AND card_id = ? and deleted_at is null", userID, guildID, ShieldCardID).
 		Count(&count).Error
 	if err != nil {
 		return false, err
@@ -2584,7 +2584,7 @@ func checkAndConsumeShield(db *gorm.DB, userID uint, guildID string) (bool, erro
 func checkAndConsumeSpareKey(db *gorm.DB, userID uint, guildID string) (bool, error) {
 	var count int64
 	err := db.Model(&models.UserInventory{}).
-		Where("user_id = ? AND guild_id = ? AND card_id = ?", userID, guildID, SpareKeyCardID).
+		Where("user_id = ? AND guild_id = ? AND card_id = ? and deleted_at is null", userID, guildID, SpareKeyCardID).
 		Count(&count).Error
 	if err != nil {
 		return false, err
@@ -2602,7 +2602,7 @@ func checkAndConsumeSpareKey(db *gorm.DB, userID uint, guildID string) (bool, er
 func checkAndConsumeMoon(db *gorm.DB, userID uint, guildID string) (bool, error) {
 	var count int64
 	err := db.Model(&models.UserInventory{}).
-		Where("user_id = ? AND guild_id = ? AND card_id = ?", userID, guildID, TheMoonCardID).
+		Where("user_id = ? AND guild_id = ? AND card_id = ? and deleted_at is null", userID, guildID, TheMoonCardID).
 		Count(&count).Error
 	if err != nil {
 		return false, err

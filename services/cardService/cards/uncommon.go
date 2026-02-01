@@ -214,7 +214,7 @@ func registerUncommonCards(deck *[]models.Card) {
 		{
 			ID:          219,
 			Code:        "TLO",
-			Name:        "The Lovers",
+			Name:        "The Lovers (🔮)",
 			Description: "Choose another user. For the next 24 hours, you'll earn 25% of every bet won by them.",
 			Handler:     handleTheLovers,
 			IsPositive:  true,
@@ -222,23 +222,26 @@ func registerUncommonCards(deck *[]models.Card) {
 		{
 			ID:          220,
 			Code:        "TRE",
-			Name:        "The Hierophant",
+			Name:        "The Hierophant (🔮)",
 			Description: "A group blessing. Every one in the server gains 50 points. but 500 points are drained from the pool to fund it.",
 			Handler:     handleTheHierophant,
+			Expansion:   "Tarot",
 		},
 		{
 			ID:          221,
 			Code:        "HER",
-			Name:        "The Hermit",
+			Name:        "The Hermit (🔮)",
 			Description: "You go into seclusion. You gain a shield, but you cannot buy any new cards for 12 hours.",
 			Handler:     handleTheHermit,
+			Expansion:   "Tarot",
 		},
 		{
 			ID:          222,
 			Code:        "STR",
-			Name:        "Strength",
+			Name:        "Strength (🔮)",
 			Description: "You block the next 'Steal' or negative effect played against you with your strength. (Gain a shield)",
 			Handler:     handleStrength,
+			Expansion:   "Tarot",
 		},
 	}
 

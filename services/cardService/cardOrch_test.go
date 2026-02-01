@@ -2071,8 +2071,8 @@ func TestApplyTheDevilIfApplicable(t *testing.T) {
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
-		if !applied {
-			t.Error("Expected The Devil to be applied (even if winner doesn't have it)")
+		if applied {
+			t.Error("Expected The Devil NOT to be applied when winner doesn't have card and no diversion")
 		}
 		if totalDiverted != 0 {
 			t.Errorf("Expected diverted 0 (winner doesn't have card), got %.2f", totalDiverted)
@@ -2163,8 +2163,8 @@ func TestApplyTheDevilIfApplicable(t *testing.T) {
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
-		if !applied {
-			t.Error("Expected The Devil to be applied (even if winnings are 0)")
+		if applied {
+			t.Error("Expected The Devil NOT to be applied when winnings are 0 (no diversion)")
 		}
 		if totalDiverted != 0 {
 			t.Errorf("Expected diverted 0 (no winnings to divert), got %.2f", totalDiverted)

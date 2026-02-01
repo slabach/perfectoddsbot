@@ -139,23 +139,25 @@ func registerEpicCards(deck *[]models.Card) {
 		{
 			ID:          95,
 			Code:        "MAG",
-			Name:        "The Magician",
+			Name:        "The Magician (🔮)",
 			Description: "Choose a user. You 'borrow' one of their cards (excluding Mythics) from their inventory and play it for yourself immediately instead (removed from their inventory)",
 			Handler:     handleTheMagician,
+			Expansion:   "Tarot",
 		},
 		{
 			ID:             96,
 			Code:           "ROR",
-			Name:           "The Emperor",
+			Name:           "The Emperor (🔮)",
 			Description:    "**User Playable Card** Play this card at any point to gain Authority. For the next hour, 10% of all points won by other players are diverted into the pool.",
 			Handler:        handleTheEmperor,
 			AddToInventory: true,
 			UserPlayable:   true,
+			Expansion:      "Tarot",
 		},
 		{
 			ID:          97,
 			Code:        "FOT",
-			Name:        "The Wheel of Fortune",
+			Name:        "The Wheel of Fortune (🔮)",
 			Description: "**CHOICE CARD** You choose one of the following options:",
 			Options: []models.CardOption{
 				{
@@ -169,23 +171,26 @@ func registerEpicCards(deck *[]models.Card) {
 					Description: "Every player randomly gains or loses 1-500 points.",
 				},
 			},
-			Handler: handleTheWheelOfFortune,
+			Handler:   handleTheWheelOfFortune,
+			Expansion: "Tarot",
 		},
 		{
 			ID:             99,
 			Code:           "DEV",
-			Name:           "The Devil",
+			Name:           "The Devil (🔮)",
 			Description:    "Temptation. Gain 1000 points immediately, but 20% of your future bet wins for the next 7 days are diverted into the pool.",
 			Handler:        handleTheDevil,
 			AddToInventory: true,
 			IsPositive:     true,
+			Expansion:      "Tarot",
 		},
 		{
 			ID:          100,
 			Code:        "SUN",
-			Name:        "The Sun",
+			Name:        "The Sun (🔮)",
 			Description: "Radiance. Public Success. You and a random user both gain 400 points from the pool.",
 			Handler:     handleTheSun,
+			Expansion:   "Tarot",
 		},
 		{
 			ID:          101,
@@ -193,6 +198,7 @@ func registerEpicCards(deck *[]models.Card) {
 			Name:        "Judgement",
 			Description: "The final reckoning. Players in the top 50% of the leaderboard lose 10% of their points to the pool. Players in the bottom 50% gain 10% of the pool's points (split evenly among them)",
 			Handler:     handleJudgement,
+			Expansion:   "Tarot",
 		},
 	}
 

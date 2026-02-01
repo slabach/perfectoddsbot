@@ -437,15 +437,15 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	if needsMythic {
 		card = PickCardByRarity(hasSubscription, "Mythic")
 		if card == nil {
-			card = PickRandomCard(hasSubscription, rarityMultiplier)
+			card = PickRandomCard(hasSubscription, rarityMultiplier, guild.TarotExpansion)
 		}
 	} else if needsEpic {
 		card = PickCardByRarity(hasSubscription, "Epic")
 		if card == nil {
-			card = PickRandomCard(hasSubscription, rarityMultiplier)
+			card = PickRandomCard(hasSubscription, rarityMultiplier, guild.TarotExpansion)
 		}
 	} else {
-		card = PickRandomCard(hasSubscription, rarityMultiplier)
+		card = PickRandomCard(hasSubscription, rarityMultiplier, guild.TarotExpansion)
 	}
 
 	if card == nil {
@@ -1518,7 +1518,6 @@ func ApplyTheDevilIfApplicable(db *gorm.DB, guildID string, winnerDiscordIDs map
 	}
 
 	totalDiverted = 0.0
-	applied = true
 	diverted = []DevilDiverted{}
 
 	var guild models.Guild
@@ -1526,6 +1525,7 @@ func ApplyTheDevilIfApplicable(db *gorm.DB, guildID string, winnerDiscordIDs map
 		return 0, nil, false, err
 	}
 
+	// Only divert from winners who themselves hold the Devil card.
 	for discordID, winnings := range winnerDiscordIDs {
 		userID, hasDevilCard := devilCardHolders[discordID]
 		if !hasDevilCard || winnings <= 0 {
@@ -1537,7 +1537,7 @@ func ApplyTheDevilIfApplicable(db *gorm.DB, guildID string, winnerDiscordIDs map
 		winnerDiscordIDs[discordID] = winnings - divertedAmount
 
 		if err := db.Model(&models.User{}).Where("id = ?", userID).UpdateColumn("points", gorm.Expr("points - ?", divertedAmount)).Error; err != nil {
-			return totalDiverted, diverted, applied, err
+			return totalDiverted, diverted, totalDiverted > 0, err
 		}
 
 		diverted = append(diverted, DevilDiverted{
@@ -1547,6 +1547,7 @@ func ApplyTheDevilIfApplicable(db *gorm.DB, guildID string, winnerDiscordIDs map
 	}
 
 	if totalDiverted > 0 {
+		applied = true
 		if err := db.Model(&guild).UpdateColumn("pool", gorm.Expr("pool + ?", totalDiverted)).Error; err != nil {
 			return totalDiverted, diverted, applied, err
 		}

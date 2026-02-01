@@ -619,7 +619,11 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 			if len(devilDivertedList) > 0 {
 				for _, diverted := range devilDivertedList {
 					cardHolderUsername := common.GetUsernameWithDB(db, s, bet.GuildID, diverted.DiscordID)
-					winnersList += fmt.Sprintf("%s - **$%.1f diverted to pool** (The Devil)\n", cardHolderUsername, diverted.Diverted)
+					netAmount := winnerDiscordIDs[diverted.DiscordID]
+					grossAmount := netAmount + diverted.Diverted
+					oldStr := fmt.Sprintf("**Won $%.1f**", grossAmount)
+					newStr := fmt.Sprintf("**Won $%.1f** ($%.1f diverted to pool via The Devil)", netAmount, diverted.Diverted)
+					winnersList = replaceWonAmountInUserLine(winnersList, cardHolderUsername, oldStr, newStr)
 				}
 			}
 		}
@@ -632,7 +636,11 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 			if len(emperorDivertedList) > 0 {
 				for _, diverted := range emperorDivertedList {
 					cardHolderUsername := common.GetUsernameWithDB(db, s, bet.GuildID, diverted.DiscordID)
-					winnersList += fmt.Sprintf("%s - **$%.1f diverted to pool** (The Emperor)\n", cardHolderUsername, diverted.Diverted)
+					netAmount := winnerDiscordIDs[diverted.DiscordID]
+					grossAmount := netAmount + diverted.Diverted
+					oldStr := fmt.Sprintf("**Won $%.1f**", grossAmount)
+					newStr := fmt.Sprintf("**Won $%.1f** ($%.1f diverted to pool via The Emperor)", netAmount, diverted.Diverted)
+					winnersList = replaceWonAmountInUserLine(winnersList, cardHolderUsername, oldStr, newStr)
 				}
 			}
 		}
@@ -668,4 +676,16 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 	}
 
 	return nil
+}
+
+// replaceWonAmountInUserLine finds the line for the given username (containing " - Bet:") that has oldStr and replaces oldStr with newStr.
+func replaceWonAmountInUserLine(winnersList, username, oldStr, newStr string) string {
+	lines := strings.Split(winnersList, "\n")
+	for i, line := range lines {
+		if strings.Contains(line, username+" - Bet:") && strings.Contains(line, oldStr) {
+			lines[i] = strings.Replace(line, oldStr, newStr, 1)
+			break
+		}
+	}
+	return strings.Join(lines, "\n")
 }

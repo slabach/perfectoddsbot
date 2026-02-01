@@ -224,9 +224,10 @@ func registerCommonCards(deck *[]models.Card) {
 		{
 			ID:          218,
 			Code:        "TFO",
-			Name:        "The Fool",
+			Name:        "The Fool (🔮)",
 			Description: "You take a leap of faith. Gain or lose 1-100 points at random.",
 			Handler:     handleTheFool,
+			Expansion:   "Tarot",
 		},
 	}
 
