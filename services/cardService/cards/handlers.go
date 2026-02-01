@@ -103,6 +103,7 @@ func ExecutePickpocketSteal(db *gorm.DB, userID string, targetUserID string, gui
 		First(&user).Error; err != nil {
 		return nil, err
 	}
+	userMention := "<@" + userID + ">"
 
 	var targetUser models.User
 	if err := db.Clauses(clause.Locking{Strength: "UPDATE"}).
@@ -154,7 +155,7 @@ func ExecutePickpocketSteal(db *gorm.DB, userID string, targetUserID string, gui
 		randomMention := "<@" + randomUserID + ">"
 		targetID := randomUserID
 		return &models.CardResult{
-			Message:           fmt.Sprintf("%s's Moon illusion redirected the theft! %s stole %.0f points from %s instead!", targetMention, targetMention, stealAmount, randomMention),
+			Message:           fmt.Sprintf("%s's Moon illusion redirected the theft! %s stole %.0f points from %s instead!", targetMention, userMention, stealAmount, randomMention),
 			PointsDelta:       stealAmount,
 			PoolDelta:         0,
 			TargetUserID:      &targetID,
@@ -962,16 +963,12 @@ func handleTheSun(s *discordgo.Session, db *gorm.DB, userID string, guildID stri
 		}
 
 		user.Points += gainAmount
-		lockedRandomUser.Points += gainAmount
 		guild.Pool -= totalPoolDrain
 		if guild.Pool < 0 {
 			guild.Pool = 0
 		}
 
 		if err := tx.Save(&user).Error; err != nil {
-			return err
-		}
-		if err := tx.Save(&lockedRandomUser).Error; err != nil {
 			return err
 		}
 		if err := tx.Save(&guild).Error; err != nil {
@@ -1041,7 +1038,7 @@ func handleJudgement(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 			var lockedUser models.User
 			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 				First(&lockedUser, top50Users[i].ID).Error; err != nil {
-				continue
+				return err
 			}
 
 			pointsLoss := lockedUser.Points * 0.10
@@ -1050,12 +1047,10 @@ func handleJudgement(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 				if lockedUser.Points < 0 {
 					lockedUser.Points = 0
 				}
-				totalPointsToPool += pointsLoss
-
 				if err := tx.Save(&lockedUser).Error; err != nil {
-					continue
+					return err
 				}
-
+				totalPointsToPool += pointsLoss
 				username := common.GetUsernameWithDB(tx, s, guildID, lockedUser.DiscordID)
 				top50Details = append(top50Details, fmt.Sprintf("%s: -%.0f points", username, pointsLoss))
 			}
@@ -1076,16 +1071,14 @@ func handleJudgement(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 			var lockedUser models.User
 			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 				First(&lockedUser, bottom50Users[i].ID).Error; err != nil {
-				continue
+				return err
 			}
 
 			lockedUser.Points += gainPerBottomUser
-			totalDistributed += gainPerBottomUser
-
 			if err := tx.Save(&lockedUser).Error; err != nil {
-				continue
+				return err
 			}
-
+			totalDistributed += gainPerBottomUser
 			username := common.GetUsernameWithDB(tx, s, guildID, lockedUser.DiscordID)
 			bottom50Details = append(bottom50Details, fmt.Sprintf("%s: +%.0f points", username, gainPerBottomUser))
 		}
@@ -1349,6 +1342,9 @@ func handleGenerousDonation(s *discordgo.Session, db *gorm.DB, userID string, gu
 		return nil, err
 	}
 	if moonCount > 0 {
+		if _, err := checkAndConsumeMoon(db, user.ID, guildID); err != nil {
+			return nil, err
+		}
 		randomUserID, err := GetRandomUserForMoon(db, guildID, []uint{user.ID})
 		if err != nil {
 			var shieldCount int64
@@ -1393,9 +1389,6 @@ func handleGenerousDonation(s *discordgo.Session, db *gorm.DB, userID string, gu
 
 		if err := removeCardFromInventory(db, user.ID, guildID, GenerousDonationCardID); err != nil {
 			return nil, fmt.Errorf("failed to remove redirected donation card: %v", err)
-		}
-		if err := removeCardFromInventory(db, user.ID, guildID, TheMoonCardID); err != nil {
-			return nil, fmt.Errorf("failed to consume moon: %v", err)
 		}
 
 		randomMention := "<@" + randomUserID + ">"
@@ -3827,13 +3820,16 @@ func handleTheHermit(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 	if moonRedirected {
 		randomUserID, err := GetRandomUserForMoon(db, guildID, []uint{user.ID})
 		if err != nil {
-			shieldBlocked, err := checkAndConsumeShield(db, user.ID, guildID)
+			var shieldBlocked, spareKeyBlocked bool
+			shieldBlocked, err = checkAndConsumeShield(db, user.ID, guildID)
 			if err != nil {
 				return nil, err
 			}
-			spareKeyBlocked, err := checkAndConsumeSpareKey(db, user.ID, guildID)
-			if err != nil {
-				return nil, err
+			if !shieldBlocked {
+				spareKeyBlocked, err = checkAndConsumeSpareKey(db, user.ID, guildID)
+				if err != nil {
+					return nil, err
+				}
 			}
 
 			inventory := models.UserInventory{
@@ -3900,14 +3896,16 @@ func handleTheHermit(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 		}, nil
 	}
 
-	shieldBlocked, err := checkAndConsumeShield(db, user.ID, guildID)
+	var shieldBlocked, spareKeyBlocked bool
+	shieldBlocked, err = checkAndConsumeShield(db, user.ID, guildID)
 	if err != nil {
 		return nil, err
 	}
-
-	spareKeyBlocked, err := checkAndConsumeSpareKey(db, user.ID, guildID)
-	if err != nil {
-		return nil, err
+	if !shieldBlocked {
+		spareKeyBlocked, err = checkAndConsumeSpareKey(db, user.ID, guildID)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	inventory := models.UserInventory{
@@ -4480,7 +4478,6 @@ func handleDeath(s *discordgo.Session, db *gorm.DB, userID string, guildID strin
 			return nil
 		}
 
-		// Get unique card IDs from inventories
 		cardIDMap := make(map[uint]bool)
 		for _, inventory := range allInventories {
 			cardIDMap[inventory.CardID] = true

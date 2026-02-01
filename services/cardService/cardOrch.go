@@ -293,7 +293,6 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		return
 	}
 
-	// Check timeout after locking user to ensure we have the most up-to-date value
 	if lockedUser.CardDrawTimeoutUntil != nil && now.Before(*lockedUser.CardDrawTimeoutUntil) {
 		tx.Rollback()
 		timeRemaining := lockedUser.CardDrawTimeoutUntil.Sub(now)
@@ -455,7 +454,6 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		return
 	}
 
-	// Update tracking for Epic and Mythic cards
 	if card.CardRarity.Name == "Mythic" {
 		guild.LastMythicDrawAt = guild.TotalCardDraws
 	} else if card.CardRarity.Name == "Epic" {
@@ -586,7 +584,6 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		if hasMoon {
 			randomUserID, err := getRandomUserForMoonFromCards(tx, guildID, []uint{user.ID})
 			if err != nil {
-				// Fall back to shield if no eligible users
 				hasShield, err := hasShieldInInventory(tx, user.ID, guildID)
 				if err != nil {
 					tx.Rollback()
@@ -688,7 +685,6 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 				if hasMoon {
 					randomUserID, err := getRandomUserForMoonFromCards(tx, guildID, []uint{targetUser.ID, user.ID})
 					if err != nil {
-						// Fall back to shield if no eligible users
 						hasShield, err := hasShieldInInventory(tx, targetUser.ID, guildID)
 						if err != nil {
 							tx.Rollback()
@@ -898,7 +894,6 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 			Flags:  discordgo.MessageFlagsEphemeral,
 		})
 		if err != nil {
-			// Log error but don't fail the card draw
 			fmt.Printf("Error sending Spy Kids 3D follow-up message: %v\n", err)
 		}
 	}
@@ -1204,7 +1199,6 @@ func ParseHexColor(colorStr string) int {
 	if colorStr == "" {
 		return 0x95A5A6
 	}
-	// Normalize to lowercase for case-insensitive prefix matching
 	colorStrLower := strings.ToLower(colorStr)
 	if len(colorStrLower) > 2 && colorStrLower[0:2] == "0x" {
 		colorStr = colorStr[2:]
@@ -1319,7 +1313,6 @@ func hasMoonInInventory(db *gorm.DB, userID uint, guildID string) (bool, error) 
 	return count > 0, err
 }
 
-// getRandomUserForMoonFromCards is a wrapper to access GetRandomUserForMoon from cards package
 func getRandomUserForMoonFromCards(db *gorm.DB, guildID string, excludeUserIDs []uint) (string, error) {
 	return cards.GetRandomUserForMoon(db, guildID, excludeUserIDs)
 }
@@ -2076,7 +2069,6 @@ func MyInventory(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.
 			fieldValue += fmt.Sprintf("**%s**%s\n%s\n\n", cardInfo.Card.Name, quantityText, cardInfo.Card.Description)
 		}
 
-		// Get emoji from first card in this rarity group
 		var rarityEmoji string = "🤍" // Default to Common emoji
 		if len(cardsHeld) > 0 && cardsHeld[0].Card.CardRarity.ID != 0 {
 			rarityEmoji = cardsHeld[0].Card.CardRarity.Icon

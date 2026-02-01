@@ -1,7 +1,6 @@
 package cards
 
 const (
-	// Card IDs
 	LuckyHorseshoeCardID    = 17
 	UnluckyCatCardID        = 18
 	ShieldCardID            = 25
