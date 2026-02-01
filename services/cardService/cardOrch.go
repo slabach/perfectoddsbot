@@ -627,13 +627,6 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 					redirectedLoss = randomUser.Points
 				}
 
-				randomUser.Points -= redirectedLoss
-				if err := tx.Save(&randomUser).Error; err != nil {
-					tx.Rollback()
-					common.SendError(s, i, err, db)
-					return
-				}
-
 				if err := PlayCardFromInventory(s, tx, user, cards.TheMoonCardID); err != nil {
 					tx.Rollback()
 					common.SendError(s, i, err, db)
@@ -736,13 +729,6 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 							redirectedLoss = randomUser.Points
 						}
 
-						randomUser.Points -= redirectedLoss
-						if err := tx.Save(&randomUser).Error; err != nil {
-							tx.Rollback()
-							common.SendError(s, i, err, db)
-							return
-						}
-
 						if err := PlayCardFromInventory(s, tx, targetUser, cards.TheMoonCardID); err != nil {
 							tx.Rollback()
 							common.SendError(s, i, err, db)
@@ -782,11 +768,20 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 				}
 			}
 
-			targetUser.Points += cardResult.TargetPointsDelta
-			if targetUser.Points < 0 {
-				targetUser.Points = 0
+			var userToUpdate models.User
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+				Where("discord_id = ? AND guild_id = ?", *cardResult.TargetUserID, guildID).
+				First(&userToUpdate).Error; err == nil {
+				userToUpdate.Points += cardResult.TargetPointsDelta
+				if userToUpdate.Points < 0 {
+					userToUpdate.Points = 0
+				}
+				if err := tx.Save(&userToUpdate).Error; err != nil {
+					tx.Rollback()
+					common.SendError(s, i, err, db)
+					return
+				}
 			}
-			tx.Save(&targetUser)
 			targetUsername = common.GetUsernameWithDB(db, s, guildID, *cardResult.TargetUserID)
 		}
 	}

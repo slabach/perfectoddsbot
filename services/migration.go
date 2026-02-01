@@ -370,6 +370,27 @@ func FixParlayResolutionMigration(s *discordgo.Session, db *gorm.DB) error {
 */
 // #endregion
 
+func RunUserInventoryTimesAppliedBackfill(db *gorm.DB) error {
+	const migrationName = "user_inventory_times_applied_backfill"
+	var existing models.Migration
+	if err := db.Where("name = ?", migrationName).First(&existing).Error; err == nil && existing.ID != 0 {
+		log.Println("User inventory times_applied backfill already executed. Skipping.")
+		return nil
+	}
+
+	log.Println("Backfilling user_inventories.times_applied: setting NULL to 0...")
+	res := db.Exec("UPDATE user_inventories SET times_applied = 0 WHERE times_applied IS NULL")
+	if res.Error != nil {
+		return fmt.Errorf("user_inventory times_applied backfill: %w", res.Error)
+	}
+	log.Printf("User inventory times_applied backfill completed. Rows updated: %d", res.RowsAffected)
+
+	if err := db.Create(&models.Migration{Name: migrationName, ExecutedAt: time.Now()}).Error; err != nil {
+		return fmt.Errorf("error recording times_applied backfill migration: %w", err)
+	}
+	return nil
+}
+
 func RunCardMigration(db *gorm.DB) error {
 	var existingMigration models.Migration
 	result := db.Where("name = ?", "card_migration").First(&existingMigration)
@@ -621,7 +642,6 @@ func SyncCards(db *gorm.DB) error {
 			cardToCreate.UserPlayable = codeCard.UserPlayable
 			cardToCreate.RoyaltyDiscordUserID = codeCard.RoyaltyDiscordUserID
 
-			// Create the card first
 			if err := db.Create(&cardToCreate).Error; err != nil {
 				log.Printf("Error creating card %d (%s): %v", codeCard.ID, codeCard.Name, err)
 				continue
@@ -669,7 +689,6 @@ func SyncCards(db *gorm.DB) error {
 			updateFields["description"] = codeCard.Description
 			needsUpdate = true
 		}
-		// Rarity, RarityID, Weight, and Active are now DB-controlled, not synced from code
 		if dbCard.HandlerName != codeCard.HandlerName {
 			updateFields["handler_name"] = codeCard.HandlerName
 			needsUpdate = true
@@ -692,7 +711,6 @@ func SyncCards(db *gorm.DB) error {
 			updateFields["user_playable"] = codeCard.UserPlayable
 			needsUpdate = true
 		}
-		// Active is DB-controlled, not synced from code
 
 		if needsUpdate {
 			if err := db.Model(&dbCard).Updates(updateFields).Error; err != nil {
@@ -760,20 +778,6 @@ func SyncCards(db *gorm.DB) error {
 						}
 					}
 				}
-
-				// Delete options that exist in DB but not in code (optional - you may want to skip this)
-				// Uncomment if you want to remove options that are no longer in code
-				/*
-					for _, dbOption := range dbOptions {
-						if !codeOptionsMap[dbOption.ID] {
-							if err := db.Delete(&dbOption).Error; err != nil {
-								log.Printf("Error deleting option %d for card %d: %v", dbOption.ID, codeCard.ID, err)
-							} else {
-								log.Printf("Deleted option %d (%s) for card %d (no longer in code)", dbOption.ID, dbOption.Name, codeCard.ID)
-							}
-						}
-					}
-				*/
 			}
 		}
 	}

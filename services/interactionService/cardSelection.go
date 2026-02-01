@@ -1,6 +1,8 @@
 package interactionService
 
 import (
+	crand "crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"math"
 	"math/rand"
@@ -648,35 +650,20 @@ func handleJusticeSelection(s *discordgo.Session, i *discordgo.InteractionCreate
 			return fmt.Errorf("selected user is not within 500 points")
 		}
 
-		if target.Points <= drawer.Points {
-			if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Content: "Justice can only be served if the target has more points than you. The card fizzles out.",
-					Flags:   discordgo.MessageFlagsEphemeral,
-				},
-			}); err != nil {
-				return err
-			}
-			return nil
-		}
-
-		drawerOriginalPoints := drawer.Points
-		targetOriginalPoints := target.Points
-
-		averagePoints := (drawer.Points + target.Points) / 2.0
-		drawer.Points = averagePoints
-		target.Points = averagePoints
-
-		if err := tx.Save(&drawer).Error; err != nil {
-			return err
-		}
-		if err := tx.Save(&target).Error; err != nil {
+		result, err := cards.ExecuteJustice(s, tx, userID, targetUserID, guildID)
+		if err != nil {
 			return err
 		}
 
 		guild, err := guildService.GetGuildInfo(s, tx, guildID, i.ChannelID)
 		if err != nil {
+			return err
+		}
+
+		var user models.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("discord_id = ? AND guild_id = ?", userID, guildID).
+			First(&user).Error; err != nil {
 			return err
 		}
 
@@ -687,26 +674,7 @@ func handleJusticeSelection(s *discordgo.Session, i *discordgo.InteractionCreate
 			return fmt.Errorf("card not found")
 		}
 
-		embed := buildCardResultEmbed(card, &models.CardResult{
-			Message:           fmt.Sprintf("Justice is served! Both you and %s now have %.1f points (the average of your previous balances).", targetUsername, averagePoints),
-			PointsDelta:       averagePoints - drawerOriginalPoints,
-			PoolDelta:         0,
-			TargetUserID:      &targetUserID,
-			TargetPointsDelta: averagePoints - targetOriginalPoints,
-		}, drawer, targetUsername, guild.Pool)
-
-		embed.Fields = []*discordgo.MessageEmbedField{
-			{
-				Name:   "You",
-				Value:  fmt.Sprintf("<@%s>: %.1f → %.1f points", drawer.DiscordID, drawerOriginalPoints, drawer.Points),
-				Inline: true,
-			},
-			{
-				Name:   "Target",
-				Value:  fmt.Sprintf("<@%s>: %.1f → %.1f points", target.DiscordID, targetOriginalPoints, target.Points),
-				Inline: true,
-			},
-		}
+		embed := buildCardResultEmbed(card, result, user, targetUsername, guild.Pool)
 
 		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -962,13 +930,14 @@ func handleTheMagicianSelection(s *discordgo.Session, i *discordgo.InteractionCr
 			paginatedOptions = append(paginatedOptions, selectOptions[i:end])
 		}
 
+		selectorID := magicianSelectorID()
 		currentPage := 0
 		components := []discordgo.MessageComponent{
 			discordgo.ActionsRow{
 				Components: []discordgo.MessageComponent{
 					discordgo.SelectMenu{
 						MenuType:    discordgo.StringSelectMenu,
-						CustomID:    fmt.Sprintf("magician_card_select_%s_%s_%s", userID, targetUserID, guildID),
+						CustomID:    fmt.Sprintf("magician_card_select_%s_%s_%s_%s", selectorID, userID, targetUserID, guildID),
 						Placeholder: fmt.Sprintf("Select a card to borrow from %s", targetMention),
 						MinValues:   &minValues,
 						MaxValues:   1,
@@ -983,19 +952,19 @@ func handleTheMagicianSelection(s *discordgo.Session, i *discordgo.InteractionCr
 				Components: []discordgo.MessageComponent{
 					discordgo.Button{
 						Label:    "Previous",
-						CustomID: fmt.Sprintf("magician_card_prev_%d_%s_%s_%s", currentPage, userID, targetUserID, guildID),
+						CustomID: fmt.Sprintf("magician_card_prev_%d_%s_%s_%s_%s", currentPage, selectorID, userID, targetUserID, guildID),
 						Style:    discordgo.PrimaryButton,
 						Disabled: currentPage == 0,
 					},
 					discordgo.Button{
 						Label:    "Next",
-						CustomID: fmt.Sprintf("magician_card_next_%d_%s_%s_%s", currentPage, userID, targetUserID, guildID),
+						CustomID: fmt.Sprintf("magician_card_next_%d_%s_%s_%s_%s", currentPage, selectorID, userID, targetUserID, guildID),
 						Style:    discordgo.PrimaryButton,
 						Disabled: currentPage == len(paginatedOptions)-1,
 					},
 					discordgo.Button{
 						Label:    "Cancel",
-						CustomID: fmt.Sprintf("magician_card_cancel_%s_%s_%s", userID, targetUserID, guildID),
+						CustomID: fmt.Sprintf("magician_card_cancel_%s_%s_%s_%s", selectorID, userID, targetUserID, guildID),
 						Style:    discordgo.DangerButton,
 					},
 				},
@@ -1005,7 +974,7 @@ func handleTheMagicianSelection(s *discordgo.Session, i *discordgo.InteractionCr
 				Components: []discordgo.MessageComponent{
 					discordgo.Button{
 						Label:    "Cancel",
-						CustomID: fmt.Sprintf("magician_card_cancel_%s_%s_%s", userID, targetUserID, guildID),
+						CustomID: fmt.Sprintf("magician_card_cancel_%s_%s_%s_%s", selectorID, userID, targetUserID, guildID),
 						Style:    discordgo.DangerButton,
 					},
 				},
@@ -1032,15 +1001,36 @@ func handleTheMagicianSelection(s *discordgo.Session, i *discordgo.InteractionCr
 	})
 }
 
+func magicianSelectorID() string {
+	b := make([]byte, 4)
+	_, _ = crand.Read(b)
+	return hex.EncodeToString(b)
+}
+
 func HandleMagicianCardSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, customID string) error {
-	parts := strings.Split(customID, "_")
-	if len(parts) != 6 {
-		return fmt.Errorf("invalid magician card selection custom ID format")
+	if !cardService.TryMarkSelectorUsed(customID) {
+		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "❌ This selection has already been used.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
 	}
 
-	drawerUserID := parts[3]
-	targetUserID := parts[4]
-	guildID := parts[5]
+	parts := strings.Split(customID, "_")
+	var drawerUserID, targetUserID, guildID string
+	if len(parts) == 7 {
+		drawerUserID = parts[4]
+		targetUserID = parts[5]
+		guildID = parts[6]
+	} else if len(parts) == 6 {
+		drawerUserID = parts[3]
+		targetUserID = parts[4]
+		guildID = parts[5]
+	} else {
+		return fmt.Errorf("invalid magician card selection custom ID format")
+	}
 
 	if i.Member.User.ID != drawerUserID {
 		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -1062,7 +1052,6 @@ func HandleMagicianCardSelection(s *discordgo.Session, i *discordgo.InteractionC
 		return fmt.Errorf("invalid selected value format")
 	}
 
-	// Verify the drawerUserID in the value matches the one making the selection
 	valueDrawerUserID := valueParts[2]
 	if valueDrawerUserID != drawerUserID || valueDrawerUserID != i.Member.User.ID {
 		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -1074,7 +1063,6 @@ func HandleMagicianCardSelection(s *discordgo.Session, i *discordgo.InteractionC
 		})
 	}
 
-	// Verify targetUserID and guildID match
 	valueTargetUserID := valueParts[3]
 	valueGuildID := valueParts[4]
 	if valueTargetUserID != targetUserID || valueGuildID != guildID {
@@ -1089,15 +1077,17 @@ func HandleMagicianCardSelection(s *discordgo.Session, i *discordgo.InteractionC
 
 	inventoryID, err := strconv.ParseUint(valueParts[0], 10, 32)
 	if err != nil {
+		cardService.UnmarkSelectorUsed(customID)
 		return fmt.Errorf("invalid inventory ID: %v", err)
 	}
 
 	cardID, err := strconv.ParseUint(valueParts[1], 10, 32)
 	if err != nil {
+		cardService.UnmarkSelectorUsed(customID)
 		return fmt.Errorf("invalid card ID: %v", err)
 	}
 
-	return db.Transaction(func(tx *gorm.DB) error {
+	err = db.Transaction(func(tx *gorm.DB) error {
 		var inventoryItem models.UserInventory
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			Where("id = ? AND user_id = (SELECT id FROM users WHERE discord_id = ? AND guild_id = ?)", inventoryID, targetUserID, guildID).
@@ -1210,11 +1200,15 @@ func HandleMagicianCardSelection(s *discordgo.Session, i *discordgo.InteractionC
 			},
 		})
 	})
+	if err != nil {
+		cardService.UnmarkSelectorUsed(customID)
+	}
+	return err
 }
 
 func HandleMagicianCardPagination(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, customID string) error {
 	parts := strings.Split(customID, "_")
-	if len(parts) != 7 {
+	if len(parts) != 8 {
 		return fmt.Errorf("invalid pagination custom ID format")
 	}
 
@@ -1224,9 +1218,10 @@ func HandleMagicianCardPagination(s *discordgo.Session, i *discordgo.Interaction
 		return fmt.Errorf("invalid page number: %v", err)
 	}
 
-	userID := parts[4]
-	targetUserID := parts[5]
-	guildID := parts[6]
+	selectorID := parts[4]
+	userID := parts[5]
+	targetUserID := parts[6]
+	guildID := parts[7]
 
 	if i.Member.User.ID != userID {
 		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -1322,7 +1317,7 @@ func HandleMagicianCardPagination(s *discordgo.Session, i *discordgo.Interaction
 				Components: []discordgo.MessageComponent{
 					discordgo.SelectMenu{
 						MenuType:    discordgo.StringSelectMenu,
-						CustomID:    fmt.Sprintf("magician_card_select_%s_%s_%s", userID, targetUserID, guildID),
+						CustomID:    fmt.Sprintf("magician_card_select_%s_%s_%s_%s", selectorID, userID, targetUserID, guildID),
 						Placeholder: fmt.Sprintf("Select a card to borrow from %s", targetMention),
 						MinValues:   &minValues,
 						MaxValues:   1,
@@ -1337,19 +1332,19 @@ func HandleMagicianCardPagination(s *discordgo.Session, i *discordgo.Interaction
 				Components: []discordgo.MessageComponent{
 					discordgo.Button{
 						Label:    "Previous",
-						CustomID: fmt.Sprintf("magician_card_prev_%d_%s_%s_%s", newPage, userID, targetUserID, guildID),
+						CustomID: fmt.Sprintf("magician_card_prev_%d_%s_%s_%s_%s", newPage, selectorID, userID, targetUserID, guildID),
 						Style:    discordgo.PrimaryButton,
 						Disabled: newPage == 0,
 					},
 					discordgo.Button{
 						Label:    "Next",
-						CustomID: fmt.Sprintf("magician_card_next_%d_%s_%s_%s", newPage, userID, targetUserID, guildID),
+						CustomID: fmt.Sprintf("magician_card_next_%d_%s_%s_%s_%s", newPage, selectorID, userID, targetUserID, guildID),
 						Style:    discordgo.PrimaryButton,
 						Disabled: newPage == len(paginatedOptions)-1,
 					},
 					discordgo.Button{
 						Label:    "Cancel",
-						CustomID: fmt.Sprintf("magician_card_cancel_%s_%s_%s", userID, targetUserID, guildID),
+						CustomID: fmt.Sprintf("magician_card_cancel_%s_%s_%s_%s", selectorID, userID, targetUserID, guildID),
 						Style:    discordgo.DangerButton,
 					},
 				},
@@ -1359,7 +1354,7 @@ func HandleMagicianCardPagination(s *discordgo.Session, i *discordgo.Interaction
 				Components: []discordgo.MessageComponent{
 					discordgo.Button{
 						Label:    "Cancel",
-						CustomID: fmt.Sprintf("magician_card_cancel_%s_%s_%s", userID, targetUserID, guildID),
+						CustomID: fmt.Sprintf("magician_card_cancel_%s_%s_%s_%s", selectorID, userID, targetUserID, guildID),
 						Style:    discordgo.DangerButton,
 					},
 				},
@@ -1383,11 +1378,14 @@ func HandleMagicianCardPagination(s *discordgo.Session, i *discordgo.Interaction
 
 func HandleMagicianCardCancel(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, customID string) error {
 	parts := strings.Split(customID, "_")
-	if len(parts) != 6 {
+	var userID string
+	if len(parts) == 7 {
+		userID = parts[5]
+	} else if len(parts) == 6 {
+		userID = parts[3]
+	} else {
 		return fmt.Errorf("invalid cancel custom ID format")
 	}
-
-	userID := parts[3]
 
 	if i.Member.User.ID != userID {
 		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -1546,7 +1544,6 @@ func HandleCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCreate
 		})
 	})
 
-	// If there was an error, rollback the selector mark
 	if err != nil {
 		cardService.UnmarkSelectorUsed(customID)
 	}
@@ -1608,7 +1605,6 @@ func HandleCardOptionSelection(s *discordgo.Session, i *discordgo.InteractionCre
 			return err
 		}
 
-		// Handle The Wheel of Fortune options
 		if cardID == cards.TheWheelOfFortuneCardID {
 			var result *models.CardResult
 
@@ -1683,7 +1679,6 @@ func HandleCardOptionSelection(s *discordgo.Session, i *discordgo.InteractionCre
 			})
 		}
 
-		// Handle Gambler card (existing logic)
 		if selectedOptionID == 2 {
 			var inventory models.UserInventory
 			result := tx.Where("user_id = ? AND guild_id = ? AND card_id = ?", user.ID, guildID, cardID).First(&inventory)
@@ -1721,7 +1716,6 @@ func HandleCardOptionSelection(s *discordgo.Session, i *discordgo.InteractionCre
 		})
 	})
 
-	// If there was an error, rollback the selector mark
 	if err != nil {
 		cardService.UnmarkSelectorUsed(customID)
 	}

@@ -209,7 +209,7 @@ func registerUncommonCards(deck *[]models.Card) {
 			Handler:              handleGambler,
 			RoyaltyDiscordUserID: &[]string{"447827835797766144"}[0],
 			AddToInventory:       true,
-			IsPositive:            true,
+			IsPositive:           true,
 		},
 		{
 			ID:          219,
@@ -217,7 +217,7 @@ func registerUncommonCards(deck *[]models.Card) {
 			Name:        "The Lovers",
 			Description: "Choose another user. For the next 24 hours, you'll earn 25% of every bet won by them.",
 			Handler:     handleTheLovers,
-			IsPositive:   true,
+			IsPositive:  true,
 		},
 		{
 			ID:          220,

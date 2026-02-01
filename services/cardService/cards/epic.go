@@ -140,7 +140,7 @@ func registerEpicCards(deck *[]models.Card) {
 			ID:          95,
 			Code:        "MAG",
 			Name:        "The Magician",
-			Description: "Chhose a user. You 'borrow' one of their cards (excluding Mythics) from their inventory and play it for yourself immediately instead (removed from their inventory)",
+			Description: "Choose a user. You 'borrow' one of their cards (excluding Mythics) from their inventory and play it for yourself immediately instead (removed from their inventory)",
 			Handler:     handleTheMagician,
 		},
 		// {
