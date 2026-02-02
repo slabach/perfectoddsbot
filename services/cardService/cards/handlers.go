@@ -1549,9 +1549,9 @@ func handleTheHierophant(s *discordgo.Session, db *gorm.DB, userID string, guild
 	}
 
 	return &models.CardResult{
-		Message:     fmt.Sprintf("The Hierophant's blessing! Everyone in the server gained %.0f points! (%d users affected) %.0f points were drained from the pool to fund this blessing.", gainAmount, int(updatedCount)+1, poolDrain),
+		Message:     fmt.Sprintf("The Hierophant's blessing! Everyone in the server gained %.0f points! (%d users affected) %.0f points were added to the pool with this blessing.", gainAmount, int(updatedCount)+1, poolDrain),
 		PointsDelta: gainAmount,
-		PoolDelta:   -poolDrain,
+		PoolDelta:   poolDrain,
 	}, nil
 }
 

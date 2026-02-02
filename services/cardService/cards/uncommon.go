@@ -223,7 +223,7 @@ func registerUncommonCards(deck *[]models.Card) {
 			ID:          220,
 			Code:        "TRE",
 			Name:        "The Hierophant (🔮)",
-			Description: "A group blessing. Everyone in the server gains 50 points. but 500 points are drained from the pool to fund it.",
+			Description: "A group blessing. Everyone in the server gains 50 points and 500 points are added to the pool.",
 			Handler:     handleTheHierophant,
 			Expansion:   "Tarot",
 		},
