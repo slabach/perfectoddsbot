@@ -486,6 +486,13 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		return
 	}
 
+	// Reload user to capture any changes made by the card handler
+	if err := tx.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
+		tx.Rollback()
+		common.SendError(s, i, fmt.Errorf("error reloading user after card effect: %v", err), db)
+		return
+	}
+
 	if err := processTagCards(tx, guildID); err != nil {
 		tx.Rollback()
 		common.SendError(s, i, fmt.Errorf("error processing tag cards: %v", err), db)
