@@ -1532,7 +1532,6 @@ func ApplyTheDevilIfApplicable(db *gorm.DB, guildID string, winnerDiscordIDs map
 		return 0, nil, false, err
 	}
 
-	// Only divert from winners who themselves hold the Devil card.
 	for discordID, winnings := range winnerDiscordIDs {
 		userID, hasDevilCard := devilCardHolders[discordID]
 		if !hasDevilCard || winnings <= 0 {
@@ -2351,7 +2350,6 @@ func ShowStore(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 	username := common.GetUsernameFromUser(i.Member.User)
 	common.UpdateUserUsername(db, &user, username)
 
-	// Query cards with store cost from database
 	var purchasableCards []models.Card
 	err = db.Where("store_cost IS NOT NULL AND active = ?", true).
 		Preload("CardRarity").
@@ -2376,7 +2374,6 @@ func ShowStore(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 		return
 	}
 
-	// Group cards by rarity for display
 	rarityOrder := []string{"Mythic", "Epic", "Rare", "Uncommon", "Common"}
 	cardsByRarity := make(map[string][]models.Card)
 	for _, card := range purchasableCards {
@@ -2387,7 +2384,6 @@ func ShowStore(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 		cardsByRarity[rarityName] = append(cardsByRarity[rarityName], card)
 	}
 
-	// Build embed fields
 	var fields []*discordgo.MessageEmbedField
 	for _, rarity := range rarityOrder {
 		cardsInRarity, exists := cardsByRarity[rarity]
@@ -2426,7 +2422,6 @@ func ShowStore(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 		},
 	}
 
-	// Create dropdown options (max 25)
 	maxOptions := 25
 	if len(purchasableCards) > maxOptions {
 		purchasableCards = purchasableCards[:maxOptions]
@@ -2531,7 +2526,6 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 
 	now := time.Now()
 
-	// Check timeout/cooldown restrictions (same as DrawCard)
 	resetPeriod := time.Duration(guild.CardDrawCooldownMinutes) * time.Minute
 	if user.FirstCardDrawCycle != nil {
 		timeSinceFirstDraw := now.Sub(*user.FirstCardDrawCycle)
@@ -2551,7 +2545,6 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 		}
 	}()
 
-	// Get card from database to ensure it has store cost
 	var dbCard models.Card
 	err = tx.Where("id = ? AND store_cost IS NOT NULL AND active = ?", cardID, true).
 		Preload("CardRarity").
@@ -2568,7 +2561,6 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 		})
 	}
 
-	// Get card from registry to get handler
 	card := GetCardByID(cardID)
 	if card == nil {
 		tx.Rollback()
@@ -2581,7 +2573,6 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 		})
 	}
 
-	// Use store cost from database
 	storeCost := 0.0
 	if dbCard.StoreCost != nil {
 		storeCost = *dbCard.StoreCost
@@ -2598,7 +2589,6 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 		})
 	}
 
-	// Check timeout
 	var lockedUser models.User
 	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&lockedUser, user.ID).Error; err != nil {
 		tx.Rollback()
@@ -2624,7 +2614,6 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 		lockedUser.CardDrawTimeoutUntil = nil
 	}
 
-	// Check if user has enough points
 	if lockedUser.Points < storeCost {
 		tx.Rollback()
 		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -2638,7 +2627,6 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 
 	user = lockedUser
 
-	// Lock guild and update pool
 	var lockedGuild models.Guild
 	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&lockedGuild, guild.ID).Error; err != nil {
 		tx.Rollback()
@@ -2648,11 +2636,9 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 
 	*guild = lockedGuild
 
-	// Deduct points and add to pool
 	user.Points -= storeCost
 	guild.Pool += storeCost
 
-	// Handle pool drain if active
 	if guild.PoolDrainUntil != nil {
 		if now.After(*guild.PoolDrainUntil) {
 			guild.PoolDrainUntil = nil
@@ -2666,7 +2652,6 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 		}
 	}
 
-	// Save user and guild
 	if err := tx.Save(&user).Error; err != nil {
 		tx.Rollback()
 		common.SendError(s, i, err, db)
@@ -2679,14 +2664,12 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 		return err
 	}
 
-	// Process royalty payment
 	if err := processRoyaltyPayment(tx, card, cards.RoyaltyGuildID); err != nil {
 		tx.Rollback()
 		common.SendError(s, i, fmt.Errorf("error processing royalty payment: %v", err), db)
 		return err
 	}
 
-	// Add to inventory if needed
 	if card.AddToInventory || card.UserPlayable {
 		if err := addCardToInventory(tx, user.ID, guildID, card.ID); err != nil {
 			tx.Rollback()
@@ -2695,7 +2678,6 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 		}
 	}
 
-	// Execute card handler
 	cardResult, err := card.Handler(s, tx, userID, guildID)
 	if err != nil {
 		tx.Rollback()
@@ -2710,14 +2692,12 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 		return err
 	}
 
-	// Process tag cards
 	if err := processTagCards(tx, guildID); err != nil {
 		tx.Rollback()
 		common.SendError(s, i, fmt.Errorf("error processing tag cards: %v", err), db)
 		return err
 	}
 
-	// Handle cards requiring selection
 	if cardResult.RequiresSelection {
 		if cardResult.SelectionType == "user" {
 			if card.ID == cards.HostileTakeoverCardID || card.ID == cards.JusticeCardID {
@@ -2763,12 +2743,12 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 			if err := tx.Save(&user).Error; err != nil {
 				tx.Rollback()
 				common.SendError(s, i, err, db)
-		return err
+				return err
 			}
 			if err := tx.Save(&guild).Error; err != nil {
 				tx.Rollback()
 				common.SendError(s, i, err, db)
-		return err
+				return err
 			}
 
 			tx.Commit()
@@ -2776,7 +2756,6 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 		}
 	}
 
-	// Handle cards with options
 	if len(card.Options) > 0 {
 		ShowCardOptionsMenu(s, i, card.ID, card.Name, card.Description, userID, guildID, db, card.Options)
 
@@ -2801,19 +2780,18 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 		return nil
 	}
 
-	// Handle negative point deltas with Moon/Shield logic (same as DrawCard)
 	if cardResult.PointsDelta < 0 {
 		hasMoon, err := hasMoonInInventory(tx, user.ID, guildID)
 		if err != nil {
 			tx.Rollback()
 			common.SendError(s, i, err, db)
-		return err
+			return err
 		}
 		if hasMoon {
 			if err := PlayCardFromInventory(s, tx, user, cards.TheMoonCardID); err != nil {
 				tx.Rollback()
 				common.SendError(s, i, err, db)
-		return err
+				return err
 			}
 			randomUserID, err := getRandomUserForMoonFromCards(tx, guildID, []uint{user.ID})
 			if err != nil {
@@ -2821,13 +2799,13 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 				if err != nil {
 					tx.Rollback()
 					common.SendError(s, i, err, db)
-		return err
+					return err
 				}
 				if hasShield {
 					if err := PlayCardFromInventory(s, tx, user, cards.ShieldCardID); err != nil {
 						tx.Rollback()
 						common.SendError(s, i, err, db)
-		return err
+						return err
 					}
 					cardResult.PointsDelta = 0
 					if cardResult.Message == "" {
@@ -2849,7 +2827,7 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 					First(&randomUser).Error; err != nil {
 					tx.Rollback()
 					common.SendError(s, i, err, db)
-		return err
+					return err
 				}
 
 				redirectedLoss := -cardResult.PointsDelta
@@ -2872,13 +2850,13 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 			if err != nil {
 				tx.Rollback()
 				common.SendError(s, i, err, db)
-		return err
+				return err
 			}
 			if hasShield {
 				if err := PlayCardFromInventory(s, tx, user, cards.ShieldCardID); err != nil {
 					tx.Rollback()
 					common.SendError(s, i, err, db)
-		return err
+					return err
 				}
 
 				cardResult.PointsDelta = 0
@@ -2891,14 +2869,12 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 		}
 	}
 
-	// Apply point deltas
 	user.Points += cardResult.PointsDelta
 	if user.Points < 0 {
 		user.Points = 0
 	}
 	guild.Pool += cardResult.PoolDelta
 
-	// Handle target user point changes
 	var targetUsername string
 	if cardResult.TargetUserID != nil {
 		var targetUser models.User
@@ -2909,13 +2885,13 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 				if err != nil {
 					tx.Rollback()
 					common.SendError(s, i, err, db)
-		return err
+					return err
 				}
 				if hasMoon {
 					if err := PlayCardFromInventory(s, tx, targetUser, cards.TheMoonCardID); err != nil {
 						tx.Rollback()
 						common.SendError(s, i, err, db)
-		return err
+						return err
 					}
 					randomUserID, err := getRandomUserForMoonFromCards(tx, guildID, []uint{targetUser.ID, user.ID})
 					if err != nil {
@@ -2923,13 +2899,13 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 						if err != nil {
 							tx.Rollback()
 							common.SendError(s, i, err, db)
-		return err
+							return err
 						}
 						if hasShield {
 							if err := PlayCardFromInventory(s, tx, targetUser, cards.ShieldCardID); err != nil {
 								tx.Rollback()
 								common.SendError(s, i, err, db)
-		return err
+								return err
 							}
 							cardResult.TargetPointsDelta = 0
 							if cardResult.Message == "" {
@@ -2951,7 +2927,7 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 							First(&randomUser).Error; err != nil {
 							tx.Rollback()
 							common.SendError(s, i, err, db)
-		return err
+							return err
 						}
 
 						redirectedLoss := -cardResult.TargetPointsDelta
@@ -2973,13 +2949,13 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 					if err != nil {
 						tx.Rollback()
 						common.SendError(s, i, err, db)
-		return err
+						return err
 					}
 					if hasShield {
 						if err := PlayCardFromInventory(s, tx, targetUser, cards.ShieldCardID); err != nil {
 							tx.Rollback()
 							common.SendError(s, i, err, db)
-		return err
+							return err
 						}
 
 						cardResult.TargetPointsDelta = 0
@@ -3003,14 +2979,13 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 				if err := tx.Save(&userToUpdate).Error; err != nil {
 					tx.Rollback()
 					common.SendError(s, i, err, db)
-		return err
+					return err
 				}
 			}
 			targetUsername = common.GetUsernameWithDB(db, s, guildID, *cardResult.TargetUserID)
 		}
 	}
 
-	// Save final state
 	if err := tx.Save(&user).Error; err != nil {
 		tx.Rollback()
 		common.SendError(s, i, err, db)
@@ -3024,11 +2999,10 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 
 	tx.Commit()
 
-	// Build and send confirmation embed
 	username = common.GetUsernameWithDB(db, s, guildID, user.DiscordID)
 	embed := buildCardEmbed(card, cardResult, user, username, targetUsername, guild.Pool, storeCost)
 
-	// Modify footer to indicate store purchase
+	embed.Title = strings.Replace(embed.Title, " Drew: ", " Purchased: ", 1)
 	if embed.Footer != nil {
 		embed.Footer.Text = fmt.Sprintf("Store Purchase: -%.0f points | Added %.0f to pool", storeCost, storeCost)
 	}

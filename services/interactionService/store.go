@@ -79,24 +79,34 @@ func HandleStoreSelection(s *discordgo.Session, i *discordgo.InteractionCreate, 
 	// Find the purchase button and update its customID to include card ID
 	var updatedComponents []discordgo.MessageComponent
 	for _, row := range originalMessage.Components {
-		actionsRow, ok := row.(*discordgo.ActionsRow)
-		if !ok {
+		var rowComponents []discordgo.MessageComponent
+		switch r := row.(type) {
+		case *discordgo.ActionsRow:
+			rowComponents = r.Components
+		case discordgo.ActionsRow:
+			rowComponents = r.Components
+		default:
 			updatedComponents = append(updatedComponents, row)
 			continue
 		}
 
 		var updatedRowComponents []discordgo.MessageComponent
-		for _, comp := range actionsRow.Components {
-			if button, ok := comp.(*discordgo.Button); ok {
-				if strings.HasPrefix(button.CustomID, "store_purchase_") {
-					// Update button to include card ID
-					newButton := *button
-					newButton.CustomID = fmt.Sprintf("store_purchase_%s_%s_%d", userID, guildID, cardID)
-					newButton.Label = fmt.Sprintf("Purchase %s (%.0f points)", card.Name, cost)
-					updatedRowComponents = append(updatedRowComponents, &newButton)
-				} else {
-					updatedRowComponents = append(updatedRowComponents, comp)
-				}
+		for _, comp := range rowComponents {
+			var btn *discordgo.Button
+			switch c := comp.(type) {
+			case *discordgo.Button:
+				btn = c
+			case discordgo.Button:
+				btn = &c
+			default:
+				updatedRowComponents = append(updatedRowComponents, comp)
+				continue
+			}
+			if strings.HasPrefix(btn.CustomID, "store_purchase_") {
+				newButton := *btn
+				newButton.CustomID = fmt.Sprintf("store_purchase_%s_%s_%d", userID, guildID, cardID)
+				newButton.Label = fmt.Sprintf("Purchase %s (%.0f points)", card.Name, cost)
+				updatedRowComponents = append(updatedRowComponents, &newButton)
 			} else {
 				updatedRowComponents = append(updatedRowComponents, comp)
 			}
