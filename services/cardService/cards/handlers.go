@@ -1258,6 +1258,7 @@ func ExecuteJesterMute(s *discordgo.Session, db *gorm.DB, userID string, targetU
 	var targetUser models.User
 	targetID := targetUserID
 	targetMention := "<@" + targetUserID + ">"
+	userMention := "<@" + userID + ">"
 	if err := db.Clauses(clause.Locking{Strength: "UPDATE"}).
 		Where("discord_id = ? AND guild_id = ?", targetUserID, guildID).
 		First(&targetUser).Error; err == nil {
@@ -1362,7 +1363,7 @@ func ExecuteJesterMute(s *discordgo.Session, db *gorm.DB, userID string, targetU
 		}
 
 		return &models.CardResult{
-			Message:           fmt.Sprintf("The Jester laughs! %s has been muted for 15 minutes.", targetMention),
+			Message:           fmt.Sprintf("The Jester laughs! %s has muted %s has for 15 minutes.", userMention, targetMention),
 			PointsDelta:       0,
 			PoolDelta:         0,
 			TargetUserID:      &targetID,
@@ -1679,6 +1680,7 @@ func ExecuteBetFreeze(s *discordgo.Session, db *gorm.DB, userID string, targetUs
 		return nil, err
 	}
 	targetMention := "<@" + targetUserID + ">"
+	userMention := "<@" + userID + ">"
 
 	moonRedirected, err := CheckAndConsumeMoon(db, targetUser.ID, guildID)
 	if err != nil {
@@ -1774,7 +1776,7 @@ func ExecuteBetFreeze(s *discordgo.Session, db *gorm.DB, userID string, targetUs
 
 	targetID := targetUserID
 	return &models.CardResult{
-		Message:           fmt.Sprintf("%s's betting ability has been frozen for 2 hours!", targetMention),
+		Message:           fmt.Sprintf("%s has frozen %s's betting ability for 2 hours!", userMention, targetMention),
 		PointsDelta:       0,
 		PoolDelta:         0,
 		TargetUserID:      &targetID,
@@ -2918,8 +2920,9 @@ func ExecuteTheGossip(s *discordgo.Session, db *gorm.DB, userID string, targetUs
 
 	targetID := targetUserID
 	targetMention := "<@" + targetUserID + ">"
+	userMention := "<@" + userID + ">"
 	return &models.CardResult{
-		Message:           fmt.Sprintf("The Gossip spreads! %s's current point balance is **%.1f points**.", targetMention, targetUser.Points),
+		Message:           fmt.Sprintf("The Gossip spreads! %s has revealed that %s's current point balance is **%.1f points**.", userMention, targetMention, targetUser.Points),
 		PointsDelta:       0,
 		PoolDelta:         0,
 		TargetUserID:      &targetID,
