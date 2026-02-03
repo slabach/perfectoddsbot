@@ -211,6 +211,22 @@ func HandleComponentInteraction(s *discordgo.Session, i *discordgo.InteractionCr
 		}
 		return
 	}
+
+	if strings.HasPrefix(customID, "store_select_") {
+		err := HandleStoreSelection(s, i, db, customID)
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
+
+	if strings.HasPrefix(customID, "store_purchase_") {
+		err := HandleStorePurchase(s, i, db, customID)
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
 }
 
 func HandleModalSubmit(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
