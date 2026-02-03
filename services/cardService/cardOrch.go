@@ -2374,6 +2374,11 @@ func ShowStore(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 		return
 	}
 
+	maxOptions := 25
+	if len(purchasableCards) > maxOptions {
+		purchasableCards = purchasableCards[:maxOptions]
+	}
+
 	rarityOrder := []string{"Mythic", "Epic", "Rare", "Uncommon", "Common"}
 	cardsByRarity := make(map[string][]models.Card)
 	for _, card := range purchasableCards {
@@ -2384,6 +2389,7 @@ func ShowStore(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 		cardsByRarity[rarityName] = append(cardsByRarity[rarityName], card)
 	}
 
+	const discordFieldValueLimit = 1024
 	var fields []*discordgo.MessageEmbedField
 	for _, rarity := range rarityOrder {
 		cardsInRarity, exists := cardsByRarity[rarity]
@@ -2397,7 +2403,22 @@ func ShowStore(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 			if card.StoreCost != nil {
 				cost = *card.StoreCost
 			}
-			fieldValue += fmt.Sprintf("**%s** - %.0f points\n%s\n\n", card.Name, cost, card.Description)
+			cardEntry := fmt.Sprintf("**%s** - %.0f points\n%s\n\n", card.Name, cost, card.Description)
+			// Truncate fieldValue to Discord's 1024 character limit per field
+			if len(fieldValue)+len(cardEntry) > discordFieldValueLimit {
+				// If adding this card would exceed the limit, truncate and break
+				remaining := discordFieldValueLimit - len(fieldValue)
+				if remaining > 0 {
+					fieldValue += cardEntry[:remaining]
+				}
+				break
+			}
+			fieldValue += cardEntry
+		}
+
+		// Ensure fieldValue doesn't exceed limit (safety check)
+		if len(fieldValue) > discordFieldValueLimit {
+			fieldValue = fieldValue[:discordFieldValueLimit]
 		}
 
 		var rarityEmoji string = "🤍"
@@ -2420,11 +2441,6 @@ func ShowStore(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 		Footer: &discordgo.MessageEmbedFooter{
 			Text: fmt.Sprintf("Your points: %.1f", user.Points),
 		},
-	}
-
-	maxOptions := 25
-	if len(purchasableCards) > maxOptions {
-		purchasableCards = purchasableCards[:maxOptions]
 	}
 
 	var selectOptions []discordgo.SelectMenuOption

@@ -1066,7 +1066,13 @@ func handleJudgement(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 			if moonRedirected {
 				randomDiscordID, err := GetRandomUserForMoon(tx, guildID, []uint{lockedUser.ID})
 				if err != nil {
-					CheckAndConsumeShield(tx, lockedUser.ID, guildID)
+					blocked, err := CheckAndConsumeShield(tx, lockedUser.ID, guildID)
+					if err != nil {
+						return err
+					}
+					if blocked {
+						continue
+					}
 					continue
 				}
 				var randomUser models.User
@@ -1082,7 +1088,9 @@ func handleJudgement(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 					if randomUser.Points < 0 {
 						randomUser.Points = 0
 					}
-					tx.Save(&randomUser)
+					if err := tx.Save(&randomUser).Error; err != nil {
+						return err
+					}
 					totalPointsToPool += deduct
 					randomName := common.GetUsernameWithDB(tx, s, guildID, randomUser.DiscordID)
 					top50Details = append(top50Details, fmt.Sprintf("%s's Moon → %s: -%.0f points", username, randomName, deduct))
@@ -2162,7 +2170,10 @@ func handleSocialism(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 			if moonRedirected {
 				randomDiscordID, err := GetRandomUserForMoon(tx, guildID, []uint{lockedTop.ID})
 				if err != nil {
-					blocked, _ := CheckAndConsumeShield(tx, lockedTop.ID, guildID)
+					blocked, err := CheckAndConsumeShield(tx, lockedTop.ID, guildID)
+					if err != nil {
+						return err
+					}
 					if blocked {
 						topMessage += fmt.Sprintf("%s's Moon had no one to redirect to; Shield blocked!\n", topDisplayName)
 					} else {
@@ -2183,7 +2194,9 @@ func handleSocialism(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 					if randomUser.Points < 0 {
 						randomUser.Points = 0
 					}
-					tx.Save(&randomUser)
+					if err := tx.Save(&randomUser).Error; err != nil {
+						return err
+					}
 					totalCollected += actualTake
 					randomDisplayName := fmt.Sprintf("<@%s>", randomUser.DiscordID)
 					if randomUser.Username != nil && *randomUser.Username != "" {
@@ -2751,7 +2764,10 @@ func ExecuteHostileTakeover(tx *gorm.DB, userID string, targetUserID string, gui
 			if moonRedirected {
 				randomDiscordID, err := GetRandomUserForMoon(tx, guildID, []uint{drawer.ID, target.ID})
 				if err != nil {
-					blocked, _ := CheckAndConsumeShield(tx, target.ID, guildID)
+					blocked, err := CheckAndConsumeShield(tx, target.ID, guildID)
+					if err != nil {
+						return err
+					}
 					if blocked {
 						result = &models.CardResult{
 							Message:           fmt.Sprintf("Hostile Takeover: %s's Moon had no one to redirect to and their Shield blocked the swap! The card fizzles.", targetMention),
@@ -2775,16 +2791,21 @@ func ExecuteHostileTakeover(tx *gorm.DB, userID string, targetUserID string, gui
 				if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("discord_id = ? AND guild_id = ?", randomDiscordID, guildID).First(&randomUser).Error; err != nil {
 					return err
 				}
+				randomOrig := randomUser.Points
 				drawer.Points, randomUser.Points = randomUser.Points, drawer.Points
-				tx.Save(&drawer)
-				tx.Save(&randomUser)
+				if err := tx.Save(&drawer).Error; err != nil {
+					return err
+				}
+				if err := tx.Save(&randomUser).Error; err != nil {
+					return err
+				}
 				randomMention := "<@" + randomUser.DiscordID + ">"
 				result = &models.CardResult{
 					Message:           fmt.Sprintf("Hostile Takeover: %s's Moon redirected the swap! You swapped points with %s instead.", targetMention, randomMention),
-					PointsDelta:       randomUser.Points - drawerOrig,
+					PointsDelta:       randomOrig - drawerOrig,
 					PoolDelta:         0,
 					TargetUserID:      &randomUser.DiscordID,
-					TargetPointsDelta: drawerOrig - randomUser.Points,
+					TargetPointsDelta: drawerOrig - randomOrig,
 				}
 				return nil
 			}
@@ -2810,7 +2831,10 @@ func ExecuteHostileTakeover(tx *gorm.DB, userID string, targetUserID string, gui
 			if moonRedirected {
 				randomDiscordID, err := GetRandomUserForMoon(tx, guildID, []uint{drawer.ID, target.ID})
 				if err != nil {
-					blocked, _ := CheckAndConsumeShield(tx, drawer.ID, guildID)
+					blocked, err := CheckAndConsumeShield(tx, drawer.ID, guildID)
+					if err != nil {
+						return err
+					}
 					if blocked {
 						result = &models.CardResult{
 							Message:           "Hostile Takeover: Your Moon had no one to redirect to and your Shield blocked the swap! The card fizzles.",
@@ -2834,16 +2858,21 @@ func ExecuteHostileTakeover(tx *gorm.DB, userID string, targetUserID string, gui
 				if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("discord_id = ? AND guild_id = ?", randomDiscordID, guildID).First(&randomUser).Error; err != nil {
 					return err
 				}
+				randomOrig := randomUser.Points
 				drawer.Points, randomUser.Points = randomUser.Points, drawer.Points
-				tx.Save(&drawer)
-				tx.Save(&randomUser)
+				if err := tx.Save(&drawer).Error; err != nil {
+					return err
+				}
+				if err := tx.Save(&randomUser).Error; err != nil {
+					return err
+				}
 				randomMention := "<@" + randomUser.DiscordID + ">"
 				result = &models.CardResult{
 					Message:           fmt.Sprintf("Hostile Takeover: Your Moon redirected the swap! You swapped points with %s instead of %s.", randomMention, targetDisplay),
-					PointsDelta:       randomUser.Points - drawerOrig,
+					PointsDelta:       randomOrig - drawerOrig,
 					PoolDelta:         0,
 					TargetUserID:      &randomUser.DiscordID,
-					TargetPointsDelta: drawerOrig - randomUser.Points,
+					TargetPointsDelta: drawerOrig - randomOrig,
 				}
 				return nil
 			}
@@ -3637,7 +3666,10 @@ func handleHotPotato(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 		if moonRedirected {
 			randomDiscordID, err := GetRandomUserForMoon(tx, guildID, []uint{user.ID, lockedTarget.ID})
 			if err != nil {
-				shieldBlocked, _ := CheckAndConsumeShield(tx, user.ID, guildID)
+				shieldBlocked, err := CheckAndConsumeShield(tx, user.ID, guildID)
+				if err != nil {
+					return err
+				}
 				if shieldBlocked {
 					messageParts = append(messageParts, fmt.Sprintf("%s's Moon tried to redirect but no eligible users. Shield blocked your loss!", userMention))
 				} else {
@@ -3656,7 +3688,9 @@ func handleHotPotato(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 				if randomUser.Points < 0 {
 					randomUser.Points = 0
 				}
-				tx.Save(&randomUser)
+				if err := tx.Save(&randomUser).Error; err != nil {
+					return err
+				}
 				randomMention := "<@" + randomUser.DiscordID + ">"
 				messageParts = append(messageParts, fmt.Sprintf("%s's Moon redirected your 50 loss to %s (%.0f points)!", userMention, randomMention, deduct))
 			}
@@ -3671,7 +3705,9 @@ func handleHotPotato(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 			} else {
 				drawerActualLoss = userLoss
 				user.Points -= userLoss
-				tx.Save(&user)
+				if err := tx.Save(&user).Error; err != nil {
+					return err
+				}
 			}
 		}
 
@@ -3683,7 +3719,10 @@ func handleHotPotato(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 		if moonRedirectedTarget {
 			randomDiscordID, err := GetRandomUserForMoon(tx, guildID, []uint{user.ID, lockedTarget.ID})
 			if err != nil {
-				shieldBlocked, _ := CheckAndConsumeShield(tx, lockedTarget.ID, guildID)
+				shieldBlocked, err := CheckAndConsumeShield(tx, lockedTarget.ID, guildID)
+				if err != nil {
+					return err
+				}
 				if shieldBlocked {
 					messageParts = append(messageParts, fmt.Sprintf("%s's Moon tried to redirect but no eligible users. Shield blocked their loss!", targetMention))
 				} else {
@@ -3702,7 +3741,9 @@ func handleHotPotato(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 				if randomUser.Points < 0 {
 					randomUser.Points = 0
 				}
-				tx.Save(&randomUser)
+				if err := tx.Save(&randomUser).Error; err != nil {
+					return err
+				}
 				randomMention := "<@" + randomUser.DiscordID + ">"
 				messageParts = append(messageParts, fmt.Sprintf("%s's Moon redirected the hit to %s (%.0f points)!", targetMention, randomMention, deduct))
 			}
@@ -3717,7 +3758,9 @@ func handleHotPotato(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 			} else {
 				targetActualLoss = targetLoss
 				lockedTarget.Points -= targetLoss
-				tx.Save(&lockedTarget)
+				if err := tx.Save(&lockedTarget).Error; err != nil {
+					return err
+				}
 			}
 		}
 
