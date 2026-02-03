@@ -157,7 +157,7 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	case 1:
 		drawCardCost = guild.CardDrawCost * 10
 	default:
-		drawCardCost = guild.CardDrawCost * 100
+		drawCardCost = guild.CardDrawCost * 50
 	}
 
 	var donorUserID uint
@@ -2008,7 +2008,7 @@ func MyInventory(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.
 	case 1:
 		nextDrawCost = guild.CardDrawCost * 10
 	default:
-		nextDrawCost = guild.CardDrawCost * 100
+		nextDrawCost = guild.CardDrawCost * 50
 	}
 
 	hasLuckyHorseshoe := cardCounts[cards.LuckyHorseshoeCardID] > 0

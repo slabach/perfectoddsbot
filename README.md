@@ -23,7 +23,7 @@ PerfectOddsBot includes an optional “card game” that sits on top of the poin
 - **Cooldown cycle + escalating price**: Each user has a draw “cycle” that resets every (default: 60 minutes).
   - 1st draw in the cycle costs `CardDrawCost` (default: 10 points)
   - 2nd draw costs `CardDrawCost * 10`
-  - 3rd+ draws cost `CardDrawCost * 100`
+  - 3rd+ draws cost `CardDrawCost * 50`
 - **Server toggle**: Admins can enable/disable drawing per server with `/toggle-card-drawing`.
 - **Rarities**: Cards come in **Common**, **Uncommon**, **Rare**, **Epic**, and **Mythic** rarities, with Mythic being the rarest.
 - **Subscription-gated cards**: Some cards are only eligible if your server has a subscribed team set via `/subscribe-to-team` (these are treated as “premium” cards in the deck logic).

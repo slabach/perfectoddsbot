@@ -279,7 +279,7 @@ func handleSmallRebate(s *discordgo.Session, db *gorm.DB, userID string, guildID
 	case 2:
 		refundAmount = guild.CardDrawCost * 10
 	default:
-		refundAmount = guild.CardDrawCost * 100
+		refundAmount = guild.CardDrawCost * 50
 	}
 
 	return &models.CardResult{
@@ -865,7 +865,7 @@ func handlePocketSand(s *discordgo.Session, db *gorm.DB, userID string, guildID 
 	case 2:
 		refundAmount = guild.CardDrawCost * 10
 	default:
-		refundAmount = guild.CardDrawCost * 100
+		refundAmount = guild.CardDrawCost * 50
 	}
 
 	return &models.CardResult{
@@ -1594,7 +1594,7 @@ func handleQuickFlip(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 	case 2:
 		cardCost = guild.CardDrawCost * 10
 	default:
-		cardCost = guild.CardDrawCost * 100
+		cardCost = guild.CardDrawCost * 50
 	}
 
 	coinFlip := rand.Intn(2)
