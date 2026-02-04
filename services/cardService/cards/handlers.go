@@ -1371,7 +1371,7 @@ func ExecuteJesterMute(s *discordgo.Session, db *gorm.DB, userID string, targetU
 		}
 
 		return &models.CardResult{
-			Message:           fmt.Sprintf("The Jester laughs! %s has muted %s has for 15 minutes.", userMention, targetMention),
+			Message:           fmt.Sprintf("The Jester laughs! %s has muted %s for 15 minutes.", userMention, targetMention),
 			PointsDelta:       0,
 			PoolDelta:         0,
 			TargetUserID:      &targetID,
