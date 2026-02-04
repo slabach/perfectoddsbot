@@ -45,6 +45,49 @@ func CheckLeech(s *discordgo.Session, db *gorm.DB) error {
 				return nil
 			}
 
+			// Shield/moon for richest player (victim of Leech)
+			moonRedirected, err := cards.CheckAndConsumeMoon(tx, richestPlayer.ID, leech.GuildID)
+			if err != nil {
+				return err
+			}
+			if moonRedirected {
+				randomDiscordID, err := cards.GetRandomUserForMoon(tx, leech.GuildID, []uint{richestPlayer.ID, leechHolder.ID})
+				if err != nil {
+					cards.CheckAndConsumeShield(tx, richestPlayer.ID, leech.GuildID)
+					return nil
+				}
+				var randomUser models.User
+				if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+					Where("discord_id = ? AND guild_id = ?", randomDiscordID, leech.GuildID).
+					First(&randomUser).Error; err != nil {
+					return err
+				}
+				actualSiphon := randomUser.Points * 0.01
+				if actualSiphon <= 0 {
+					return nil
+				}
+				randomUser.Points -= actualSiphon
+				if randomUser.Points < 0 {
+					randomUser.Points = 0
+				}
+				if err := tx.Save(&randomUser).Error; err != nil {
+					return err
+				}
+				leechHolder.Points += actualSiphon
+				if err := tx.Save(&leechHolder).Error; err != nil {
+					return err
+				}
+				return nil
+			}
+
+			blocked, err := cards.CheckAndConsumeShield(tx, richestPlayer.ID, leech.GuildID)
+			if err != nil {
+				return err
+			}
+			if blocked {
+				return nil
+			}
+
 			richestPlayer.Points -= siphonAmount
 			if richestPlayer.Points < 0 {
 				richestPlayer.Points = 0

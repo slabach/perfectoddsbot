@@ -63,6 +63,8 @@ func HandleSlashCommand(s *discordgo.Session, i *discordgo.InteractionCreate, db
 		cardService.MyInventory(s, i, db)
 	case "play-card":
 		cardService.PlayCard(s, i, db)
+	case "store":
+		cardService.ShowStore(s, i, db)
 	case "toggle-card-drawing":
 		guildService.ToggleCardDrawing(s, i, db)
 	}
@@ -78,6 +80,7 @@ func ShowHelp(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		{"my-parlays", "Show your active parlays", false, false},
 		{"create-parlay", "Create a parlay by combining multiple open bets", false, false},
 		{"draw-card", "Draw a random card from the deck (Costs X points, adds to pool)", false, false},
+		{"store", "Purchase specific cards directly from the store", false, false},
 		{"my-inventory", "View the cards currently in your hand", false, false},
 		{"play-card", "Play a card from your inventory", false, false},
 		{"create-bet", "Create a new bet", true, false},
@@ -277,6 +280,10 @@ func RegisterCommands(s *discordgo.Session) error {
 		{
 			Name:        "play-card",
 			Description: "Play a card from your inventory",
+		},
+		{
+			Name:        "store",
+			Description: "Purchase specific cards directly from the store",
 		},
 		{
 			Name:        "toggle-card-drawing",

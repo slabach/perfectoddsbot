@@ -558,15 +558,8 @@ func handleHostileTakeoverSelection(s *discordgo.Session, i *discordgo.Interacti
 			return fmt.Errorf("selected user is not within 500 points")
 		}
 
-		drawerOriginalPoints := drawer.Points
-		targetOriginalPoints := target.Points
-
-		drawer.Points, target.Points = target.Points, drawer.Points
-
-		if err := tx.Save(&drawer).Error; err != nil {
-			return err
-		}
-		if err := tx.Save(&target).Error; err != nil {
+		result, err := cards.ExecuteHostileTakeover(tx, userID, targetUserID, guildID)
+		if err != nil {
 			return err
 		}
 
@@ -575,30 +568,30 @@ func handleHostileTakeoverSelection(s *discordgo.Session, i *discordgo.Interacti
 			return err
 		}
 
+		var drawerAfter, targetAfter models.User
+		tx.First(&drawerAfter, drawer.ID)
+		tx.First(&targetAfter, target.ID)
 		targetUsername := common.GetUsernameWithDB(tx, s, guildID, targetUserID)
+		if result.TargetUserID != nil {
+			targetUsername = common.GetUsernameWithDB(tx, s, guildID, *result.TargetUserID)
+		}
 
 		card := cardService.GetCardByID(cards.HostileTakeoverCardID)
 		if card == nil {
 			return fmt.Errorf("card not found")
 		}
 
-		embed := buildCardResultEmbed(card, &models.CardResult{
-			Message:           fmt.Sprintf("Hostile Takeover successful! You swapped points with %s.", targetUsername),
-			PointsDelta:       targetOriginalPoints - drawerOriginalPoints,
-			PoolDelta:         0,
-			TargetUserID:      &targetUserID,
-			TargetPointsDelta: drawerOriginalPoints - targetOriginalPoints,
-		}, drawer, targetUsername, guild.Pool)
+		embed := buildCardResultEmbed(card, result, drawerAfter, targetUsername, guild.Pool)
 
 		embed.Fields = []*discordgo.MessageEmbedField{
 			{
 				Name:   "You",
-				Value:  fmt.Sprintf("<@%s>: %.1f → %.1f points", drawer.DiscordID, drawerOriginalPoints, drawer.Points),
+				Value:  fmt.Sprintf("<@%s>: %.1f → %.1f points", drawerAfter.DiscordID, drawer.Points, drawerAfter.Points),
 				Inline: true,
 			},
 			{
 				Name:   "Target",
-				Value:  fmt.Sprintf("<@%s>: %.1f → %.1f points", target.DiscordID, targetOriginalPoints, target.Points),
+				Value:  fmt.Sprintf("<@%s>: %.1f → %.1f points", targetAfter.DiscordID, target.Points, targetAfter.Points),
 				Inline: true,
 			},
 		}

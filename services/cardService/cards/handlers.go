@@ -115,7 +115,7 @@ func ExecutePickpocketSteal(db *gorm.DB, userID string, targetUserID string, gui
 
 	targetMention := "<@" + targetUserID + ">"
 
-	moonRedirected, err := checkAndConsumeMoon(db, targetUser.ID, guildID)
+	moonRedirected, err := CheckAndConsumeMoon(db, targetUser.ID, guildID)
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +164,7 @@ func ExecutePickpocketSteal(db *gorm.DB, userID string, targetUserID string, gui
 		}, nil
 	}
 
-	blocked, err := checkAndConsumeShield(db, targetUser.ID, guildID)
+	blocked, err := CheckAndConsumeShield(db, targetUser.ID, guildID)
 	if err != nil {
 		return nil, err
 	}
@@ -409,7 +409,7 @@ func handleTimeout(s *discordgo.Session, db *gorm.DB, userID string, guildID str
 		}, nil
 	}
 
-	moonRedirected, err := checkAndConsumeMoon(db, user.ID, guildID)
+	moonRedirected, err := CheckAndConsumeMoon(db, user.ID, guildID)
 	if err != nil {
 		return nil, err
 	}
@@ -427,7 +427,7 @@ func handleTimeout(s *discordgo.Session, db *gorm.DB, userID string, guildID str
 					PoolDelta:   0,
 				}, nil
 			}
-			shieldBlocked, err := checkAndConsumeShield(db, user.ID, guildID)
+			shieldBlocked, err := CheckAndConsumeShield(db, user.ID, guildID)
 			if err != nil {
 				return nil, err
 			}
@@ -468,7 +468,7 @@ func handleTimeout(s *discordgo.Session, db *gorm.DB, userID string, guildID str
 		}, nil
 	}
 
-	shieldBlocked, err := checkAndConsumeShield(db, user.ID, guildID)
+	shieldBlocked, err := CheckAndConsumeShield(db, user.ID, guildID)
 	if err != nil {
 		return nil, err
 	}
@@ -1054,18 +1054,67 @@ func handleJudgement(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 			}
 
 			pointsLoss := lockedUser.Points * 0.10
-			if pointsLoss > 0 {
-				lockedUser.Points -= pointsLoss
-				if lockedUser.Points < 0 {
-					lockedUser.Points = 0
+			if pointsLoss <= 0 {
+				continue
+			}
+
+			username := common.GetUsernameWithDB(tx, s, guildID, lockedUser.DiscordID)
+			moonRedirected, err := CheckAndConsumeMoon(tx, lockedUser.ID, guildID)
+			if err != nil {
+				return err
+			}
+			if moonRedirected {
+				randomDiscordID, err := GetRandomUserForMoon(tx, guildID, []uint{lockedUser.ID})
+				if err != nil {
+					blocked, err := CheckAndConsumeShield(tx, lockedUser.ID, guildID)
+					if err != nil {
+						return err
+					}
+					if blocked {
+						continue
+					}
+					continue
 				}
-				if err := tx.Save(&lockedUser).Error; err != nil {
+				var randomUser models.User
+				if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("discord_id = ? AND guild_id = ?", randomDiscordID, guildID).First(&randomUser).Error; err != nil {
 					return err
 				}
-				totalPointsToPool += pointsLoss
-				username := common.GetUsernameWithDB(tx, s, guildID, lockedUser.DiscordID)
-				top50Details = append(top50Details, fmt.Sprintf("%s: -%.0f points", username, pointsLoss))
+				deduct := randomUser.Points * 0.10
+				if deduct > randomUser.Points {
+					deduct = randomUser.Points
+				}
+				if deduct > 0 {
+					randomUser.Points -= deduct
+					if randomUser.Points < 0 {
+						randomUser.Points = 0
+					}
+					if err := tx.Save(&randomUser).Error; err != nil {
+						return err
+					}
+					totalPointsToPool += deduct
+					randomName := common.GetUsernameWithDB(tx, s, guildID, randomUser.DiscordID)
+					top50Details = append(top50Details, fmt.Sprintf("%s's Moon → %s: -%.0f points", username, randomName, deduct))
+				}
+				continue
 			}
+			blocked, err := CheckAndConsumeShield(tx, lockedUser.ID, guildID)
+			if err != nil {
+				return err
+			}
+			if blocked {
+				top50Details = append(top50Details, fmt.Sprintf("%s: Shield blocked", username))
+				continue
+			}
+
+			lockedUser.Points -= pointsLoss
+			if lockedUser.Points < 0 {
+				lockedUser.Points = 0
+			}
+			if err := tx.Save(&lockedUser).Error; err != nil {
+				return err
+			}
+			totalPointsToPool += pointsLoss
+			top50Details = append(top50Details, fmt.Sprintf("%s: -%.0f points", username, pointsLoss))
 		}
 
 		guild.Pool += totalPointsToPool
@@ -1217,17 +1266,18 @@ func ExecuteJesterMute(s *discordgo.Session, db *gorm.DB, userID string, targetU
 	var targetUser models.User
 	targetID := targetUserID
 	targetMention := "<@" + targetUserID + ">"
+	userMention := "<@" + userID + ">"
 	if err := db.Clauses(clause.Locking{Strength: "UPDATE"}).
 		Where("discord_id = ? AND guild_id = ?", targetUserID, guildID).
 		First(&targetUser).Error; err == nil {
-		moonRedirected, err := checkAndConsumeMoon(db, targetUser.ID, guildID)
+		moonRedirected, err := CheckAndConsumeMoon(db, targetUser.ID, guildID)
 		if err != nil {
 			return nil, err
 		}
 		if moonRedirected {
 			randomUserID, err := GetRandomUserForMoon(db, guildID, []uint{targetUser.ID})
 			if err != nil {
-				blocked, err := checkAndConsumeShield(db, targetUser.ID, guildID)
+				blocked, err := CheckAndConsumeShield(db, targetUser.ID, guildID)
 				if err != nil {
 					return nil, err
 				}
@@ -1282,7 +1332,7 @@ func ExecuteJesterMute(s *discordgo.Session, db *gorm.DB, userID string, targetU
 			}, nil
 		}
 
-		blocked, err := checkAndConsumeShield(db, targetUser.ID, guildID)
+		blocked, err := CheckAndConsumeShield(db, targetUser.ID, guildID)
 		if err != nil {
 			return nil, err
 		}
@@ -1321,7 +1371,7 @@ func ExecuteJesterMute(s *discordgo.Session, db *gorm.DB, userID string, targetU
 		}
 
 		return &models.CardResult{
-			Message:           fmt.Sprintf("The Jester laughs! %s has been muted for 15 minutes.", targetMention),
+			Message:           fmt.Sprintf("The Jester laughs! %s has muted %s for 15 minutes.", userMention, targetMention),
 			PointsDelta:       0,
 			PoolDelta:         0,
 			TargetUserID:      &targetID,
@@ -1354,7 +1404,7 @@ func handleGenerousDonation(s *discordgo.Session, db *gorm.DB, userID string, gu
 		return nil, err
 	}
 	if moonCount > 0 {
-		if _, err := checkAndConsumeMoon(db, user.ID, guildID); err != nil {
+		if _, err := CheckAndConsumeMoon(db, user.ID, guildID); err != nil {
 			return nil, err
 		}
 		randomUserID, err := GetRandomUserForMoon(db, guildID, []uint{user.ID})
@@ -1638,15 +1688,16 @@ func ExecuteBetFreeze(s *discordgo.Session, db *gorm.DB, userID string, targetUs
 		return nil, err
 	}
 	targetMention := "<@" + targetUserID + ">"
+	userMention := "<@" + userID + ">"
 
-	moonRedirected, err := checkAndConsumeMoon(db, targetUser.ID, guildID)
+	moonRedirected, err := CheckAndConsumeMoon(db, targetUser.ID, guildID)
 	if err != nil {
 		return nil, err
 	}
 	if moonRedirected {
 		randomUserID, err := GetRandomUserForMoon(db, guildID, []uint{targetUser.ID, user.ID})
 		if err != nil {
-			blocked, err := checkAndConsumeShield(db, targetUser.ID, guildID)
+			blocked, err := CheckAndConsumeShield(db, targetUser.ID, guildID)
 			if err != nil {
 				return nil, err
 			}
@@ -1694,7 +1745,7 @@ func ExecuteBetFreeze(s *discordgo.Session, db *gorm.DB, userID string, targetUs
 		}, nil
 	}
 
-	blocked, err := checkAndConsumeShield(db, targetUser.ID, guildID)
+	blocked, err := CheckAndConsumeShield(db, targetUser.ID, guildID)
 	if err != nil {
 		return nil, err
 	}
@@ -1733,7 +1784,7 @@ func ExecuteBetFreeze(s *discordgo.Session, db *gorm.DB, userID string, targetUs
 
 	targetID := targetUserID
 	return &models.CardResult{
-		Message:           fmt.Sprintf("%s's betting ability has been frozen for 2 hours!", targetMention),
+		Message:           fmt.Sprintf("%s has frozen %s's betting ability for 2 hours!", userMention, targetMention),
 		PointsDelta:       0,
 		PoolDelta:         0,
 		TargetUserID:      &targetID,
@@ -1784,7 +1835,7 @@ func handleGreenShells(s *discordgo.Session, db *gorm.DB, userID string, guildID
 				return err
 			}
 
-			moonRedirected, err := checkAndConsumeMoon(tx, lockedTarget.ID, guildID)
+			moonRedirected, err := CheckAndConsumeMoon(tx, lockedTarget.ID, guildID)
 			if err != nil {
 				return err
 			}
@@ -1794,7 +1845,7 @@ func handleGreenShells(s *discordgo.Session, db *gorm.DB, userID string, guildID
 					return err
 				}
 				if len(allUsers) == 0 {
-					blocked, err := checkAndConsumeShield(tx, lockedTarget.ID, guildID)
+					blocked, err := CheckAndConsumeShield(tx, lockedTarget.ID, guildID)
 					if err != nil {
 						return err
 					}
@@ -1850,7 +1901,7 @@ func handleGreenShells(s *discordgo.Session, db *gorm.DB, userID string, guildID
 				continue
 			}
 
-			blocked, err := checkAndConsumeShield(tx, lockedTarget.ID, guildID)
+			blocked, err := CheckAndConsumeShield(tx, lockedTarget.ID, guildID)
 			if err != nil {
 				return err
 			}
@@ -1940,7 +1991,7 @@ func handleWhackAMole(s *discordgo.Session, db *gorm.DB, userID string, guildID 
 				return err
 			}
 
-			blocked, err := checkAndConsumeShield(tx, lockedTarget.ID, guildID)
+			blocked, err := CheckAndConsumeShield(tx, lockedTarget.ID, guildID)
 			if err != nil {
 				return err
 			}
@@ -2099,11 +2150,6 @@ func handleSocialism(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 				return err
 			}
 
-			blocked, err := checkAndConsumeShield(tx, lockedTop.ID, guildID)
-			if err != nil {
-				return err
-			}
-
 			topPlayerName := lockedTop.Username
 			topDisplayName := ""
 			if topPlayerName == nil || *topPlayerName == "" {
@@ -2112,14 +2158,63 @@ func handleSocialism(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 				topDisplayName = *topPlayerName
 			}
 
-			if blocked {
-				topMessage += fmt.Sprintf("%s's Shield blocked!\n", topDisplayName)
-				continue
-			}
-
 			takeAmount := 90.0
 			if lockedTop.Points < takeAmount {
 				takeAmount = lockedTop.Points
+			}
+
+			moonRedirected, err := CheckAndConsumeMoon(tx, lockedTop.ID, guildID)
+			if err != nil {
+				return err
+			}
+			if moonRedirected {
+				randomDiscordID, err := GetRandomUserForMoon(tx, guildID, []uint{lockedTop.ID})
+				if err != nil {
+					blocked, err := CheckAndConsumeShield(tx, lockedTop.ID, guildID)
+					if err != nil {
+						return err
+					}
+					if blocked {
+						topMessage += fmt.Sprintf("%s's Moon had no one to redirect to; Shield blocked!\n", topDisplayName)
+					} else {
+						topMessage += fmt.Sprintf("%s's Moon had no one to redirect to; fizzles.\n", topDisplayName)
+					}
+					continue
+				}
+				var randomUser models.User
+				if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("discord_id = ? AND guild_id = ?", randomDiscordID, guildID).First(&randomUser).Error; err != nil {
+					return err
+				}
+				actualTake := takeAmount
+				if randomUser.Points < actualTake {
+					actualTake = randomUser.Points
+				}
+				if actualTake > 0 {
+					randomUser.Points -= actualTake
+					if randomUser.Points < 0 {
+						randomUser.Points = 0
+					}
+					if err := tx.Save(&randomUser).Error; err != nil {
+						return err
+					}
+					totalCollected += actualTake
+					randomDisplayName := fmt.Sprintf("<@%s>", randomUser.DiscordID)
+					if randomUser.Username != nil && *randomUser.Username != "" {
+						randomDisplayName = *randomUser.Username
+					}
+					topMessage += fmt.Sprintf("%s's Moon redirected! %s lost %.0f points\n", topDisplayName, randomDisplayName, actualTake)
+				}
+				continue
+			}
+
+			blocked, err := CheckAndConsumeShield(tx, lockedTop.ID, guildID)
+			if err != nil {
+				return err
+			}
+
+			if blocked {
+				topMessage += fmt.Sprintf("%s's Shield blocked!\n", topDisplayName)
+				continue
 			}
 
 			if takeAmount > 0 {
@@ -2248,7 +2343,7 @@ func handleRobinHood(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 			bottomDisplayName = *bottomPlayerName
 		}
 
-		moonRedirected, err := checkAndConsumeMoon(tx, lockedTop.ID, guildID)
+		moonRedirected, err := CheckAndConsumeMoon(tx, lockedTop.ID, guildID)
 		if err != nil {
 			return err
 		}
@@ -2258,7 +2353,7 @@ func handleRobinHood(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 				return err
 			}
 			if len(allUsers) == 0 {
-				blocked, err := checkAndConsumeShield(tx, lockedTop.ID, guildID)
+				blocked, err := CheckAndConsumeShield(tx, lockedTop.ID, guildID)
 				if err != nil {
 					return err
 				}
@@ -2322,7 +2417,7 @@ func handleRobinHood(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 			return nil
 		}
 
-		blocked, err := checkAndConsumeShield(tx, lockedTop.ID, guildID)
+		blocked, err := CheckAndConsumeShield(tx, lockedTop.ID, guildID)
 		if err != nil {
 			return err
 		}
@@ -2445,7 +2540,7 @@ func handleRedShells(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 				return err
 			}
 
-			moonRedirected, err := checkAndConsumeMoon(tx, lockedTarget.ID, guildID)
+			moonRedirected, err := CheckAndConsumeMoon(tx, lockedTarget.ID, guildID)
 			if err != nil {
 				return err
 			}
@@ -2455,7 +2550,7 @@ func handleRedShells(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 					return err
 				}
 				if len(allUsers) == 0 {
-					blocked, err := checkAndConsumeShield(tx, lockedTarget.ID, guildID)
+					blocked, err := CheckAndConsumeShield(tx, lockedTarget.ID, guildID)
 					if err != nil {
 						return err
 					}
@@ -2511,7 +2606,7 @@ func handleRedShells(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 				continue
 			}
 
-			blocked, err := checkAndConsumeShield(tx, lockedTarget.ID, guildID)
+			blocked, err := CheckAndConsumeShield(tx, lockedTarget.ID, guildID)
 			if err != nil {
 				return err
 			}
@@ -2563,7 +2658,8 @@ func handleRedShells(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 	return result, nil
 }
 
-func checkAndConsumeShield(db *gorm.DB, userID uint, guildID string) (bool, error) {
+// CheckAndConsumeShield removes one Shield from the user's inventory if present; returns true if consumed.
+func CheckAndConsumeShield(db *gorm.DB, userID uint, guildID string) (bool, error) {
 	var count int64
 	err := db.Model(&models.UserInventory{}).
 		Where("user_id = ? AND guild_id = ? AND card_id = ? and deleted_at is null", userID, guildID, ShieldCardID).
@@ -2599,7 +2695,7 @@ func checkAndConsumeSpareKey(db *gorm.DB, userID uint, guildID string) (bool, er
 	return false, nil
 }
 
-func checkAndConsumeMoon(db *gorm.DB, userID uint, guildID string) (bool, error) {
+func CheckAndConsumeMoon(db *gorm.DB, userID uint, guildID string) (bool, error) {
 	var count int64
 	err := db.Model(&models.UserInventory{}).
 		Where("user_id = ? AND guild_id = ? AND card_id = ? and deleted_at is null", userID, guildID, TheMoonCardID).
@@ -2637,6 +2733,187 @@ func GetRandomUserForMoon(db *gorm.DB, guildID string, excludeUserIDs []uint) (s
 	return allUsers[randomIndex].DiscordID, nil
 }
 
+func ExecuteHostileTakeover(tx *gorm.DB, userID string, targetUserID string, guildID string) (*models.CardResult, error) {
+	var result *models.CardResult
+	err := func() error {
+		var drawer models.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("discord_id = ? AND guild_id = ?", userID, guildID).
+			First(&drawer).Error; err != nil {
+			return err
+		}
+		var target models.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("discord_id = ? AND guild_id = ?", targetUserID, guildID).
+			First(&target).Error; err != nil {
+			return err
+		}
+		drawerOrig := drawer.Points
+		targetOrig := target.Points
+		targetMention := "<@" + target.DiscordID + ">"
+		targetDisplay := targetMention
+		if target.Username != nil && *target.Username != "" {
+			targetDisplay = *target.Username
+		}
+
+		if targetOrig > drawerOrig {
+			moonRedirected, err := CheckAndConsumeMoon(tx, target.ID, guildID)
+			if err != nil {
+				return err
+			}
+			if moonRedirected {
+				randomDiscordID, err := GetRandomUserForMoon(tx, guildID, []uint{drawer.ID, target.ID})
+				if err != nil {
+					blocked, err := CheckAndConsumeShield(tx, target.ID, guildID)
+					if err != nil {
+						return err
+					}
+					if blocked {
+						result = &models.CardResult{
+							Message:           fmt.Sprintf("Hostile Takeover: %s's Moon had no one to redirect to and their Shield blocked the swap! The card fizzles.", targetMention),
+							PointsDelta:       0,
+							PoolDelta:         0,
+							TargetUserID:      &targetUserID,
+							TargetPointsDelta: 0,
+						}
+					} else {
+						result = &models.CardResult{
+							Message:           fmt.Sprintf("Hostile Takeover: %s's Moon had no one to redirect to. The card fizzles.", targetMention),
+							PointsDelta:       0,
+							PoolDelta:         0,
+							TargetUserID:      &targetUserID,
+							TargetPointsDelta: 0,
+						}
+					}
+					return nil
+				}
+				var randomUser models.User
+				if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("discord_id = ? AND guild_id = ?", randomDiscordID, guildID).First(&randomUser).Error; err != nil {
+					return err
+				}
+				randomOrig := randomUser.Points
+				drawer.Points, randomUser.Points = randomUser.Points, drawer.Points
+				if err := tx.Save(&drawer).Error; err != nil {
+					return err
+				}
+				if err := tx.Save(&randomUser).Error; err != nil {
+					return err
+				}
+				randomMention := "<@" + randomUser.DiscordID + ">"
+				result = &models.CardResult{
+					Message:           fmt.Sprintf("Hostile Takeover: %s's Moon redirected the swap! You swapped points with %s instead.", targetMention, randomMention),
+					PointsDelta:       randomOrig - drawerOrig,
+					PoolDelta:         0,
+					TargetUserID:      &randomUser.DiscordID,
+					TargetPointsDelta: drawerOrig - randomOrig,
+				}
+				return nil
+			}
+			blocked, err := CheckAndConsumeShield(tx, target.ID, guildID)
+			if err != nil {
+				return err
+			}
+			if blocked {
+				result = &models.CardResult{
+					Message:           fmt.Sprintf("Hostile Takeover: %s's Shield blocked the swap! The card fizzles.", targetMention),
+					PointsDelta:       0,
+					PoolDelta:         0,
+					TargetUserID:      &targetUserID,
+					TargetPointsDelta: 0,
+				}
+				return nil
+			}
+		} else if drawerOrig > targetOrig {
+			moonRedirected, err := CheckAndConsumeMoon(tx, drawer.ID, guildID)
+			if err != nil {
+				return err
+			}
+			if moonRedirected {
+				randomDiscordID, err := GetRandomUserForMoon(tx, guildID, []uint{drawer.ID, target.ID})
+				if err != nil {
+					blocked, err := CheckAndConsumeShield(tx, drawer.ID, guildID)
+					if err != nil {
+						return err
+					}
+					if blocked {
+						result = &models.CardResult{
+							Message:           "Hostile Takeover: Your Moon had no one to redirect to and your Shield blocked the swap! The card fizzles.",
+							PointsDelta:       0,
+							PoolDelta:         0,
+							TargetUserID:      &targetUserID,
+							TargetPointsDelta: 0,
+						}
+					} else {
+						result = &models.CardResult{
+							Message:           "Hostile Takeover: Your Moon had no one to redirect to. The card fizzles.",
+							PointsDelta:       0,
+							PoolDelta:         0,
+							TargetUserID:      &targetUserID,
+							TargetPointsDelta: 0,
+						}
+					}
+					return nil
+				}
+				var randomUser models.User
+				if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("discord_id = ? AND guild_id = ?", randomDiscordID, guildID).First(&randomUser).Error; err != nil {
+					return err
+				}
+				randomOrig := randomUser.Points
+				drawer.Points, randomUser.Points = randomUser.Points, drawer.Points
+				if err := tx.Save(&drawer).Error; err != nil {
+					return err
+				}
+				if err := tx.Save(&randomUser).Error; err != nil {
+					return err
+				}
+				randomMention := "<@" + randomUser.DiscordID + ">"
+				result = &models.CardResult{
+					Message:           fmt.Sprintf("Hostile Takeover: Your Moon redirected the swap! You swapped points with %s instead of %s.", randomMention, targetDisplay),
+					PointsDelta:       randomOrig - drawerOrig,
+					PoolDelta:         0,
+					TargetUserID:      &randomUser.DiscordID,
+					TargetPointsDelta: drawerOrig - randomOrig,
+				}
+				return nil
+			}
+			blocked, err := CheckAndConsumeShield(tx, drawer.ID, guildID)
+			if err != nil {
+				return err
+			}
+			if blocked {
+				result = &models.CardResult{
+					Message:           "Hostile Takeover: Your Shield blocked the swap! The card fizzles.",
+					PointsDelta:       0,
+					PoolDelta:         0,
+					TargetUserID:      &targetUserID,
+					TargetPointsDelta: 0,
+				}
+				return nil
+			}
+		}
+
+		drawer.Points, target.Points = target.Points, drawer.Points
+		if err := tx.Save(&drawer).Error; err != nil {
+			return err
+		}
+		if err := tx.Save(&target).Error; err != nil {
+			return err
+		}
+		result = &models.CardResult{
+			Message:           fmt.Sprintf("Hostile Takeover successful! You swapped points with %s.", targetDisplay),
+			PointsDelta:       targetOrig - drawerOrig,
+			PoolDelta:         0,
+			TargetUserID:      &targetUserID,
+			TargetPointsDelta: drawerOrig - targetOrig,
+		}
+		return nil
+	}()
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 func handleGrandLarceny(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
 	return &models.CardResult{
 		Message:           "Grand Larceny requires you to select a target!",
@@ -2672,8 +2949,9 @@ func ExecuteTheGossip(s *discordgo.Session, db *gorm.DB, userID string, targetUs
 
 	targetID := targetUserID
 	targetMention := "<@" + targetUserID + ">"
+	userMention := "<@" + userID + ">"
 	return &models.CardResult{
-		Message:           fmt.Sprintf("The Gossip spreads! %s's current point balance is **%.1f points**.", targetMention, targetUser.Points),
+		Message:           fmt.Sprintf("The Gossip spreads! %s has revealed that %s's current point balance is **%.1f points**.", userMention, targetMention, targetUser.Points),
 		PointsDelta:       0,
 		PoolDelta:         0,
 		TargetUserID:      &targetID,
@@ -2784,7 +3062,7 @@ func handleBlueShell(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 			return nil
 		}
 
-		moonRedirected, err := checkAndConsumeMoon(tx, firstPlaceUser.ID, guildID)
+		moonRedirected, err := CheckAndConsumeMoon(tx, firstPlaceUser.ID, guildID)
 		if err != nil {
 			return err
 		}
@@ -2794,7 +3072,7 @@ func handleBlueShell(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 				return err
 			}
 			if len(allUsers) == 0 {
-				blocked, err := checkAndConsumeShield(tx, firstPlaceUser.ID, guildID)
+				blocked, err := CheckAndConsumeShield(tx, firstPlaceUser.ID, guildID)
 				if err != nil {
 					return err
 				}
@@ -2865,7 +3143,7 @@ func handleBlueShell(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 			return nil
 		}
 
-		blocked, err := checkAndConsumeShield(tx, firstPlaceUser.ID, guildID)
+		blocked, err := CheckAndConsumeShield(tx, firstPlaceUser.ID, guildID)
 		if err != nil {
 			return err
 		}
@@ -3077,16 +3355,99 @@ func handleRobbingTheHood(s *discordgo.Session, db *gorm.DB, userID string, guil
 			return nil
 		}
 
-		stolenAmount := poorestUser.Points * 0.1
-		poorestUser.Points -= stolenAmount
-		if err := tx.Save(&poorestUser).Error; err != nil {
-			return err
-		}
-
 		var drawer models.User
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			Where("discord_id = ? AND guild_id = ?", userID, guildID).
 			First(&drawer).Error; err != nil {
+			return err
+		}
+
+		stolenAmount := poorestUser.Points * 0.1
+		poorestDisplayName := ""
+		if poorestUser.Username == nil || *poorestUser.Username == "" {
+			poorestDisplayName = fmt.Sprintf("<@%s>", poorestUser.DiscordID)
+		} else {
+			poorestDisplayName = *poorestUser.Username
+		}
+
+		moonRedirected, err := CheckAndConsumeMoon(tx, poorestUser.ID, guildID)
+		if err != nil {
+			return err
+		}
+		if moonRedirected {
+			randomUserDiscordID, err := GetRandomUserForMoon(tx, guildID, []uint{poorestUser.ID, drawer.ID})
+			if err != nil {
+				blocked, err := CheckAndConsumeShield(tx, poorestUser.ID, guildID)
+				if err != nil {
+					return err
+				}
+				if blocked {
+					result = &models.CardResult{
+						Message:     fmt.Sprintf("Robbing the Hood targeted %s, but their Moon illusion tried to redirect with no eligible users. Shield blocked the theft! The card fizzles out.", poorestDisplayName),
+						PointsDelta: 0,
+						PoolDelta:   0,
+					}
+				} else {
+					result = &models.CardResult{
+						Message:     fmt.Sprintf("Robbing the Hood targeted %s, but their Moon illusion tried to redirect with no eligible users. The card fizzles out.", poorestDisplayName),
+						PointsDelta: 0,
+						PoolDelta:   0,
+					}
+				}
+				return nil
+			}
+			var randomUser models.User
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+				Where("discord_id = ? AND guild_id = ?", randomUserDiscordID, guildID).
+				First(&randomUser).Error; err != nil {
+				return err
+			}
+			redirectStolen := randomUser.Points * 0.1
+			if redirectStolen > randomUser.Points {
+				redirectStolen = randomUser.Points
+			}
+			randomUser.Points -= redirectStolen
+			if randomUser.Points < 0 {
+				randomUser.Points = 0
+			}
+			if err := tx.Save(&randomUser).Error; err != nil {
+				return err
+			}
+			drawer.Points += redirectStolen
+			if err := tx.Save(&drawer).Error; err != nil {
+				return err
+			}
+			randomDisplayName := ""
+			if randomUser.Username == nil || *randomUser.Username == "" {
+				randomDisplayName = fmt.Sprintf("<@%s>", randomUser.DiscordID)
+			} else {
+				randomDisplayName = *randomUser.Username
+			}
+			result = &models.CardResult{
+				Message:           fmt.Sprintf("Robbing the Hood targeted %s, but their Moon illusion redirected it! You stole 10%% of %s's points (%.0f) instead.", poorestDisplayName, randomDisplayName, redirectStolen),
+				PointsDelta:       redirectStolen,
+				PoolDelta:         0,
+				TargetUserID:      &randomUser.DiscordID,
+				TargetPointsDelta: -redirectStolen,
+			}
+			return nil
+		}
+
+		blocked, err := CheckAndConsumeShield(tx, poorestUser.ID, guildID)
+		if err != nil {
+			return err
+		}
+		if blocked {
+			result = &models.CardResult{
+				Message:     fmt.Sprintf("Robbing the Hood targeted %s, but their Shield blocked the theft! The card fizzles out.", poorestDisplayName),
+				PointsDelta: 0,
+				PoolDelta:   0,
+			}
+			return nil
+		}
+
+		poorestUser.Points -= stolenAmount
+		if err := tx.Save(&poorestUser).Error; err != nil {
 			return err
 		}
 		drawer.Points += stolenAmount
@@ -3291,26 +3652,139 @@ func handleHotPotato(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 			targetLoss = lockedTarget.Points
 		}
 
-		user.Points -= userLoss
-		lockedTarget.Points -= targetLoss
+		userMention := "<@" + userID + ">"
+		targetMention := "<@" + lockedTarget.DiscordID + ">"
+		drawerActualLoss := 0.0
+		targetActualLoss := 0.0
+		var messageParts []string
 
-		if err := tx.Save(&user).Error; err != nil {
+		// Shield/moon for drawer (user)
+		moonRedirected, err := CheckAndConsumeMoon(tx, user.ID, guildID)
+		if err != nil {
 			return err
 		}
-		if err := tx.Save(&lockedTarget).Error; err != nil {
+		if moonRedirected {
+			randomDiscordID, err := GetRandomUserForMoon(tx, guildID, []uint{user.ID, lockedTarget.ID})
+			if err != nil {
+				shieldBlocked, err := CheckAndConsumeShield(tx, user.ID, guildID)
+				if err != nil {
+					return err
+				}
+				if shieldBlocked {
+					messageParts = append(messageParts, fmt.Sprintf("%s's Moon tried to redirect but no eligible users. Shield blocked your loss!", userMention))
+				} else {
+					messageParts = append(messageParts, fmt.Sprintf("%s's Moon tried to redirect but no eligible users. Your loss fizzles.", userMention))
+				}
+			} else {
+				var randomUser models.User
+				if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("discord_id = ? AND guild_id = ?", randomDiscordID, guildID).First(&randomUser).Error; err != nil {
+					return err
+				}
+				deduct := userLoss
+				if randomUser.Points < deduct {
+					deduct = randomUser.Points
+				}
+				randomUser.Points -= deduct
+				if randomUser.Points < 0 {
+					randomUser.Points = 0
+				}
+				if err := tx.Save(&randomUser).Error; err != nil {
+					return err
+				}
+				randomMention := "<@" + randomUser.DiscordID + ">"
+				messageParts = append(messageParts, fmt.Sprintf("%s's Moon redirected your 50 loss to %s (%.0f points)!", userMention, randomMention, deduct))
+			}
+		} else {
+			shieldBlocked, err := CheckAndConsumeShield(tx, user.ID, guildID)
+			if err != nil {
+				return err
+			}
+			if shieldBlocked {
+				drawerActualLoss = 0
+				messageParts = append(messageParts, fmt.Sprintf("%s's Shield blocked your loss!", userMention))
+			} else {
+				drawerActualLoss = userLoss
+				user.Points -= userLoss
+				if err := tx.Save(&user).Error; err != nil {
+					return err
+				}
+			}
+		}
+
+		// Shield/moon for target
+		moonRedirectedTarget, err := CheckAndConsumeMoon(tx, lockedTarget.ID, guildID)
+		if err != nil {
 			return err
+		}
+		if moonRedirectedTarget {
+			randomDiscordID, err := GetRandomUserForMoon(tx, guildID, []uint{user.ID, lockedTarget.ID})
+			if err != nil {
+				shieldBlocked, err := CheckAndConsumeShield(tx, lockedTarget.ID, guildID)
+				if err != nil {
+					return err
+				}
+				if shieldBlocked {
+					messageParts = append(messageParts, fmt.Sprintf("%s's Moon tried to redirect but no eligible users. Shield blocked their loss!", targetMention))
+				} else {
+					messageParts = append(messageParts, fmt.Sprintf("%s's Moon tried to redirect but no eligible users. Their loss fizzles.", targetMention))
+				}
+			} else {
+				var randomUser models.User
+				if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("discord_id = ? AND guild_id = ?", randomDiscordID, guildID).First(&randomUser).Error; err != nil {
+					return err
+				}
+				deduct := targetLoss
+				if randomUser.Points < deduct {
+					deduct = randomUser.Points
+				}
+				randomUser.Points -= deduct
+				if randomUser.Points < 0 {
+					randomUser.Points = 0
+				}
+				if err := tx.Save(&randomUser).Error; err != nil {
+					return err
+				}
+				randomMention := "<@" + randomUser.DiscordID + ">"
+				messageParts = append(messageParts, fmt.Sprintf("%s's Moon redirected the hit to %s (%.0f points)!", targetMention, randomMention, deduct))
+			}
+		} else {
+			shieldBlocked, err := CheckAndConsumeShield(tx, lockedTarget.ID, guildID)
+			if err != nil {
+				return err
+			}
+			if shieldBlocked {
+				targetActualLoss = 0
+				messageParts = append(messageParts, fmt.Sprintf("%s's Shield blocked the hot potato!", targetMention))
+			} else {
+				targetActualLoss = targetLoss
+				lockedTarget.Points -= targetLoss
+				if err := tx.Save(&lockedTarget).Error; err != nil {
+					return err
+				}
+			}
+		}
+
+		msg := "🥔 Hot Potato! "
+		if len(messageParts) > 0 {
+			msg += strings.Join(messageParts, " ")
+		}
+		if drawerActualLoss > 0 || targetActualLoss > 0 {
+			if drawerActualLoss > 0 && targetActualLoss > 0 {
+				msg += fmt.Sprintf("%s lost %.0f points. The hot potato was passed to %s who also lost %.0f points!", userMention, drawerActualLoss, targetMention, targetActualLoss)
+			} else if drawerActualLoss > 0 {
+				msg += fmt.Sprintf("%s lost %.0f points. The hot potato was passed to %s who was protected.", userMention, drawerActualLoss, targetMention)
+			} else if targetActualLoss > 0 {
+				msg += fmt.Sprintf("You were protected. The hot potato was passed to %s who lost %.0f points!", targetMention, targetActualLoss)
+			}
 		}
 
 		targetID := lockedTarget.DiscordID
-		targetMention := "<@" + lockedTarget.DiscordID + ">"
-		userMention := "<@" + userID + ">"
-
 		result = &models.CardResult{
-			Message:           fmt.Sprintf("🥔 Hot Potato! %s lost %.0f points. The hot potato was passed to %s who also lost %.0f points!", userMention, userLoss, targetMention, targetLoss),
-			PointsDelta:       -userLoss,
+			Message:           msg,
+			PointsDelta:       -drawerActualLoss,
 			PoolDelta:         0,
 			TargetUserID:      &targetID,
-			TargetPointsDelta: -targetLoss,
+			TargetPointsDelta: -targetActualLoss,
 		}
 		return nil
 	}); err != nil {
@@ -3360,6 +3834,74 @@ func ExecuteDuel(db *gorm.DB, userID string, targetUserID string, guildID string
 				transferAmount = targetUser.Points
 			}
 
+			// Shield/moon for loser (target)
+			moonRedirected, err := CheckAndConsumeMoon(tx, targetUser.ID, guildID)
+			if err != nil {
+				return err
+			}
+			if moonRedirected {
+				randomDiscordID, err := GetRandomUserForMoon(tx, guildID, []uint{targetUser.ID, user.ID})
+				if err != nil {
+					blocked, _ := CheckAndConsumeShield(tx, targetUser.ID, guildID)
+					if blocked {
+						result = &models.CardResult{
+							Message:           fmt.Sprintf("⚔️ DUEL! %s rolled %d, %s rolled %d. You win! But %s's Moon had no one to redirect to and their Shield blocked the loss! The duel fizzles.", userMention, userRoll, targetMention, targetRoll, targetMention),
+							PointsDelta:       0,
+							PoolDelta:         0,
+							TargetUserID:      &targetID,
+							TargetPointsDelta: 0,
+						}
+					} else {
+						result = &models.CardResult{
+							Message:           fmt.Sprintf("⚔️ DUEL! %s rolled %d, %s rolled %d. You win! But %s's Moon had no one to redirect to. The duel fizzles.", userMention, userRoll, targetMention, targetRoll, targetMention),
+							PointsDelta:       0,
+							PoolDelta:         0,
+							TargetUserID:      &targetID,
+							TargetPointsDelta: 0,
+						}
+					}
+					return nil
+				}
+				var randomUser models.User
+				if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("discord_id = ? AND guild_id = ?", randomDiscordID, guildID).First(&randomUser).Error; err != nil {
+					return err
+				}
+				actualTransfer := transferAmount
+				if randomUser.Points < actualTransfer {
+					actualTransfer = randomUser.Points
+				}
+				randomUser.Points -= actualTransfer
+				if randomUser.Points < 0 {
+					randomUser.Points = 0
+				}
+				tx.Save(&randomUser)
+				user.Points += actualTransfer
+				tx.Save(&user)
+				randomMention := "<@" + randomUser.DiscordID + ">"
+				result = &models.CardResult{
+					Message:           fmt.Sprintf("⚔️ DUEL! %s rolled %d, %s rolled %d. You win! %s's Moon redirected the loss to %s — you gained %.0f points!", userMention, userRoll, targetMention, targetRoll, targetMention, randomMention, actualTransfer),
+					PointsDelta:       actualTransfer,
+					PoolDelta:         0,
+					TargetUserID:      &targetID,
+					TargetPointsDelta: 0,
+				}
+				return nil
+			}
+			blocked, err := CheckAndConsumeShield(tx, targetUser.ID, guildID)
+			if err != nil {
+				return err
+			}
+			if blocked {
+				result = &models.CardResult{
+					Message:           fmt.Sprintf("⚔️ DUEL! %s rolled %d, %s rolled %d. You win! But %s's Shield blocked the loss! The duel fizzles.", userMention, userRoll, targetMention, targetRoll, targetMention),
+					PointsDelta:       0,
+					PoolDelta:         0,
+					TargetUserID:      &targetID,
+					TargetPointsDelta: 0,
+				}
+				return nil
+			}
+
 			user.Points += transferAmount
 			targetUser.Points -= transferAmount
 
@@ -3381,6 +3923,73 @@ func ExecuteDuel(db *gorm.DB, userID string, targetUserID string, guildID string
 			transferAmount := 100.0
 			if user.Points < transferAmount {
 				transferAmount = user.Points
+			}
+
+			moonRedirected, err := CheckAndConsumeMoon(tx, user.ID, guildID)
+			if err != nil {
+				return err
+			}
+			if moonRedirected {
+				randomDiscordID, err := GetRandomUserForMoon(tx, guildID, []uint{user.ID, targetUser.ID})
+				if err != nil {
+					blocked, _ := CheckAndConsumeShield(tx, user.ID, guildID)
+					if blocked {
+						result = &models.CardResult{
+							Message:           fmt.Sprintf("⚔️ DUEL! %s rolled %d, %s rolled %d. You lose! Your Moon had no one to redirect to and your Shield blocked the loss! The duel fizzles.", userMention, userRoll, targetMention, targetRoll),
+							PointsDelta:       0,
+							PoolDelta:         0,
+							TargetUserID:      &targetID,
+							TargetPointsDelta: 0,
+						}
+					} else {
+						result = &models.CardResult{
+							Message:           fmt.Sprintf("⚔️ DUEL! %s rolled %d, %s rolled %d. You lose! Your Moon had no one to redirect to. The duel fizzles.", userMention, userRoll, targetMention, targetRoll),
+							PointsDelta:       0,
+							PoolDelta:         0,
+							TargetUserID:      &targetID,
+							TargetPointsDelta: 0,
+						}
+					}
+					return nil
+				}
+				var randomUser models.User
+				if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("discord_id = ? AND guild_id = ?", randomDiscordID, guildID).First(&randomUser).Error; err != nil {
+					return err
+				}
+				actualTransfer := transferAmount
+				if randomUser.Points < actualTransfer {
+					actualTransfer = randomUser.Points
+				}
+				randomUser.Points -= actualTransfer
+				if randomUser.Points < 0 {
+					randomUser.Points = 0
+				}
+				tx.Save(&randomUser)
+				targetUser.Points += actualTransfer
+				tx.Save(&targetUser)
+				randomMention := "<@" + randomUser.DiscordID + ">"
+				result = &models.CardResult{
+					Message:           fmt.Sprintf("⚔️ DUEL! %s rolled %d, %s rolled %d. You lose! Your Moon redirected the loss to %s — %s gained %.0f points!", userMention, userRoll, targetMention, targetRoll, randomMention, targetMention, actualTransfer),
+					PointsDelta:       0,
+					PoolDelta:         0,
+					TargetUserID:      &targetID,
+					TargetPointsDelta: actualTransfer,
+				}
+				return nil
+			}
+			blocked, err := CheckAndConsumeShield(tx, user.ID, guildID)
+			if err != nil {
+				return err
+			}
+			if blocked {
+				result = &models.CardResult{
+					Message:           fmt.Sprintf("⚔️ DUEL! %s rolled %d, %s rolled %d. You lose! But your Shield blocked the loss! The duel fizzles.", userMention, userRoll, targetMention, targetRoll),
+					PointsDelta:       0,
+					PoolDelta:         0,
+					TargetUserID:      &targetID,
+					TargetPointsDelta: 0,
+				}
+				return nil
 			}
 
 			user.Points -= transferAmount
@@ -3411,22 +4020,67 @@ func ExecuteDuel(db *gorm.DB, userID string, targetUserID string, guildID string
 				targetLoss = targetUser.Points
 			}
 
-			user.Points -= userLoss
-			targetUser.Points -= targetLoss
+			userActualLoss := 0.0
+			targetActualLoss := 0.0
 
-			if err := tx.Save(&user).Error; err != nil {
-				return err
+			moonU, _ := CheckAndConsumeMoon(tx, user.ID, guildID)
+			if moonU {
+				randomID, err := GetRandomUserForMoon(tx, guildID, []uint{user.ID, targetUser.ID})
+				if err != nil {
+					CheckAndConsumeShield(tx, user.ID, guildID)
+				} else {
+					var ru models.User
+					tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("discord_id = ? AND guild_id = ?", randomID, guildID).First(&ru)
+					deduct := userLoss
+					if ru.Points < deduct {
+						deduct = ru.Points
+					}
+					ru.Points -= deduct
+					if ru.Points < 0 {
+						ru.Points = 0
+					}
+					tx.Save(&ru)
+				}
+			} else {
+				if blocked, _ := CheckAndConsumeShield(tx, user.ID, guildID); !blocked {
+					userActualLoss = userLoss
+					user.Points -= userLoss
+					tx.Save(&user)
+				}
 			}
-			if err := tx.Save(&targetUser).Error; err != nil {
-				return err
+
+			moonT, _ := CheckAndConsumeMoon(tx, targetUser.ID, guildID)
+			if moonT {
+				randomID, err := GetRandomUserForMoon(tx, guildID, []uint{user.ID, targetUser.ID})
+				if err != nil {
+					CheckAndConsumeShield(tx, targetUser.ID, guildID)
+				} else {
+					var ru models.User
+					tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("discord_id = ? AND guild_id = ?", randomID, guildID).First(&ru)
+					deduct := targetLoss
+					if ru.Points < deduct {
+						deduct = ru.Points
+					}
+					ru.Points -= deduct
+					if ru.Points < 0 {
+						ru.Points = 0
+					}
+					tx.Save(&ru)
+				}
+			} else {
+				if blocked, _ := CheckAndConsumeShield(tx, targetUser.ID, guildID); !blocked {
+					targetActualLoss = targetLoss
+					targetUser.Points -= targetLoss
+					tx.Save(&targetUser)
+				}
 			}
 
 			result = &models.CardResult{
-				Message:           fmt.Sprintf("⚔️ DUEL! You both rolled %d! It's a tie! You both lose 50 points.", userRoll),
-				PointsDelta:       -userLoss,
+				Message:           fmt.Sprintf("⚔️ DUEL! You both rolled %d! It's a tie! You lost %.0f points, %s lost %.0f points.", userRoll, userActualLoss, targetMention, targetActualLoss),
+				PointsDelta:       -userActualLoss,
 				PoolDelta:         0,
 				TargetUserID:      &targetID,
-				TargetPointsDelta: -targetLoss,
+				TargetPointsDelta: -targetActualLoss,
 			}
 		}
 
@@ -3689,14 +4343,14 @@ func ExecuteSocialDistancing(db *gorm.DB, userID string, targetUserID string, gu
 	}
 	targetMention := "<@" + targetUserID + ">"
 
-	moonRedirected, err := checkAndConsumeMoon(db, targetUser.ID, guildID)
+	moonRedirected, err := CheckAndConsumeMoon(db, targetUser.ID, guildID)
 	if err != nil {
 		return nil, err
 	}
 	if moonRedirected {
 		randomUserID, err := GetRandomUserForMoon(db, guildID, []uint{targetUser.ID})
 		if err != nil {
-			blocked, err := checkAndConsumeShield(db, targetUser.ID, guildID)
+			blocked, err := CheckAndConsumeShield(db, targetUser.ID, guildID)
 			if err != nil {
 				return nil, err
 			}
@@ -3767,7 +4421,7 @@ func ExecuteSocialDistancing(db *gorm.DB, userID string, targetUserID string, gu
 		}, nil
 	}
 
-	blocked, err := checkAndConsumeShield(db, targetUser.ID, guildID)
+	blocked, err := CheckAndConsumeShield(db, targetUser.ID, guildID)
 	if err != nil {
 		return nil, err
 	}
@@ -3833,7 +4487,7 @@ func handleTheHermit(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 		return nil, err
 	}
 
-	moonRedirected, err := checkAndConsumeMoon(db, user.ID, guildID)
+	moonRedirected, err := CheckAndConsumeMoon(db, user.ID, guildID)
 	if err != nil {
 		return nil, err
 	}
@@ -3841,7 +4495,7 @@ func handleTheHermit(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 		randomUserID, err := GetRandomUserForMoon(db, guildID, []uint{user.ID})
 		if err != nil {
 			var shieldBlocked, spareKeyBlocked bool
-			shieldBlocked, err = checkAndConsumeShield(db, user.ID, guildID)
+			shieldBlocked, err = CheckAndConsumeShield(db, user.ID, guildID)
 			if err != nil {
 				return nil, err
 			}
@@ -3917,7 +4571,7 @@ func handleTheHermit(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 	}
 
 	var shieldBlocked, spareKeyBlocked bool
-	shieldBlocked, err = checkAndConsumeShield(db, user.ID, guildID)
+	shieldBlocked, err = CheckAndConsumeShield(db, user.ID, guildID)
 	if err != nil {
 		return nil, err
 	}
@@ -4074,14 +4728,14 @@ func ExecuteJustice(s *discordgo.Session, db *gorm.DB, userID string, targetUser
 
 	targetMention := "<@" + targetUserID + ">"
 
-	moonRedirected, err := checkAndConsumeMoon(db, target.ID, guildID)
+	moonRedirected, err := CheckAndConsumeMoon(db, target.ID, guildID)
 	if err != nil {
 		return nil, err
 	}
 	if moonRedirected {
 		randomUserID, err := GetRandomUserForMoon(db, guildID, []uint{target.ID, drawer.ID})
 		if err != nil {
-			blocked, err := checkAndConsumeShield(db, target.ID, guildID)
+			blocked, err := CheckAndConsumeShield(db, target.ID, guildID)
 			if err != nil {
 				return nil, err
 			}
@@ -4136,7 +4790,7 @@ func ExecuteJustice(s *discordgo.Session, db *gorm.DB, userID string, targetUser
 		}, nil
 	}
 
-	blocked, err := checkAndConsumeShield(db, target.ID, guildID)
+	blocked, err := CheckAndConsumeShield(db, target.ID, guildID)
 	if err != nil {
 		return nil, err
 	}
