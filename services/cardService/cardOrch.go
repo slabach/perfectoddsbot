@@ -1242,9 +1242,14 @@ func buildCardEmbed(card *models.Card, result *models.CardResult, user models.Us
 	})
 
 	if result.Message != "" {
+		effectValue := result.Message
+		const discordFieldValueLimit = 1024
+		if len(effectValue) > discordFieldValueLimit {
+			effectValue = effectValue[:discordFieldValueLimit-3] + "..."
+		}
 		embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
 			Name:   "Effect",
-			Value:  result.Message,
+			Value:  effectValue,
 			Inline: false,
 		})
 	}

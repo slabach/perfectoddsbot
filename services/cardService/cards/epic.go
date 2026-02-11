@@ -196,7 +196,7 @@ func registerEpicCards(deck *[]models.Card) {
 			ID:          101,
 			Code:        "JUD",
 			Name:        "Judgement (🔮)",
-			Description: "The final reckoning. Players in the top 50% of the leaderboard lose 10% of their points to the pool. Players in the bottom 50% gain 10% of the pool's points (split evenly among them)",
+			Description: "The final reckoning. Players in the top 50% of the leaderboard lose 5% of their points to the pool. Players in the bottom 50% gain 10% of the pool's points (split evenly among them)",
 			Handler:     handleJudgement,
 			Expansion:   "Tarot",
 		},

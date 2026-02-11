@@ -1053,7 +1053,7 @@ func handleJudgement(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 				return err
 			}
 
-			pointsLoss := lockedUser.Points * 0.10
+			pointsLoss := lockedUser.Points * 0.05
 			if pointsLoss <= 0 {
 				continue
 			}
@@ -1153,19 +1153,34 @@ func handleJudgement(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 			return err
 		}
 
+		const maxLinesPerSection = 10 // cap like Wheel of Fortune Chaos to stay under Discord's 1024 embed field limit
 		message := "The final reckoning! Judgement has been passed:\n\n"
 		message += fmt.Sprintf("**Top 50%% (lost 10%% of points to pool):**\n")
 		if len(top50Details) > 0 {
+			shown := 0
 			for _, detail := range top50Details {
-				message += detail + "\n"
+				if shown < maxLinesPerSection {
+					message += detail + "\n"
+					shown++
+				}
+			}
+			if len(top50Details) > maxLinesPerSection {
+				message += fmt.Sprintf("\n...and %d more.\n", len(top50Details)-maxLinesPerSection)
 			}
 		} else {
 			message += "No players affected.\n"
 		}
 		message += fmt.Sprintf("\n**Bottom 50%% (gained 10%% of pool, split evenly):**\n")
 		if len(bottom50Details) > 0 {
+			shown := 0
 			for _, detail := range bottom50Details {
-				message += detail + "\n"
+				if shown < maxLinesPerSection {
+					message += detail + "\n"
+					shown++
+				}
+			}
+			if len(bottom50Details) > maxLinesPerSection {
+				message += fmt.Sprintf("\n...and %d more.\n", len(bottom50Details)-maxLinesPerSection)
 			}
 		} else {
 			message += "No players affected.\n"
