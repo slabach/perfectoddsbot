@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"perfectOddsBot/models"
 	"perfectOddsBot/scheduler/scheduler_jobs"
+	scheduled_cards "perfectOddsBot/scheduler/scheduler_jobs/scheduled_cards"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/robfig/cron/v3"
@@ -86,37 +87,37 @@ func SetupCron(s *discordgo.Session, db *gorm.DB) {
 	// Card expiration jobs. All card checks should be run every hour.
 	_, err = cronService.AddFunc("0 0 */1 * * *", func() {
 		// Runs every hour to collect Loan Shark debts
-		err := scheduler_jobs.CheckLoanShark(s, db)
+		err := scheduled_cards.CheckLoanShark(s, db)
 		if err != nil {
 			fmt.Println(err)
 		}
 
 		// // Runs every hour to expire Vampire cards after 24 hours
-		err = scheduler_jobs.CheckVampire(s, db)
+		err = scheduled_cards.CheckVampire(s, db)
 		if err != nil {
 			fmt.Println(err)
 		}
 
 		// Runs every hour to process active Leech cards and expire them after 12 hours
-		err = scheduler_jobs.CheckLeech(s, db)
+		err = scheduled_cards.CheckLeech(s, db)
 		if err != nil {
 			fmt.Println(err)
 		}
 
 		// Runs every hour to process The Hanged Man cards after 24 hours
-		err = scheduler_jobs.CheckHangedMan(s, db)
+		err = scheduled_cards.CheckHangedMan(s, db)
 		if err != nil {
 			fmt.Println(err)
 		}
 
 		// Runs every hour to expire The Devil cards after 7 days
-		err = scheduler_jobs.CheckTheDevil(s, db)
+		err = scheduled_cards.CheckTheDevil(s, db)
 		if err != nil {
 			fmt.Println(err)
 		}
 
 		// Runs every hour to refresh the deck from the database
-		err = scheduler_jobs.RefreshDeck(s, db)
+		err = scheduled_cards.RefreshDeck(s, db)
 		if err != nil {
 			fmt.Println(err)
 		}

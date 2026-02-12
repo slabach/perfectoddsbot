@@ -1279,7 +1279,7 @@ func TestApplyTheLoversIfApplicable(t *testing.T) {
 
 		createdAt := time.Now().Add(-12 * time.Hour)
 		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
-			WithArgs(guildID, cards.TheLoversCardID, sqlmock.AnyArg()).
+			WithArgs(guildID, cards.TheLoversCardID).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "created_at", "updated_at", "deleted_at", "user_id", "guild_id", "card_id", "target_bet_id", "target_user_id", "bet_amount"}).
 				AddRow(1, createdAt, createdAt, nil, loversHolderID, guildID, cards.TheLoversCardID, nil, &targetUserDiscordID, 0.0))
 
@@ -1347,7 +1347,7 @@ func TestApplyTheLoversIfApplicable(t *testing.T) {
 		createdAt1 := time.Now().Add(-12 * time.Hour)
 		createdAt2 := time.Now().Add(-12 * time.Hour)
 		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
-			WithArgs(guildID, cards.TheLoversCardID, sqlmock.AnyArg()).
+			WithArgs(guildID, cards.TheLoversCardID).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "created_at", "updated_at", "deleted_at", "user_id", "guild_id", "card_id", "target_bet_id", "target_user_id", "bet_amount"}).
 				AddRow(1, createdAt1, createdAt1, nil, loversHolder1ID, guildID, cards.TheLoversCardID, nil, &target1DiscordID, 0.0).
 				AddRow(2, createdAt2, createdAt2, nil, loversHolder2ID, guildID, cards.TheLoversCardID, nil, &target2DiscordID, 0.0))
@@ -1416,7 +1416,7 @@ func TestApplyTheLoversIfApplicable(t *testing.T) {
 		guildID := "guild1"
 
 		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
-			WithArgs(guildID, cards.TheLoversCardID, sqlmock.AnyArg()).
+			WithArgs(guildID, cards.TheLoversCardID).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "created_at", "updated_at", "deleted_at", "user_id", "guild_id", "card_id", "target_bet_id", "target_user_id", "bet_amount"}))
 
 		winnerDiscordIDs := make(map[string]float64)
@@ -1458,7 +1458,7 @@ func TestApplyTheLoversIfApplicable(t *testing.T) {
 
 		createdAt := time.Now().Add(-12 * time.Hour)
 		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
-			WithArgs(guildID, cards.TheLoversCardID, sqlmock.AnyArg()).
+			WithArgs(guildID, cards.TheLoversCardID).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "created_at", "updated_at", "deleted_at", "user_id", "guild_id", "card_id", "target_bet_id", "target_user_id", "bet_amount"}).
 				AddRow(1, createdAt, createdAt, nil, loversHolderID, guildID, cards.TheLoversCardID, nil, &targetUserDiscordID, 0.0))
 
@@ -1495,10 +1495,18 @@ func TestApplyTheLoversIfApplicable(t *testing.T) {
 
 		guildID := "guild1"
 		targetUserDiscordID := "target123"
+		expiredCreatedAt := time.Now().Add(-48 * time.Hour)
 
 		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
-			WithArgs(guildID, cards.TheLoversCardID, sqlmock.AnyArg()).
-			WillReturnRows(sqlmock.NewRows([]string{"id", "created_at", "updated_at", "deleted_at", "user_id", "guild_id", "card_id", "target_bet_id", "target_user_id", "bet_amount"}))
+			WithArgs(guildID, cards.TheLoversCardID).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "created_at", "updated_at", "deleted_at", "user_id", "guild_id", "card_id", "target_bet_id", "target_user_id", "bet_amount"}).
+				AddRow(1, expiredCreatedAt, expiredCreatedAt, nil, 2, guildID, cards.TheLoversCardID, nil, &targetUserDiscordID, 0.0))
+
+		mock.ExpectBegin()
+		mock.ExpectExec("UPDATE `user_inventories` SET `deleted_at`=").
+			WithArgs(sqlmock.AnyArg(), 1).
+			WillReturnResult(sqlmock.NewResult(0, 1))
+		mock.ExpectCommit()
 
 		winnerDiscordIDs := make(map[string]float64)
 		winnerDiscordIDs[targetUserDiscordID] = 1000.0
@@ -1507,11 +1515,11 @@ func TestApplyTheLoversIfApplicable(t *testing.T) {
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
 		}
-		if applied {
-			t.Error("Expected The Lovers NOT to be applied (card expired)")
+		if !applied {
+			t.Error("Expected applied true (we processed cards, just deleted the expired one)")
 		}
 		if totalLoversPayout != 0 {
-			t.Errorf("Expected payout 0, got %.2f", totalLoversPayout)
+			t.Errorf("Expected payout 0 (card expired and deleted), got %.2f", totalLoversPayout)
 		}
 		if len(winners) != 0 {
 			t.Errorf("Expected no winners, got %d", len(winners))
@@ -1541,7 +1549,7 @@ func TestApplyTheLoversIfApplicable(t *testing.T) {
 
 		createdAt := time.Now().Add(-12 * time.Hour)
 		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
-			WithArgs(guildID, cards.TheLoversCardID, sqlmock.AnyArg()).
+			WithArgs(guildID, cards.TheLoversCardID).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "created_at", "updated_at", "deleted_at", "user_id", "guild_id", "card_id", "target_bet_id", "target_user_id", "bet_amount"}).
 				AddRow(1, createdAt, createdAt, nil, loversHolderID, guildID, cards.TheLoversCardID, nil, &targetUserDiscordID, 0.0))
 
@@ -1595,7 +1603,7 @@ func TestApplyTheLoversIfApplicable(t *testing.T) {
 
 		createdAt := time.Now().Add(-12 * time.Hour)
 		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
-			WithArgs(guildID, cards.TheLoversCardID, sqlmock.AnyArg()).
+			WithArgs(guildID, cards.TheLoversCardID).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "created_at", "updated_at", "deleted_at", "user_id", "guild_id", "card_id", "target_bet_id", "target_user_id", "bet_amount"}).
 				AddRow(1, createdAt, createdAt, nil, 2, guildID, cards.TheLoversCardID, nil, nil, 0.0))
 
@@ -1633,7 +1641,7 @@ func TestApplyTheLoversIfApplicable(t *testing.T) {
 		guildID := "guild1"
 
 		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
-			WithArgs(guildID, cards.TheLoversCardID, sqlmock.AnyArg()).
+			WithArgs(guildID, cards.TheLoversCardID).
 			WillReturnError(errors.New("db error"))
 
 		winnerDiscordIDs := make(map[string]float64)

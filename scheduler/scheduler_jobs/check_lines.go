@@ -1,7 +1,6 @@
 package scheduler_jobs
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"perfectOddsBot/models"
@@ -110,7 +109,7 @@ func CheckCFBLines(s *discordgo.Session, db *gorm.DB) (err error) {
 			var secondaryMsgs []models.BetMessage
 			secondaryResult := db.Where("active = 1 AND bet_id = ?", bet.ID).Find(&secondaryMsgs)
 			if secondaryResult.Error != nil {
-				return errors.New(fmt.Sprintf("Error finding secondary messageService: %v", secondaryResult.Error))
+				return fmt.Errorf("Error finding secondary messageService: %v", secondaryResult.Error)
 			}
 			if len(secondaryMsgs) > 0 {
 				for _, msg := range secondaryMsgs {

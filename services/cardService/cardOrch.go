@@ -1631,7 +1631,7 @@ func ApplyTheEmperorIfApplicable(db *gorm.DB, guildID string, winnerDiscordIDs m
 func ApplyTheLoversIfApplicable(db *gorm.DB, guildID string, winnerDiscordIDs map[string]float64) (totalLoversPayout float64, winners []LoversWinner, applied bool, err error) {
 	twentyFourHoursAgo := time.Now().Add(-24 * time.Hour)
 	var loversCards []models.UserInventory
-	err = db.Where("guild_id = ? AND card_id = ? AND created_at >= ? AND target_user_id IS NOT NULL AND deleted_at IS NULL", guildID, cards.TheLoversCardID, twentyFourHoursAgo).
+	err = db.Where("guild_id = ? AND card_id = ? AND target_user_id IS NOT NULL AND deleted_at IS NULL", guildID, cards.TheLoversCardID).
 		Find(&loversCards).Error
 
 	if err != nil {
@@ -1648,6 +1648,13 @@ func ApplyTheLoversIfApplicable(db *gorm.DB, guildID string, winnerDiscordIDs ma
 
 	for _, card := range loversCards {
 		if card.TargetUserID == nil {
+			continue
+		}
+
+		if card.CreatedAt.Before(twentyFourHoursAgo) {
+			if err := db.Delete(&card).Error; err != nil {
+				return totalLoversPayout, winners, applied, err
+			}
 			continue
 		}
 
