@@ -229,6 +229,62 @@ func registerCommonCards(deck *[]models.Card) {
 			Handler:     handleTheFool,
 			Expansion:   "Tarot",
 		},
+		{
+			ID:          150,
+			Name:        "Helmet Sticker",
+			Description: "A reward for a job well done. Gain 15 points.",
+			Handler:     handleHelmetSticker,
+			Expansion:   "Collegiate",
+		},
+		{
+			ID:          151,
+			Name:        "The Walk-On",
+			Description: "You worked your way onto the roster. Gain 25 points if you are in the bottom 50% of players.",
+			Handler:     handleWalkOn,
+			Expansion:   "Collegiate",
+		},
+		{
+			ID:          152,
+			Name:        "Waterboy",
+			Description: "Give 10 points to another player. The Pool rewards you with 20 points for your service.",
+			Handler:     handleWaterboy,
+			Expansion:   "Collegiate",
+		},
+		{
+			ID:          153,
+			Name:        "Alumni Donation",
+			Description: "A wealthy booster helps out. Gain 50 points directly from the Pool.",
+			Handler:     handleAlumniDonation,
+			Expansion:   "Collegiate",
+		},
+		{
+			ID:          154,
+			Name:        "Away Game",
+			Description: "Travel costs are high. Lose 10 points to the Pool.",
+			Handler:     handleAwayGame,
+			Expansion:   "Collegiate",
+		},
+		{
+			ID:          155,
+			Name:        "School Spirit",
+			Description: "You and a random active user both gain 10 points.",
+			Handler:     handleSchoolSpirit,
+			Expansion:   "Collegiate",
+		},
+		{
+			ID:          173,
+			Name:        "Alley-Oop",
+			Description: "A perfect assist! Give 50 points to a chosen user.",
+			Handler:     handleAlleyOop,
+			Expansion:   "Collegiate",
+		},
+		{
+			ID:          174,
+			Name:        "Sixth Man",
+			Description: "Coming off the bench to help. If you have the lowest balance in the server, gain 150 points. Otherwise, gain 50 points.",
+			Handler:     handleSixthMan,
+			Expansion:   "Collegiate",
+		},
 	}
 
 	*deck = append(*deck, commonCards...)
