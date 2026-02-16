@@ -280,6 +280,12 @@ func LoadDeckFromDB(db *gorm.DB) error {
 	}
 
 	rand.Seed(time.Now().UnixNano())
+	rand.Shuffle(len(Deck), func(i, j int) {
+		Deck[i], Deck[j] = Deck[j], Deck[i]
+		cardMap[Deck[i].ID] = &Deck[i]
+		cardMap[Deck[j].ID] = &Deck[j]
+	})
+
 	log.Printf("Loaded %d cards from database into deck (skipped %d cards without handlers)", len(Deck), skippedCount)
 	return nil
 }

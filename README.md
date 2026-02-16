@@ -59,25 +59,26 @@ Some card effects are handled by scheduled jobs:
 | Command                   | Description                                                                                           | Admin Only | Premium | Ephemeral |
 |---------------------------|-------------------------------------------------------------------------------------------------------|------------|---------|-----------|
 | `/help`                   | Show this help message with all available commands                                                    | No         | No      | Yes       |
-| `/create-bet`             | Create a new bet with specified options and odds.                                                     | Yes        | No      | No        |
-| `/create-cfb-bet`         | Create new CFB bet for provided game id                                                               | No         | Yes     | No        |
-| `/create-cbb-bet`         | Create new CBB bet for provided game id                                                               | No         | Yes     | No        |
-| `/create-parlay`          | Create a parlay by combining multiple open bets                                                        | No         | No      | No        |
-| `/give-points`            | Give points to a specific user.                                                                       | Yes        | No      | No        |
-| `/reset-points`           | Reset all users' points to a default value                                                            | Yes        | No      | No        |
-| `/leaderboard`            | Display the leaderboard with the top users based on points.                                           | No         | No      | No        |
 | `/my-points`              | Display your current point total                                                                      | No         | No      | Yes       |
 | `/my-stats`               | Show your betting statistics                                                                          | No         | No      | Yes       |
+| `/leaderboard`            | Display the leaderboard with the top users based on points.                                           | No         | No      | No        |
 | `/my-bets`                | Display your active bets not yet resolved                                                             | No         | No      | Yes       |
 | `/my-parlays`             | Show your active parlays                                                                              | No         | No      | Yes       |
+| `/create-parlay`          | Create a parlay by combining multiple open bets                                                        | No         | No      | No        |
 | `/draw-card`              | Draw a random card from the deck (cost increases per draw cycle; adds to pool)                        | No         | No      | No        |
+| `/store`                  | Purchase specific cards directly from the store                                                       | No         | No      | Yes       |
 | `/my-inventory`           | View the cards currently in your hand                                                                 | No         | No      | Yes       |
-| `/play-card`              | Play a card from your inventory                                   | No         | No      | Yes       |
-| `/list-cfb-games`         | List this weeks CFB games and their current lines                                                     | No         | Yes     | Yes       |
-| `/list-cbb-games`         | List the currently open CBB games                                                                     | No         | Yes     | Yes       |
+| `/play-card`              | Play a card from your inventory                                                                       | No         | No      | Yes       |
+| `/create-bet`             | Create a new bet with specified options and odds                                                      | Yes        | No      | No        |
+| `/give-points`            | Give points to a specific user                                                                        | Yes        | No      | No        |
+| `/reset-points`           | Reset all users' points to a default value                                                            | Yes        | No      | No        |
 | `/set-betting-channel`    | Set the current channel to your Server's 'bet channel' where auto msgs get sent                       | Yes        | No      | Yes       |
 | `/set-points-per-message` | Set the amount of points a user will receive for each message they send                               | Yes        | No      | Yes       |
 | `/set-starting-points`    | Set the amount of points a new user will start with                                                   | Yes        | No      | Yes       |
+| `/list-cfb-games`         | List this weeks CFB games and their current lines                                                     | No         | Yes     | Yes       |
+| `/list-cbb-games`         | List the currently open CBB games                                                                     | No         | Yes     | Yes       |
+| `/create-cfb-bet`         | Create new CFB bet for provided game id                                                               | No         | Yes     | No        |
+| `/create-cbb-bet`         | Create new CBB bet for provided game id                                                               | No         | Yes     | No        |
 | `/subscribe-to-team`      | Choose a College team to subscribe to all CFB & CBB events for                                        | Yes        | Yes     | Yes       |
 | `/toggle-card-drawing`    | Toggle card drawing on/off for this server                                                            | Yes        | No      | Yes       |
 
