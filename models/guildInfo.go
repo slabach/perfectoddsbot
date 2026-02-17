@@ -23,8 +23,11 @@ type Guild struct {
 	PoolDrainUntil          *time.Time
 	EmperorActiveUntil      *time.Time
 	EmperorHolderDiscordID  *string
-	TotalCardDraws          int  `gorm:"default:0"`
-	LastEpicDrawAt          int  `gorm:"default:0"`
-	LastMythicDrawAt        int  `gorm:"default:0"`
-	TarotExpansion          bool `gorm:"default:true"`
+	TotalCardDraws          int `gorm:"default:0"`
+	LastEpicDrawAt          int `gorm:"default:0"`
+	LastMythicDrawAt        int `gorm:"default:0"`
+
+	// Expansions
+	TarotExpansion      bool `gorm:"default:true"`
+	CollegiateExpansion bool `gorm:"default:true"`
 }
