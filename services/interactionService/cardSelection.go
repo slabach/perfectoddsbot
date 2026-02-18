@@ -106,6 +106,10 @@ func HandleCardUserSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 		err = cardSelection.HandleTheHighPriestessSelection(s, i, db, userID, targetUserID, guildID)
 	case cards.TheMagicianCardID:
 		err = cardSelection.HandleTheMagicianSelection(s, i, db, userID, targetUserID, guildID)
+	case cards.AlleyOopCardID:
+		err = cardSelection.HandleAlleyOopSelection(s, i, db, userID, targetUserID, guildID)
+	case cards.TransferPortalCardID:
+		err = cardSelection.HandleTransferPortalSelection(s, i, db, userID, targetUserID, guildID)
 	default:
 		cardService.UnmarkSelectorUsed(customID)
 		return fmt.Errorf("card %d does not support user selection", cardID)

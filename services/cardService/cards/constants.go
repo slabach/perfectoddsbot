@@ -51,6 +51,8 @@ const (
 	TheDevilCardID          = 99
 	DeathCardID             = 98
 	TheWorldCardID          = 103
+	AlleyOopCardID          = 173
+	TransferPortalCardID   = 156
 
 	RoyaltyGuildID = "761721066959667220"
 )

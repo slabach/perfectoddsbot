@@ -192,7 +192,7 @@ func HandleMagicianCardSelection(s *discordgo.Session, i *discordgo.InteractionC
 		if cardResult.RequiresSelection {
 			if cardResult.SelectionType == "user" {
 				if card.ID == cards.HostileTakeoverCardID || card.ID == cards.JusticeCardID {
-					cardService.ShowFilteredUserSelectMenu(s, i, card.ID, card.Name, card.Description, drawerUserID, guildID, tx, 500.0)
+					cardService.ShowPointRangeUserSelectMenu(s, i, card.ID, card.Name, card.Description, drawerUserID, guildID, tx, 500.0)
 				} else {
 					cardService.ShowUserSelectMenu(s, i, card.ID, card.Name, card.Description, drawerUserID, guildID, db)
 				}

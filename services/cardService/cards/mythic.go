@@ -75,14 +75,14 @@ func registerMythicCards(deck *[]models.Card) {
 		},
 		// {
 		// 	ID:             179,
-		// 	Name:           "Heisman Trophy",
+		// 	Name:           "Heisman Trophy (🏟️)",
 		// 	Description:    "Win 5% of the Pool and your next winning bet payout is doubled.",
 		// 	Handler:        handleHeismanTrophy,
 		// 	AddToInventory: true,
 		// },
 		// {
 		// 	ID:          169,
-		// 	Name:        "National Championship",
+		// 	Name:        "National Championship (🏟️)",
 		// 	Description: "You win 20% of the current Pool, and every other active player gains 200 points.",
 		// 	Handler:     handleNationalChampionship,
 		// 	Expansion:   "Collegiate",

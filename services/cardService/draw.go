@@ -426,8 +426,10 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 
 	if cardResult.RequiresSelection {
 		if cardResult.SelectionType == "user" {
-			if card.ID == cards.HostileTakeoverCardID || card.ID == cards.JusticeCardID {
-				ShowFilteredUserSelectMenu(s, i, card.ID, card.Name, card.Description, userID, guildID, tx, 500.0)
+			if card.ID == cards.TransferPortalCardID {
+				ShowTransferPortalUserSelectMenu(s, i, card.ID, card.Name, card.Description, userID, guildID, db)
+			} else if card.ID == cards.HostileTakeoverCardID || card.ID == cards.JusticeCardID {
+				ShowPointRangeUserSelectMenu(s, i, card.ID, card.Name, card.Description, userID, guildID, tx, 500.0)
 			} else {
 				ShowUserSelectMenu(s, i, card.ID, card.Name, card.Description, userID, guildID, db)
 			}

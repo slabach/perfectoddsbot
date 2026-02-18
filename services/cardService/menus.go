@@ -39,7 +39,7 @@ func ShowUserSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, ca
 	}
 }
 
-func ShowFilteredUserSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, cardID uint, cardName string, cardDescription string, userID string, guildID string, db *gorm.DB, maxPointDifference float64) {
+func ShowPointRangeUserSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, cardID uint, cardName string, cardDescription string, userID string, guildID string, db *gorm.DB, maxPointDifference float64) {
 	var drawer models.User
 	if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&drawer).Error; err != nil {
 		common.SendError(s, i, err, db)
@@ -116,6 +116,99 @@ func ShowFilteredUserSelectMenu(s *discordgo.Session, i *discordgo.InteractionCr
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Content: fmt.Sprintf("🎴 <@%s> drew **%s**!\n%s\n\nSelect a user within %.0f points of you (you have %.1f points):", userID, cardName, cardDescription, maxPointDifference, drawer.Points),
+			Components: []discordgo.MessageComponent{
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{
+						discordgo.SelectMenu{
+							MenuType:    discordgo.StringSelectMenu,
+							CustomID:    fmt.Sprintf("card_%d_select_%s_%s_%s", cardID, userID, guildID, selectorID),
+							Placeholder: "Choose a user...",
+							MinValues:   &minValues,
+							MaxValues:   1,
+							Options:     selectOptions,
+						},
+					},
+				},
+			},
+			Flags: discordgo.MessageFlagsEphemeral,
+		},
+	})
+	if err != nil {
+		common.SendError(s, i, err, db)
+	}
+}
+
+func ShowTransferPortalUserSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, cardID uint, cardName string, cardDescription string, userID string, guildID string, db *gorm.DB) {
+	var drawer models.User
+	if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&drawer).Error; err != nil {
+		common.SendError(s, i, err, db)
+		return
+	}
+
+	hasTradeable, err := HasTradeableCard(db, drawer.ID, guildID)
+	if err != nil {
+		common.SendError(s, i, err, db)
+		return
+	}
+	if !hasTradeable {
+		_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: fmt.Sprintf("🎴 <@%s> drew **%s**!\n%s\n\nYou have no tradeable cards in your inventory. This card fizzles out.", userID, cardName, cardDescription),
+			},
+		})
+		return
+	}
+
+	eligibleUsers, err := GetEligibleUsersWithTradeableCards(db, guildID, userID)
+	if err != nil {
+		common.SendError(s, i, err, db)
+		return
+	}
+	if len(eligibleUsers) == 0 {
+		_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: fmt.Sprintf("🎴 <@%s> drew **%s**!\n%s\n\nNo other players have tradeable cards. This card fizzles out.", userID, cardName, cardDescription),
+			},
+		})
+		return
+	}
+
+	var selectOptions []discordgo.SelectMenuOption
+	for _, u := range eligibleUsers {
+		displayName := ""
+		if u.Username != nil && *u.Username != "" {
+			displayName = *u.Username
+		} else {
+			displayName = fmt.Sprintf("User %s", u.DiscordID)
+		}
+		if len(displayName) > 100 {
+			displayName = displayName[:97] + "..."
+		}
+		description := fmt.Sprintf("%.1f points", u.Points)
+		if len(description) > 100 {
+			description = description[:97] + "..."
+		}
+		value := u.DiscordID
+		if len(value) > 25 {
+			value = value[:25]
+		}
+		selectOptions = append(selectOptions, discordgo.SelectMenuOption{
+			Label:       displayName,
+			Value:       value,
+			Description: description,
+			Emoji:       nil,
+			Default:     false,
+		})
+	}
+
+	selectorID := i.Interaction.ID
+	minValues := 1
+	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: fmt.Sprintf("🎴 <@%s> drew **%s**!\n%s\n\nSelect a user who has a tradeable card to swap with:", userID, cardName, cardDescription),
 			Components: []discordgo.MessageComponent{
 				discordgo.ActionsRow{
 					Components: []discordgo.MessageComponent{

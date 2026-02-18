@@ -281,6 +281,130 @@ func HandleTagSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db
 	})
 }
 
+func HandleAlleyOopSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, userID string, targetUserID string, guildID string) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		result, err := cards.ExecuteAlleyOop(tx, userID, targetUserID, guildID)
+		if err != nil {
+			return err
+		}
+
+		guild, err := guildService.GetGuildInfo(s, tx, guildID, i.ChannelID)
+		if err != nil {
+			return err
+		}
+
+		var user models.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("discord_id = ? AND guild_id = ?", userID, guildID).
+			First(&user).Error; err != nil {
+			return err
+		}
+
+		targetUsername := common.GetUsernameWithDB(tx, s, guildID, targetUserID)
+
+		card := cardService.GetCardByID(cards.AlleyOopCardID)
+		if card == nil {
+			return fmt.Errorf("card not found")
+		}
+
+		embed := BuildCardResultEmbed(card, result, user, targetUsername, guild.Pool)
+
+		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Embeds: []*discordgo.MessageEmbed{embed},
+			},
+		})
+	})
+}
+
+func HandleTransferPortalSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, userID string, targetUserID string, guildID string) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		var drawer models.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("discord_id = ? AND guild_id = ?", userID, guildID).
+			First(&drawer).Error; err != nil {
+			return err
+		}
+		var targetUser models.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("discord_id = ? AND guild_id = ?", targetUserID, guildID).
+			First(&targetUser).Error; err != nil {
+			return err
+		}
+
+		drawerItems, err := cardService.GetTradeableInventoryForUser(tx, drawer.ID, guildID)
+		if err != nil {
+			return err
+		}
+		targetItems, err := cardService.GetTradeableInventoryForUser(tx, targetUser.ID, guildID)
+		if err != nil {
+			return err
+		}
+		if len(drawerItems) == 0 || len(targetItems) == 0 {
+			return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "You or the target no longer have tradeable cards. This card fizzles out.",
+					Flags:   discordgo.MessageFlagsEphemeral,
+				},
+			})
+		}
+
+		fromDrawer := cardService.PickWeightedTradeable(drawerItems)
+		fromTarget := cardService.PickWeightedTradeable(targetItems)
+		if fromDrawer == nil || fromTarget == nil {
+			return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "Could not pick cards to swap. This card fizzles out.",
+					Flags:   discordgo.MessageFlagsEphemeral,
+				},
+			})
+		}
+
+		fromDrawer.Inventory.UserID = targetUser.ID
+		fromTarget.Inventory.UserID = drawer.ID
+		if err := tx.Save(&fromDrawer.Inventory).Error; err != nil {
+			return err
+		}
+		if err := tx.Save(&fromTarget.Inventory).Error; err != nil {
+			return err
+		}
+
+		card := cardService.GetCardByID(cards.TransferPortalCardID)
+		if card == nil {
+			return fmt.Errorf("card not found")
+		}
+		targetUsername := common.GetUsernameWithDB(tx, s, guildID, targetUserID)
+		drawerCardName := "Unknown"
+		targetCardName := "Unknown"
+		if fromDrawer.Card != nil {
+			drawerCardName = fromDrawer.Card.Name
+		}
+		if fromTarget.Card != nil {
+			targetCardName = fromTarget.Card.Name
+		}
+		guild, err := guildService.GetGuildInfo(s, tx, guildID, i.ChannelID)
+		if err != nil {
+			return err
+		}
+		result := &models.CardResult{
+			Message:     fmt.Sprintf("You swapped **%s** for **%s** with %s!", drawerCardName, targetCardName, targetUsername),
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}
+		embed := BuildCardResultEmbed(card, result, drawer, targetUsername, guild.Pool)
+
+		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Embeds: []*discordgo.MessageEmbed{embed},
+			},
+		})
+	})
+}
+
 func HandleBountyHunterSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, userID string, targetUserID string, guildID string) error {
 	return db.Transaction(func(tx *gorm.DB) error {
 		result, err := cards.ExecuteBountyHunter(tx, userID, targetUserID, guildID)
