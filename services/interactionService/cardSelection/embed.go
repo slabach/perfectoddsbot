@@ -1,0 +1,63 @@
+package cardSelection
+
+import (
+	"fmt"
+	"perfectOddsBot/models"
+	cardService "perfectOddsBot/services/cardService"
+
+	"github.com/bwmarrin/discordgo"
+)
+
+func BuildCardResultEmbed(card *models.Card, result *models.CardResult, user models.User, targetUsername string, poolBalance float64) *discordgo.MessageEmbed {
+	var color int
+	if card.CardRarity.ID != 0 {
+		color = cardService.ParseHexColor(card.CardRarity.Color)
+	} else {
+		color = 0x95A5A6
+	}
+
+	embed := &discordgo.MessageEmbed{
+		Title:       fmt.Sprintf("🎴 Card Effect: %s", card.Name),
+		Description: result.Message,
+		Color:       color,
+		Fields:      []*discordgo.MessageEmbedField{},
+	}
+
+	if result.PointsDelta != 0 {
+		sign := "+"
+		if result.PointsDelta < 0 {
+			sign = ""
+		}
+		embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
+			Name:   fmt.Sprintf("<@%s>", user.DiscordID),
+			Value:  fmt.Sprintf("%s%.1f points (Total: %.1f)", sign, result.PointsDelta, user.Points),
+			Inline: true,
+		})
+	}
+
+	if result.TargetUserID != nil && result.TargetPointsDelta != 0 {
+		sign := "+"
+		if result.TargetPointsDelta < 0 {
+			sign = ""
+		}
+		fieldName := "Target"
+		if targetUsername != "" {
+			fieldName = targetUsername
+		}
+		embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
+			Name:   fieldName,
+			Value:  fmt.Sprintf("<@%s>: %s%.1f points", *result.TargetUserID, sign, result.TargetPointsDelta),
+			Inline: true,
+		})
+	}
+
+	if poolBalance >= 0 {
+		embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
+			Name:   "Pool Balance",
+			Value:  fmt.Sprintf("%.1f points", poolBalance),
+			Inline: true,
+		})
+	}
+
+	return embed
+}

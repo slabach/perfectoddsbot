@@ -3,6 +3,7 @@ package interactionService
 import (
 	"perfectOddsBot/services/betService"
 	"perfectOddsBot/services/common"
+	cardSelection "perfectOddsBot/services/interactionService/cardSelection"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
@@ -189,7 +190,7 @@ func HandleComponentInteraction(s *discordgo.Session, i *discordgo.InteractionCr
 	}
 
 	if strings.HasPrefix(customID, "magician_card_select_") {
-		err := HandleMagicianCardSelection(s, i, db, customID)
+		err := cardSelection.HandleMagicianCardSelection(s, i, db, customID)
 		if err != nil {
 			common.SendError(s, i, err, db)
 		}
@@ -197,7 +198,7 @@ func HandleComponentInteraction(s *discordgo.Session, i *discordgo.InteractionCr
 	}
 
 	if strings.HasPrefix(customID, "magician_card_prev_") || strings.HasPrefix(customID, "magician_card_next_") {
-		err := HandleMagicianCardPagination(s, i, db, customID)
+		err := cardSelection.HandleMagicianCardPagination(s, i, db, customID)
 		if err != nil {
 			common.SendError(s, i, err, db)
 		}
@@ -205,7 +206,7 @@ func HandleComponentInteraction(s *discordgo.Session, i *discordgo.InteractionCr
 	}
 
 	if strings.HasPrefix(customID, "magician_card_cancel_") {
-		err := HandleMagicianCardCancel(s, i, db, customID)
+		err := cardSelection.HandleMagicianCardCancel(s, i, db, customID)
 		if err != nil {
 			common.SendError(s, i, err, db)
 		}

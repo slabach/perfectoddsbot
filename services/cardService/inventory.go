@@ -13,6 +13,17 @@ func PlayCardFromInventory(s *discordgo.Session, db *gorm.DB, user models.User, 
 	return PlayCardFromInventoryWithMessage(s, db, user, cardID, "")
 }
 
+func PlayCardFromInventoryInTransaction(tx *gorm.DB, user models.User, cardID uint) error {
+	var inventory models.UserInventory
+	result := tx.Where("user_id = ? AND guild_id = ? AND card_id = ?", user.ID, user.GuildID, cardID).First(&inventory)
+
+	if result.Error != nil {
+		return result.Error
+	}
+
+	return tx.Delete(&inventory).Error
+}
+
 func PlayCardFromInventoryWithMessage(s *discordgo.Session, db *gorm.DB, user models.User, cardID uint, customMessage string) error {
 	card := GetCardByID(cardID)
 	if card == nil {

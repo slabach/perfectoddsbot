@@ -115,6 +115,21 @@ func runApp() {
 		log.Fatalf("Error running user inventory times_applied backfill: %v", err)
 	}
 
+	err = services.RunVampireDevilExpiresAtBackfill(db)
+	if err != nil {
+		log.Fatalf("Error running Vampire/Devil expires_at backfill: %v", err)
+	}
+
+	err = services.RunHomeFieldAdvantageExpiresAtBackfill(db)
+	if err != nil {
+		log.Fatalf("Error running Home Field Advantage expires_at backfill: %v", err)
+	}
+
+	err = services.RunUserInventoryCardCodeBackfill(db)
+	if err != nil {
+		log.Fatalf("Error running user inventory card code backfill: %v", err)
+	}
+
 	token := os.Getenv("DISCORD_BOT_TOKEN")
 	if token == "" {
 		log.Fatalf("DISCORD_BOT_TOKEN not set in environment variables")

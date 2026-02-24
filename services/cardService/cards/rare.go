@@ -155,6 +155,32 @@ func registerRareCards(deck *[]models.Card) {
 			IsPositive:     true,
 			Expansion:      "Tarot",
 		},
+		{
+			ID:          30001,
+			Code:        "UND",
+			Name:        "The Underdog (🏟️)",
+			Description: "If you are in the bottom 25% of players, gain 250 points from the Pool. Otherwise gain 50 points.",
+			Handler:     handleUnderdog,
+			Expansion:   "Collegiate",
+		},
+		{
+			ID:             30002,
+			Name:           "Full Ride (🏟️)",
+			Code:           "FRD",
+			Description:    "Your next card purchase is free.",
+			Handler:        handleFullRide,
+			AddToInventory: true,
+			Expansion:      "Collegiate",
+			IsPositive:     true,
+		},
+		{
+			ID:          30003,
+			Code:        "HCAM",
+			Name:        "Heisman Campaign (🏟️)",
+			Description: "If you are in the top 5 players, gain 300 points and your next bet payout is reduced by 15%. Otherwise gain 100 points.",
+			Handler:     handleHeismanCampaign,
+			Expansion:   "Collegiate",
+		},
 	}
 
 	*deck = append(*deck, rareCards...)
