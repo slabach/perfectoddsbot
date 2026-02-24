@@ -5724,7 +5724,7 @@ func handleTheWorld(s *discordgo.Session, db *gorm.DB, userID string, guildID st
 	return result, nil
 }
 
-func handleToTheMoon(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+func handleTheGoldenWhistle(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
 	var result *models.CardResult
 	if err := db.Transaction(func(tx *gorm.DB) error {
 		var openBets []models.Bet
@@ -5733,7 +5733,7 @@ func handleToTheMoon(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 		}
 		if len(openBets) == 0 {
 			result = &models.CardResult{
-				Message:     "To the Moon 🚀! There were no open bets to resolve.",
+				Message:     "The Golden Whistle! There were no open bets to resolve.",
 				PointsDelta: 0,
 				PoolDelta:   0,
 			}
@@ -5751,7 +5751,7 @@ func handleToTheMoon(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 		}
 		if len(entries) == 0 {
 			result = &models.CardResult{
-				Message:     "To the Moon 🚀! There were no bet entries on open bets to resolve.",
+				Message:     "The Golden Whistle! There were no bet entries on open bets to resolve.",
 				PointsDelta: 0,
 				PoolDelta:   0,
 			}
@@ -5783,7 +5783,7 @@ func handleToTheMoon(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 		}
 
 		result = &models.CardResult{
-			Message:     fmt.Sprintf("To the Moon 🚀! All %d open bet(s) were resolved as wins. %d entries paid out (%.0f points total).", len(openBets), len(entries), totalPayout),
+			Message:     fmt.Sprintf("The Golden Whistle! All %d open bet(s) were resolved as wins. %d entries paid out (%.0f points total).", len(openBets), len(entries), totalPayout),
 			PointsDelta: 0,
 			PoolDelta:   0,
 		}

@@ -84,10 +84,11 @@ func registerMythicCards(deck *[]models.Card) {
 		},
 		{
 			ID:          50003,
-			Code:        "TTM",
-			Name:        "To the Moon 🚀",
+			Code:        "TGW",
+			Name:        "The Golden Whistle",
 			Description: "All active bets currently placed are resolved as wins.",
-			Handler:     handleToTheMoon,
+			Handler:     handleTheGoldenWhistle,
+			Expansion:   "Collegiate",
 		},
 	}
 
