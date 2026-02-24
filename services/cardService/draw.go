@@ -92,7 +92,7 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	var donorUserID uint
 	var donorName string
 	if drawCardCost == guild.CardDrawCost {
-		donorID, err := hasGenerousDonationInInventory(db, guildID)
+		donorID, err := hasGenerousDonationInInventory(tx, guildID)
 		if err != nil {
 			tx.Rollback()
 			common.SendError(s, i, fmt.Errorf("error checking donation inventory: %v", err), db)
@@ -102,8 +102,8 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		if donorID != 0 && donorID != lockedUser.ID {
 			donorUserID = donorID
 			var donor models.User
-			if err := db.First(&donor, donorID).Error; err == nil {
-				donorName = common.GetUsernameWithDB(db, s, guildID, donor.DiscordID)
+			if err := tx.First(&donor, donorID).Error; err == nil {
+				donorName = common.GetUsernameWithDB(tx, s, guildID, donor.DiscordID)
 			}
 
 			drawCardCost = 0

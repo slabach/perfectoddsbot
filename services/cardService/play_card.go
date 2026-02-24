@@ -12,6 +12,20 @@ import (
 )
 
 func PlayCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
+	if i.Member == nil {
+		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "This command can only be used in a server, not in DMs.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
+
 	userID := i.Member.User.ID
 	guildID := i.GuildID
 

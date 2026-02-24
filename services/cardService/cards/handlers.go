@@ -1031,11 +1031,14 @@ func handleHomeFieldAdvantage(s *discordgo.Session, db *gorm.DB, userID string, 
 	}
 	var inv models.UserInventory
 	if err := db.Where("user_id = ? AND guild_id = ? AND card_id = ? AND deleted_at IS NULL", user.ID, guildID, HomeFieldAdvantageCardID).First(&inv).Error; err != nil {
-		return &models.CardResult{
-			Message:     "You don't have a Home Field Advantage card to play. The card fizzles out.",
-			PointsDelta: 0,
-			PoolDelta:   0,
-		}, nil
+		if err == gorm.ErrRecordNotFound {
+			return &models.CardResult{
+				Message:     "You don't have a Home Field Advantage card to play. The card fizzles out.",
+				PointsDelta: 0,
+				PoolDelta:   0,
+			}, nil
+		}
+		return nil, err
 	}
 	expiresAt := time.Now().Add(24 * time.Hour)
 	if err := db.Model(&inv).Update("expires_at", expiresAt).Error; err != nil {
@@ -2834,7 +2837,10 @@ func burnExpiredRedshirt(db *gorm.DB, userID uint, guildID string) error {
 		Where("(expires_at IS NOT NULL AND expires_at < ?) OR (expires_at IS NULL AND created_at < ?)", now, legacyCutoff).
 		First(&item).Error
 	if err != nil {
-		return nil
+		if err == gorm.ErrRecordNotFound {
+			return nil
+		}
+		return err
 	}
 	return db.Delete(&item).Error
 }
@@ -4069,7 +4075,10 @@ func ExecuteDuel(db *gorm.DB, userID string, targetUserID string, guildID string
 			if moonRedirected {
 				randomDiscordID, err := GetRandomUserForMoon(tx, guildID, []uint{targetUser.ID, user.ID})
 				if err != nil {
-					blocked, blockedByRedshirt, _ := CheckAndConsumeShieldOrRedshirt(tx, targetUser.ID, guildID)
+					blocked, blockedByRedshirt, err := CheckAndConsumeShieldOrRedshirt(tx, targetUser.ID, guildID)
+					if err != nil {
+						return err
+					}
 					if blocked {
 						result = &models.CardResult{
 							Message:           fmt.Sprintf("⚔️ DUEL! %s rolled %d, %s rolled %d. You win! But %s's Moon had no one to redirect to and their %s blocked the loss! The duel fizzles.", userMention, userRoll, targetMention, targetRoll, targetMention, protectionName(blockedByRedshirt)),
@@ -4159,7 +4168,10 @@ func ExecuteDuel(db *gorm.DB, userID string, targetUserID string, guildID string
 			if moonRedirected {
 				randomDiscordID, err := GetRandomUserForMoon(tx, guildID, []uint{user.ID, targetUser.ID})
 				if err != nil {
-					blocked, blockedByRedshirt, _ := CheckAndConsumeShieldOrRedshirt(tx, user.ID, guildID)
+					blocked, blockedByRedshirt, err := CheckAndConsumeShieldOrRedshirt(tx, user.ID, guildID)
+					if err != nil {
+						return err
+					}
 					if blocked {
 						result = &models.CardResult{
 							Message:           fmt.Sprintf("⚔️ DUEL! %s rolled %d, %s rolled %d. You lose! Your Moon had no one to redirect to and your %s blocked the loss! The duel fizzles.", userMention, userRoll, targetMention, targetRoll, protectionName(blockedByRedshirt)),
@@ -4250,11 +4262,17 @@ func ExecuteDuel(db *gorm.DB, userID string, targetUserID string, guildID string
 			userActualLoss := 0.0
 			targetActualLoss := 0.0
 
-			moonU, _ := CheckAndConsumeMoon(tx, user.ID, guildID)
+			moonU, err := CheckAndConsumeMoon(tx, user.ID, guildID)
+			if err != nil {
+				return err
+			}
 			if moonU {
 				randomID, err := GetRandomUserForMoon(tx, guildID, []uint{user.ID, targetUser.ID})
 				if err != nil {
-					CheckAndConsumeShieldOrRedshirt(tx, user.ID, guildID)
+					_, _, err := CheckAndConsumeShieldOrRedshirt(tx, user.ID, guildID)
+					if err != nil {
+						return err
+					}
 				} else {
 					var ru models.User
 					tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("discord_id = ? AND guild_id = ?", randomID, guildID).First(&ru)
@@ -4269,18 +4287,28 @@ func ExecuteDuel(db *gorm.DB, userID string, targetUserID string, guildID string
 					tx.Save(&ru)
 				}
 			} else {
-				if blocked, _, _ := CheckAndConsumeShieldOrRedshirt(tx, user.ID, guildID); !blocked {
+				blocked, _, err := CheckAndConsumeShieldOrRedshirt(tx, user.ID, guildID)
+				if err != nil {
+					return err
+				}
+				if !blocked {
 					userActualLoss = userLoss
 					user.Points -= userLoss
 					tx.Save(&user)
 				}
 			}
 
-			moonT, _ := CheckAndConsumeMoon(tx, targetUser.ID, guildID)
+			moonT, err := CheckAndConsumeMoon(tx, targetUser.ID, guildID)
+			if err != nil {
+				return err
+			}
 			if moonT {
 				randomID, err := GetRandomUserForMoon(tx, guildID, []uint{user.ID, targetUser.ID})
 				if err != nil {
-					CheckAndConsumeShieldOrRedshirt(tx, targetUser.ID, guildID)
+					_, _, err := CheckAndConsumeShieldOrRedshirt(tx, targetUser.ID, guildID)
+					if err != nil {
+						return err
+					}
 				} else {
 					var ru models.User
 					tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("discord_id = ? AND guild_id = ?", randomID, guildID).First(&ru)
@@ -4295,7 +4323,11 @@ func ExecuteDuel(db *gorm.DB, userID string, targetUserID string, guildID string
 					tx.Save(&ru)
 				}
 			} else {
-				if blocked, _, _ := CheckAndConsumeShieldOrRedshirt(tx, targetUser.ID, guildID); !blocked {
+				blocked, _, err := CheckAndConsumeShieldOrRedshirt(tx, targetUser.ID, guildID)
+				if err != nil {
+					return err
+				}
+				if !blocked {
 					targetActualLoss = targetLoss
 					targetUser.Points -= targetLoss
 					tx.Save(&targetUser)
@@ -5818,14 +5850,14 @@ func handleWalkOn(s *discordgo.Session, db *gorm.DB, userID string, guildID stri
 	if isBottom50Percent {
 		return &models.CardResult{
 			Message:     "Congrats on making the team! +25 Points.",
-			PointsDelta: 75,
+			PointsDelta: 25,
 			PoolDelta:   0,
 		}, nil
 	}
 
 	return &models.CardResult{
 		Message:     "You did what was expected. Here's 10 points.",
-		PointsDelta: 25,
+		PointsDelta: 10,
 		PoolDelta:   0,
 	}, nil
 }
@@ -6120,11 +6152,6 @@ func handleSchoolSpirit(s *discordgo.Session, db *gorm.DB, userID string, guildI
 	randomIndex := rand.Intn(len(allUsers))
 	targetUser := allUsers[randomIndex]
 
-	giveAmount := 10.0
-	if user.Points < giveAmount {
-		giveAmount = user.Points
-	}
-
 	targetID := targetUser.DiscordID
 	targetMention := "<@" + targetID + ">"
 	return &models.CardResult{
@@ -6132,7 +6159,7 @@ func handleSchoolSpirit(s *discordgo.Session, db *gorm.DB, userID string, guildI
 		PointsDelta:       10,
 		PoolDelta:         0,
 		TargetUserID:      &targetID,
-		TargetPointsDelta: giveAmount,
+		TargetPointsDelta: 10,
 	}, nil
 }
 

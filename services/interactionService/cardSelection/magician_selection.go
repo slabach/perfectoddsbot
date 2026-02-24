@@ -10,11 +10,91 @@ import (
 	"perfectOddsBot/services/common"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
+
+type selectionCacheEntry struct {
+	inventoryID uint
+	cardID      uint
+	userID      string
+	targetUserID string
+	guildID     string
+	expiresAt   time.Time
+}
+
+var (
+	selectionCache     = make(map[string]*selectionCacheEntry)
+	selectionCacheMu   sync.RWMutex
+	selectionCacheTTL  = 30 * time.Minute
+)
+
+func init() {
+	// Start cleanup goroutine
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			cleanupSelectionCache()
+		}
+	}()
+}
+
+func cleanupSelectionCache() {
+	selectionCacheMu.Lock()
+	defer selectionCacheMu.Unlock()
+	now := time.Now()
+	for key, entry := range selectionCache {
+		if now.After(entry.expiresAt) {
+			delete(selectionCache, key)
+		}
+	}
+}
+
+func generateSelectionKey() string {
+	b := make([]byte, 8)
+	_, _ = crand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+func storeSelectionPayload(inventoryID uint, cardID uint, userID, targetUserID, guildID string) string {
+	key := generateSelectionKey()
+	entry := &selectionCacheEntry{
+		inventoryID:  inventoryID,
+		cardID:       cardID,
+		userID:       userID,
+		targetUserID: targetUserID,
+		guildID:      guildID,
+		expiresAt:    time.Now().Add(selectionCacheTTL),
+	}
+	selectionCacheMu.Lock()
+	selectionCache[key] = entry
+	selectionCacheMu.Unlock()
+	return key
+}
+
+func getSelectionPayload(key string) (*selectionCacheEntry, bool) {
+	selectionCacheMu.RLock()
+	defer selectionCacheMu.RUnlock()
+	entry, exists := selectionCache[key]
+	if !exists {
+		return nil, false
+	}
+	if time.Now().After(entry.expiresAt) {
+		// Entry expired, delete it
+		selectionCacheMu.RUnlock()
+		selectionCacheMu.Lock()
+		delete(selectionCache, key)
+		selectionCacheMu.Unlock()
+		selectionCacheMu.RLock()
+		return nil, false
+	}
+	return entry, true
+}
 
 func MagicianSelectorID() string {
 	b := make([]byte, 4)
@@ -62,12 +142,18 @@ func HandleMagicianCardSelection(s *discordgo.Session, i *discordgo.InteractionC
 	}
 
 	selectedValue := i.MessageComponentData().Values[0]
-	valueParts := strings.Split(selectedValue, "_")
-	if len(valueParts) != 5 {
-		return fmt.Errorf("invalid selected value format")
+	entry, exists := getSelectionPayload(selectedValue)
+	if !exists {
+		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "Invalid or expired card selection. Please try again.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
 	}
 
-	valueDrawerUserID := valueParts[2]
+	valueDrawerUserID := entry.userID
 	if valueDrawerUserID != drawerUserID || valueDrawerUserID != i.Member.User.ID {
 		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -78,8 +164,8 @@ func HandleMagicianCardSelection(s *discordgo.Session, i *discordgo.InteractionC
 		})
 	}
 
-	valueTargetUserID := valueParts[3]
-	valueGuildID := valueParts[4]
+	valueTargetUserID := entry.targetUserID
+	valueGuildID := entry.guildID
 	if valueTargetUserID != targetUserID || valueGuildID != guildID {
 		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -90,19 +176,10 @@ func HandleMagicianCardSelection(s *discordgo.Session, i *discordgo.InteractionC
 		})
 	}
 
-	inventoryID, err := strconv.ParseUint(valueParts[0], 10, 32)
-	if err != nil {
-		cardService.UnmarkSelectorUsed(customID)
-		return fmt.Errorf("invalid inventory ID: %v", err)
-	}
+	inventoryID := entry.inventoryID
+	cardID := entry.cardID
 
-	cardID, err := strconv.ParseUint(valueParts[1], 10, 32)
-	if err != nil {
-		cardService.UnmarkSelectorUsed(customID)
-		return fmt.Errorf("invalid card ID: %v", err)
-	}
-
-	err = db.Transaction(func(tx *gorm.DB) error {
+	err := db.Transaction(func(tx *gorm.DB) error {
 		var inventoryItem models.UserInventory
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			Where("id = ? AND user_id = (SELECT id FROM users WHERE discord_id = ? AND guild_id = ?)", inventoryID, targetUserID, guildID).
@@ -176,10 +253,11 @@ func HandleMagicianCardSelection(s *discordgo.Session, i *discordgo.InteractionC
 
 		if card.AddToInventory {
 			inventory := models.UserInventory{
-				UserID:   drawerUser.ID,
-				GuildID:  guildID,
-				CardID:   card.ID,
-				CardCode: card.Code,
+				UserID:    drawerUser.ID,
+				GuildID:   guildID,
+				CardID:    card.ID,
+				CardCode:  card.Code,
+				ExpiresAt: cardService.GetExpiresAtForNewCard(card.ID),
 			}
 			if err := tx.Create(&inventory).Error; err != nil {
 				return err
@@ -289,10 +367,7 @@ func HandleMagicianCardPagination(s *discordgo.Session, i *discordgo.Interaction
 				description = description[:97] + "..."
 			}
 
-			value := fmt.Sprintf("%d_%d_%s_%s_%s", item.ID, item.CardID, userID, targetUserID, guildID)
-			if len(value) > 100 {
-				value = value[:100]
-			}
+			value := storeSelectionPayload(item.ID, item.CardID, userID, targetUserID, guildID)
 
 			selectOptions = append(selectOptions, discordgo.SelectMenuOption{
 				Label:       label,
