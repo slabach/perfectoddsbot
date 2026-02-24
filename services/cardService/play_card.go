@@ -5,6 +5,7 @@ import (
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/common"
 	"perfectOddsBot/services/guildService"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"gorm.io/gorm"
@@ -38,7 +39,11 @@ func showPlayableCardSelectMenu(s *discordgo.Session, i *discordgo.InteractionCr
 	}
 
 	inventoryMap := make(map[uint]int)
+	now := time.Now()
 	for _, item := range inventory {
+		if item.ExpiresAt != nil && item.ExpiresAt.Before(now) {
+			continue
+		}
 		inventoryMap[item.CardID]++
 	}
 

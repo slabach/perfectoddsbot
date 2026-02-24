@@ -2,6 +2,7 @@ package betService
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/cardService"
@@ -894,7 +895,12 @@ func UpdateParlaysOnBetResolution(s *discordgo.Session, db *gorm.DB, betID uint,
 				var user models.User
 				db.First(&user, parlay.UserID)
 				payout := common.CalculateParlayPayout(parlay.Amount, parlay.TotalOdds)
-				payout, _, _ = cardService.ApplyHeismanCampaignIfApplicable(db, user, payout)
+				var err error
+				payout, _, err = cardService.ApplyHeismanCampaignIfApplicable(db, user, payout)
+				if err != nil {
+					log.Printf("Error applying Heisman Campaign card for parlay ID %d, user ID %d, payout %.2f: %v", parlay.ID, parlay.UserID, payout, err)
+					return fmt.Errorf("failed to apply Heisman Campaign card for parlay %d (user %d): %w", parlay.ID, parlay.UserID, err)
+				}
 				user.Points += payout
 				user.TotalBetsWon++
 				user.TotalPointsWon += payout

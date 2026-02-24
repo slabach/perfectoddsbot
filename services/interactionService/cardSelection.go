@@ -499,16 +499,45 @@ func HandlePlayCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCr
 	}
 	betID := uint(selectedBetID)
 
-	return db.Transaction(func(tx *gorm.DB) error {
-		var user models.User
+	card := cardService.GetCardByID(cardID)
+	if card == nil {
+		return fmt.Errorf("card not found: %d", cardID)
+	}
+
+	// Validate and get data (with locking for consistency)
+	var user models.User
+	var bet models.Bet
+	var entries []models.BetEntry
+	var refundAmount int
+
+	if err := db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			Where("discord_id = ? AND guild_id = ?", userID, guildID).
 			First(&user).Error; err != nil {
 			return fmt.Errorf("user not found: %v", err)
 		}
 
-		var bet models.Bet
 		if err := tx.First(&bet, "id = ? AND guild_id = ? AND paid = 0 AND deleted_at IS NULL", betID, guildID).Error; err != nil {
+			return fmt.Errorf("bet not found")
+		}
+
+		if err := tx.Where("bet_id = ? AND user_id = ? AND deleted_at IS NULL", betID, user.ID).Find(&entries).Error; err != nil {
+			return fmt.Errorf("error querying bet entries: %v", err)
+		}
+
+		if len(entries) == 0 {
+			return fmt.Errorf("no entries found")
+		}
+
+		refundAmount = 0
+		for _, entry := range entries {
+			refundAmount += entry.Amount
+		}
+
+		return nil
+	}); err != nil {
+		// Handle validation errors with appropriate responses
+		if err.Error() == "bet not found" {
 			return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
@@ -517,13 +546,7 @@ func HandlePlayCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCr
 				},
 			})
 		}
-
-		var entries []models.BetEntry
-		if err := tx.Where("bet_id = ? AND user_id = ? AND deleted_at IS NULL", betID, user.ID).Find(&entries).Error; err != nil {
-			return fmt.Errorf("error querying bet entries: %v", err)
-		}
-
-		if len(entries) == 0 {
+		if err.Error() == "no entries found" {
 			return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
@@ -532,48 +555,66 @@ func HandlePlayCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCr
 				},
 			})
 		}
+		return err
+	}
 
-		refundAmount := 0
-		for _, entry := range entries {
-			refundAmount += entry.Amount
+	// Get guild info for embed
+	guild, err := guildService.GetGuildInfo(s, db, guildID, i.ChannelID)
+	if err != nil {
+		return fmt.Errorf("error getting guild info: %v", err)
+	}
+
+	embed := cardSelection.BuildCardResultEmbed(card, &models.CardResult{
+		Message:     fmt.Sprintf("You cancelled your bet: **%s** and received a refund of **%d** points.", bet.Description, refundAmount),
+		PointsDelta: float64(refundAmount),
+		PoolDelta:   0,
+	}, user, "", guild.Pool)
+
+	// Fail fast on Discord errors - respond first
+	if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{embed},
+			Flags:  discordgo.MessageFlagsEphemeral,
+		},
+	}); err != nil {
+		return err
+	}
+
+	// Now perform DB mutations in transaction
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		var txUser models.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("discord_id = ? AND guild_id = ?", userID, guildID).
+			First(&txUser).Error; err != nil {
+			return fmt.Errorf("user not found: %v", err)
 		}
 
-		user.Points += float64(refundAmount)
-		if err := tx.Save(&user).Error; err != nil {
+		txUser.Points += float64(refundAmount)
+		if err := tx.Save(&txUser).Error; err != nil {
 			return fmt.Errorf("error refunding points: %v", err)
 		}
 
-		result := tx.Where("bet_id = ? AND user_id = ? AND deleted_at IS NULL", betID, user.ID).Delete(&models.BetEntry{})
+		result := tx.Where("bet_id = ? AND user_id = ? AND deleted_at IS NULL", betID, txUser.ID).Delete(&models.BetEntry{})
 		if result.Error != nil {
 			return fmt.Errorf("error soft deleting bet entries: %v", result.Error)
 		}
 
-		card := cardService.GetCardByID(cardID)
-		if card == nil {
-			return fmt.Errorf("card not found: %d", cardID)
-		}
-
-		if err := cardService.PlayCardFromInventoryWithMessage(s, tx, user, cardID, fmt.Sprintf("<@%s> played **%s** and cancelled bet: **%s**", userID, card.Name, bet.Description)); err != nil {
+		if err := cardService.PlayCardFromInventoryInTransaction(tx, txUser, cardID); err != nil {
 			return fmt.Errorf("error consuming card: %v", err)
 		}
 
-		guild, err := guildService.GetGuildInfo(s, tx, guildID, i.ChannelID)
-		if err != nil {
-			return fmt.Errorf("error getting guild info: %v", err)
-		}
+		return nil
+	}); err != nil {
+		return err
+	}
 
-		embed := cardSelection.BuildCardResultEmbed(card, &models.CardResult{
-			Message:     fmt.Sprintf("You cancelled your bet: **%s** and received a refund of **%d** points.", bet.Description, refundAmount),
-			PointsDelta: float64(refundAmount),
-			PoolDelta:   0,
-		}, user, "", guild.Pool)
+	// Only send public notification after successful commit
+	notificationMessage := fmt.Sprintf("<@%s> played **%s** and cancelled bet: **%s**", userID, card.Name, bet.Description)
+	if err := cardService.NotifyCardPlayedWithMessage(s, db, user, card, notificationMessage); err != nil {
+		// Log error but don't fail - notification is best-effort
+		fmt.Printf("Error sending card played notification: %v\n", err)
+	}
 
-		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Embeds: []*discordgo.MessageEmbed{embed},
-				Flags:  discordgo.MessageFlagsEphemeral,
-			},
-		})
-	})
+	return nil
 }

@@ -313,6 +313,42 @@ func HandleMagicianCardPagination(s *discordgo.Session, i *discordgo.Interaction
 			paginatedOptions = append(paginatedOptions, selectOptions[i:end])
 		}
 
+		if len(paginatedOptions) == 0 {
+			targetMention := "<@" + targetUserID + ">"
+			components := []discordgo.MessageComponent{
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{
+						discordgo.SelectMenu{
+							MenuType:    discordgo.StringSelectMenu,
+							CustomID:    fmt.Sprintf("magician_card_select_%s_%s_%s_%s", selectorID, userID, targetUserID, guildID),
+							Placeholder: fmt.Sprintf("No borrowable cards from %s", targetMention),
+							MinValues:   &minValues,
+							MaxValues:   1,
+							Options:     []discordgo.SelectMenuOption{},
+							Disabled:    true,
+						},
+					},
+				},
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{
+						discordgo.Button{
+							Label:    "Cancel",
+							CustomID: fmt.Sprintf("magician_card_cancel_%s_%s_%s_%s", selectorID, userID, targetUserID, guildID),
+							Style:    discordgo.DangerButton,
+						},
+					},
+				},
+			}
+
+			return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseUpdateMessage,
+				Data: &discordgo.InteractionResponseData{
+					Content:    fmt.Sprintf("🎴 The Magician! There are no borrowable cards from %s (Mythic cards are excluded).", targetMention),
+					Components: components,
+				},
+			})
+		}
+
 		newPage := currentPage
 		if direction == "next" {
 			newPage++

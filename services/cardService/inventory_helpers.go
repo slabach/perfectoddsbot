@@ -28,12 +28,12 @@ func processRoyaltyPayment(tx *gorm.DB, card *models.Card, royaltyGuildID string
 	}
 
 	var royaltyUser models.User
-	result := tx.First(&royaltyUser, models.User{
+	result := tx.Where(models.User{
 		DiscordID: *card.RoyaltyDiscordUserID,
 		GuildID:   royaltyGuildID,
-	})
+	}).FirstOrCreate(&royaltyUser)
 	if result.Error != nil {
-		return fmt.Errorf("error fetching royalty user: %v", result.Error)
+		return fmt.Errorf("error fetching or creating royalty user: %v", result.Error)
 	}
 
 	if err := tx.Model(&royaltyUser).UpdateColumn("points", gorm.Expr("points + ?", royaltyAmount)).Error; err != nil {

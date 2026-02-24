@@ -2876,7 +2876,14 @@ func CheckAndConsumeShieldOrRedshirt(db *gorm.DB, userID uint, guildID string) (
 	var redshirt models.UserInventory
 	err = db.Where("user_id = ? AND guild_id = ? AND card_id = ? AND deleted_at IS NULL", userID, guildID, RedshirtCardID).
 		Order("created_at DESC").Limit(1).First(&redshirt).Error
-	if err == nil {
+	if err != nil {
+		// If error is not ErrRecordNotFound, return immediately
+		if err != gorm.ErrRecordNotFound {
+			return false, false, err
+		}
+		// If NotFound, fall through to CheckAndConsumeShield
+	} else {
+		// Record found - check if active
 		active := false
 		if redshirt.ExpiresAt != nil {
 			active = time.Now().Before(*redshirt.ExpiresAt)
@@ -2886,7 +2893,11 @@ func CheckAndConsumeShieldOrRedshirt(db *gorm.DB, userID uint, guildID string) (
 		if active {
 			return true, true, nil
 		}
-		_ = db.Delete(&redshirt).Error
+		// Expired - delete it and propagate any error
+		if err = db.Delete(&redshirt).Error; err != nil {
+			return false, false, err
+		}
+		// Deletion succeeded, fall through to CheckAndConsumeShield
 	}
 	blocked, err = CheckAndConsumeShield(db, userID, guildID)
 	return blocked, false, err
@@ -5899,6 +5910,104 @@ func ExecuteBlindsideBlock(db *gorm.DB, userID string, targetUserID string, guil
 		return nil, err
 	}
 
+	targetMention := "<@" + targetUserID + ">"
+
+	// Check Moon protection first
+	moonRedirected, err := CheckAndConsumeMoon(db, targetUser.ID, guildID)
+	if err != nil {
+		return nil, err
+	}
+	if moonRedirected {
+		// Get user who played the card for exclusion list
+		var user models.User
+		if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
+			return nil, err
+		}
+
+		randomUserID, err := GetRandomUserForMoon(db, guildID, []uint{targetUser.ID, user.ID})
+		if err != nil {
+			// No eligible users found, check Shield/Redshirt
+			blocked, blockedByRedshirt, err := CheckAndConsumeShieldOrRedshirt(db, targetUser.ID, guildID)
+			if err != nil {
+				return nil, err
+			}
+			if blocked {
+				targetID := targetUserID
+				return &models.CardResult{
+					Message:           fmt.Sprintf("Blindside block! %s's Moon illusion tried to redirect, but no eligible users found. %s blocked it instead!", targetMention, protectionName(blockedByRedshirt)),
+					PointsDelta:       0,
+					PoolDelta:         0,
+					TargetUserID:      &targetID,
+					TargetPointsDelta: 0,
+				}, nil
+			}
+			targetID := targetUserID
+			return &models.CardResult{
+				Message:           fmt.Sprintf("Blindside block! %s's Moon illusion tried to redirect, but no eligible users found. The card fizzles out.", targetMention),
+				PointsDelta:       0,
+				PoolDelta:         0,
+				TargetUserID:      &targetID,
+				TargetPointsDelta: 0,
+			}, nil
+		}
+
+		// Moon redirected successfully - apply to random user
+		var randomUser models.User
+		if err := db.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("discord_id = ? AND guild_id = ?", randomUserID, guildID).
+			First(&randomUser).Error; err != nil {
+			return nil, err
+		}
+
+		deductAmount := 50.0
+		if randomUser.Points < deductAmount {
+			deductAmount = randomUser.Points
+		}
+
+		randomUser.Points -= deductAmount
+		if err := db.Save(&randomUser).Error; err != nil {
+			return nil, err
+		}
+
+		var guild models.Guild
+		if err := db.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("guild_id = ?", guildID).
+			First(&guild).Error; err != nil {
+			return nil, err
+		}
+		guild.Pool += deductAmount
+		if err := db.Save(&guild).Error; err != nil {
+			return nil, err
+		}
+
+		randomMention := "<@" + randomUserID + ">"
+		targetID := randomUserID
+		return &models.CardResult{
+			Message:           fmt.Sprintf("Blindside block! %s's Moon illusion redirected it! %s lost %.0f points (added to the Pool).", targetMention, randomMention, deductAmount),
+			PointsDelta:       0,
+			PoolDelta:         deductAmount,
+			TargetUserID:      &targetID,
+			TargetPointsDelta: -deductAmount,
+		}, nil
+	}
+
+	// Moon didn't redirect, check Shield/Redshirt
+	blocked, blockedByRedshirt, err := CheckAndConsumeShieldOrRedshirt(db, targetUser.ID, guildID)
+	if err != nil {
+		return nil, err
+	}
+	if blocked {
+		targetID := targetUserID
+		return &models.CardResult{
+			Message:           fmt.Sprintf("Blindside block! %s's %s blocked it!", targetMention, protectionName(blockedByRedshirt)),
+			PointsDelta:       0,
+			PoolDelta:         0,
+			TargetUserID:      &targetID,
+			TargetPointsDelta: 0,
+		}, nil
+	}
+
+	// No protection - proceed with normal deduction
 	deductAmount := 50.0
 	if targetUser.Points < deductAmount {
 		deductAmount = targetUser.Points
@@ -6284,8 +6393,8 @@ func handleHeismanTrophy(s *discordgo.Session, db *gorm.DB, userID string, guild
 	inv := models.UserInventory{
 		UserID:    user.ID,
 		GuildID:   guildID,
-		CardID:    FullCourtPressCardID,
-		CardCode:  "FCP",
+		CardID:    DoubleDownCardID,
+		CardCode:  "DDN",
 		ExpiresAt: nil,
 	}
 	if err := db.Create(&inv).Error; err != nil {
@@ -6312,20 +6421,28 @@ func handleNationalChampionship(s *discordgo.Session, db *gorm.DB, userID string
 		return nil, err
 	}
 	poolWin := guild.Pool * 0.2
-	otherUserPointsDelta := 200.0
-	if otherUserPointsDelta > (guild.Pool - poolWin) {
-		otherUserPointsDelta = (guild.Pool - poolWin) / float64(len(allUsers))
+	var otherUserPointsDelta float64
+	if len(allUsers) == 0 {
+		otherUserPointsDelta = 0
+	} else {
+		otherUserPointsDelta = math.Min(200.0, (guild.Pool-poolWin)/float64(len(allUsers)))
 	}
 	for _, user := range allUsers {
-		user.Points += poolWin
+		user.Points += otherUserPointsDelta
 		if err := db.Save(&user).Error; err != nil {
 			return nil, err
 		}
 	}
 
+	totalDrain := poolWin + otherUserPointsDelta*float64(len(allUsers))
+	guild.Pool -= totalDrain
+	if err := db.Save(&guild).Error; err != nil {
+		return nil, err
+	}
+
 	return &models.CardResult{
 		Message:     fmt.Sprintf("National Championship! You win 20%% of the current Pool, and every other active player gains %.0f points.", otherUserPointsDelta),
 		PointsDelta: poolWin,
-		PoolDelta:   guild.Pool * 0.2,
+		PoolDelta:   -totalDrain,
 	}, nil
 }

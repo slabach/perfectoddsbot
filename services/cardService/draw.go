@@ -53,22 +53,6 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 
 	now := time.Now()
 
-	resetPeriod := time.Duration(guild.CardDrawCooldownMinutes) * time.Minute
-
-	shouldResetCount := false
-	if user.FirstCardDrawCycle != nil {
-		timeSinceFirstDraw := now.Sub(*user.FirstCardDrawCycle)
-		if timeSinceFirstDraw >= resetPeriod {
-			user.FirstCardDrawCycle = &now
-			user.CardDrawCount = 0
-			shouldResetCount = true
-		}
-	} else {
-		user.FirstCardDrawCycle = &now
-		user.CardDrawCount = 0
-		shouldResetCount = true
-	}
-
 	tx := db.Begin()
 	defer func() {
 		if r := recover(); r != nil {
@@ -76,8 +60,27 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		}
 	}()
 
+	var lockedUser models.User
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&lockedUser, user.ID).Error; err != nil {
+		tx.Rollback()
+		common.SendError(s, i, fmt.Errorf("error locking user: %v", err), db)
+		return
+	}
+
+	resetPeriod := time.Duration(guild.CardDrawCooldownMinutes) * time.Minute
+	if lockedUser.FirstCardDrawCycle != nil {
+		timeSinceFirstDraw := now.Sub(*lockedUser.FirstCardDrawCycle)
+		if timeSinceFirstDraw >= resetPeriod {
+			lockedUser.FirstCardDrawCycle = &now
+			lockedUser.CardDrawCount = 0
+		}
+	} else {
+		lockedUser.FirstCardDrawCycle = &now
+		lockedUser.CardDrawCount = 0
+	}
+
 	var drawCardCost float64
-	switch user.CardDrawCount {
+	switch lockedUser.CardDrawCount {
 	case 0:
 		drawCardCost = guild.CardDrawCost
 	case 1:
@@ -96,7 +99,7 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 			return
 		}
 
-		if donorID != 0 && donorID != user.ID {
+		if donorID != 0 && donorID != lockedUser.ID {
 			donorUserID = donorID
 			var donor models.User
 			if err := db.First(&donor, donorID).Error; err == nil {
@@ -107,10 +110,11 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		}
 	}
 
+	// Check inventory items that modify draw cost
 	var chariotInventory models.UserInventory
 	err = tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 		Where("user_id = ? AND guild_id = ? AND card_id = ? AND deleted_at IS NULL",
-			user.ID, guildID, cards.TheChariotCardID).
+			lockedUser.ID, guildID, cards.TheChariotCardID).
 		First(&chariotInventory).Error
 	if err == nil {
 		if chariotInventory.TimesApplied < 3 {
@@ -139,7 +143,7 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	var inventoryItems []models.UserInventory
 	err = tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 		Where("user_id = ? AND guild_id = ? AND card_id IN (?, ?, ?, ?, ?, ?)",
-			user.ID, guildID,
+			lockedUser.ID, guildID,
 			cards.LuckyHorseshoeCardID, cards.UnluckyCatCardID, cards.CouponCardID, cards.ExcessiveCelebrationCardID, cards.FullCourtPressCardID, cards.FullRideCardID).
 		Find(&inventoryItems).Error
 	if err != nil {
@@ -151,7 +155,7 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	var shoppingSpreeItems []models.UserInventory
 	err = tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 		Where("user_id = ? AND guild_id = ? AND card_id = ? AND deleted_at IS NULL",
-			user.ID, guildID, cards.ShoppingSpreeCardID).
+			lockedUser.ID, guildID, cards.ShoppingSpreeCardID).
 		Order("created_at DESC").
 		Find(&shoppingSpreeItems).Error
 	if err != nil {
@@ -232,13 +236,6 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	hasExcessiveCelebration := excessiveCelebrationInventory != nil
 	hasFullCourtPress := fullCourtPressInventory != nil
 	hasFullRide := fullRideInventory != nil
-
-	var lockedUser models.User
-	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&lockedUser, user.ID).Error; err != nil {
-		tx.Rollback()
-		common.SendError(s, i, fmt.Errorf("error locking user: %v", err), db)
-		return
-	}
 
 	if lockedUser.CardDrawTimeoutUntil != nil && now.Before(*lockedUser.CardDrawTimeoutUntil) {
 		tx.Rollback()
@@ -326,11 +323,6 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	}
 
 	user = lockedUser
-
-	if shouldResetCount {
-		user.CardDrawCount = 0
-		user.FirstCardDrawCycle = &now
-	}
 
 	if donorUserID != 0 {
 		var donorUser models.User

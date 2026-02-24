@@ -40,9 +40,21 @@ func BuildCardResultEmbed(card *models.Card, result *models.CardResult, user mod
 		if result.TargetPointsDelta < 0 {
 			sign = ""
 		}
+		fieldName := "Target"
+		if targetUsername != "" {
+			fieldName = targetUsername
+		}
 		embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
-			Name:   "Target",
+			Name:   fieldName,
 			Value:  fmt.Sprintf("<@%s>: %s%.1f points", *result.TargetUserID, sign, result.TargetPointsDelta),
+			Inline: true,
+		})
+	}
+
+	if poolBalance >= 0 {
+		embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
+			Name:   "Pool Balance",
+			Value:  fmt.Sprintf("%.1f points", poolBalance),
 			Inline: true,
 		})
 	}

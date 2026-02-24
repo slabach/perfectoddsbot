@@ -447,6 +447,33 @@ func RunVampireDevilExpiresAtBackfill(db *gorm.DB) error {
 	return nil
 }
 
+func RunHomeFieldAdvantageExpiresAtBackfill(db *gorm.DB) error {
+	const migrationName = "home_field_advantage_expires_at_backfill"
+	var existing models.Migration
+	if err := db.Where("name = ?", migrationName).First(&existing).Error; err == nil && existing.ID != 0 {
+		log.Println("Home Field Advantage expires_at backfill already executed. Skipping.")
+		return nil
+	}
+
+	log.Println("Backfilling expires_at for legacy Home Field Advantage inventory rows...")
+
+	res := db.Exec(
+		"UPDATE user_inventories SET expires_at = DATE_ADD(created_at, INTERVAL 24 HOUR) WHERE card_id = ? AND expires_at IS NULL AND deleted_at IS NULL",
+		cards.HomeFieldAdvantageCardID,
+	)
+	if res.Error != nil {
+		return fmt.Errorf("home field advantage expires_at backfill: %w", res.Error)
+	}
+	rowsUpdated := res.RowsAffected
+
+	log.Printf("Home Field Advantage expires_at backfill completed. Rows updated: %d", rowsUpdated)
+
+	if err := db.Create(&models.Migration{Name: migrationName, ExecutedAt: time.Now()}).Error; err != nil {
+		return fmt.Errorf("error recording home_field_advantage_expires_at_backfill migration: %w", err)
+	}
+	return nil
+}
+
 func RunCardMigration(db *gorm.DB) error {
 	var existingMigration models.Migration
 	result := db.Where("name = ?", "card_migration").First(&existingMigration)

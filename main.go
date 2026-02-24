@@ -120,6 +120,11 @@ func runApp() {
 		log.Fatalf("Error running Vampire/Devil expires_at backfill: %v", err)
 	}
 
+	err = services.RunHomeFieldAdvantageExpiresAtBackfill(db)
+	if err != nil {
+		log.Fatalf("Error running Home Field Advantage expires_at backfill: %v", err)
+	}
+
 	err = services.RunUserInventoryCardCodeBackfill(db)
 	if err != nil {
 		log.Fatalf("Error running user inventory card code backfill: %v", err)

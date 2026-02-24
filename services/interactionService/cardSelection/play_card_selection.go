@@ -95,95 +95,168 @@ func ShowBetSelectMenuForPlayCard(s *discordgo.Session, i *discordgo.Interaction
 }
 
 func HandleEmperorPlay(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, cardID uint, userID string, guildID string) error {
-	return db.Transaction(func(tx *gorm.DB) error {
-		var user models.User
+	card := cardService.GetCardByID(cardID)
+	if card == nil {
+		return fmt.Errorf("card not found: %d", cardID)
+	}
+
+	var user models.User
+	if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
+		return fmt.Errorf("user not found: %v", err)
+	}
+
+	var guild models.Guild
+	if err := db.Where("guild_id = ?", guildID).First(&guild).Error; err != nil {
+		return fmt.Errorf("guild not found: %v", err)
+	}
+
+	embed := BuildCardResultEmbed(card, &models.CardResult{
+		Message:     "You gained Authority for 1 hour! 10% of all points won by other players will be diverted to the pool.",
+		PointsDelta: 0,
+		PoolDelta:   0,
+	}, user, "", guild.Pool)
+
+	// Fail fast on Discord errors - respond first
+	if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{embed},
+			Flags:  discordgo.MessageFlagsEphemeral,
+		},
+	}); err != nil {
+		return err
+	}
+
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		var txUser models.User
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			Where("discord_id = ? AND guild_id = ?", userID, guildID).
-			First(&user).Error; err != nil {
+			First(&txUser).Error; err != nil {
 			return fmt.Errorf("user not found: %v", err)
 		}
 
-		var guild models.Guild
+		var txGuild models.Guild
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			Where("guild_id = ?", guildID).
-			First(&guild).Error; err != nil {
+			First(&txGuild).Error; err != nil {
 			return fmt.Errorf("guild not found: %v", err)
-		}
-
-		card := cardService.GetCardByID(cardID)
-		if card == nil {
-			return fmt.Errorf("card not found: %d", cardID)
 		}
 
 		oneHourLater := time.Now().Add(1 * time.Hour)
-		guild.EmperorActiveUntil = &oneHourLater
-		guild.EmperorHolderDiscordID = &userID
-		if err := tx.Save(&guild).Error; err != nil {
+		txGuild.EmperorActiveUntil = &oneHourLater
+		txGuild.EmperorHolderDiscordID = &userID
+		if err := tx.Save(&txGuild).Error; err != nil {
 			return fmt.Errorf("error setting Emperor state: %v", err)
 		}
 
-		if err := cardService.PlayCardFromInventoryWithMessage(s, tx, user, cardID, fmt.Sprintf("<@%s> played **%s** and gained Authority! For the next hour, 10%% of all points won by other players will be diverted to the pool.", userID, card.Name)); err != nil {
+		if err := cardService.PlayCardFromInventoryInTransaction(tx, txUser, cardID); err != nil {
 			return fmt.Errorf("error consuming card: %v", err)
 		}
 
-		embed := BuildCardResultEmbed(card, &models.CardResult{
-			Message:     "You gained Authority for 1 hour! 10% of all points won by other players will be diverted to the pool.",
-			PointsDelta: 0,
-			PoolDelta:   0,
-		}, user, "", guild.Pool)
+		return nil
+	}); err != nil {
+		return err
+	}
+	notificationMessage := fmt.Sprintf("<@%s> played **%s** and gained Authority! For the next hour, 10%% of all points won by other players will be diverted to the pool.", userID, card.Name)
+	if err := cardService.NotifyCardPlayedWithMessage(s, db, user, card, notificationMessage); err != nil {
+		fmt.Printf("Error sending card played notification: %v\n", err)
+	}
 
-		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Embeds: []*discordgo.MessageEmbed{embed},
-				Flags:  discordgo.MessageFlagsEphemeral,
-			},
-		})
-	})
+	return nil
 }
 
 func HandlePoolBoyPlay(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, cardID uint, userID string, guildID string) error {
-	return db.Transaction(func(tx *gorm.DB) error {
-		var user models.User
+	card := cardService.GetCardByID(cardID)
+	if card == nil {
+		return fmt.Errorf("card not found: %d", cardID)
+	}
+
+	var user models.User
+	if err := db.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
+		return fmt.Errorf("user not found: %v", err)
+	}
+
+	var guild models.Guild
+	if err := db.Where("guild_id = ?", guildID).First(&guild).Error; err != nil {
+		return fmt.Errorf("guild not found: %v", err)
+	}
+
+	// Check if a pool drain is active before proceeding
+	if guild.PoolDrainUntil == nil {
+		if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "There is no active pool drain to clean. The Pool Boy card can only be used when a pool drain is active.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		}); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	embed := BuildCardResultEmbed(card, &models.CardResult{
+		Message:     "You cleaned the algae from the pool! The algae bloom effect has been stopped.",
+		PointsDelta: 0,
+		PoolDelta:   0,
+	}, user, "", guild.Pool)
+
+	if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{embed},
+			Flags:  discordgo.MessageFlagsEphemeral,
+		},
+	}); err != nil {
+		return err
+	}
+
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		var txUser models.User
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			Where("discord_id = ? AND guild_id = ?", userID, guildID).
-			First(&user).Error; err != nil {
+			First(&txUser).Error; err != nil {
 			return fmt.Errorf("user not found: %v", err)
 		}
 
-		var guild models.Guild
+		var txGuild models.Guild
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			Where("guild_id = ?", guildID).
-			First(&guild).Error; err != nil {
+			First(&txGuild).Error; err != nil {
 			return fmt.Errorf("guild not found: %v", err)
 		}
 
-		card := cardService.GetCardByID(cardID)
-		if card == nil {
-			return fmt.Errorf("card not found: %d", cardID)
+		// Check again in transaction (race condition protection)
+		if txGuild.PoolDrainUntil == nil {
+			// Send followup ephemeral message since we already responded
+			if _, err := s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+				Content: "The pool drain was already cleared by another action. Your card was not consumed.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			}); err != nil {
+				// Log but don't fail the transaction
+				fmt.Printf("Error sending followup message: %v\n", err)
+			}
+			return nil // Return nil to avoid consuming the card
 		}
 
-		guild.PoolDrainUntil = nil
-		if err := tx.Save(&guild).Error; err != nil {
+		txGuild.PoolDrainUntil = nil
+		if err := tx.Save(&txGuild).Error; err != nil {
 			return fmt.Errorf("error clearing pool drain: %v", err)
 		}
 
-		if err := cardService.PlayCardFromInventoryWithMessage(s, tx, user, cardID, fmt.Sprintf("<@%s> played **%s** and cleaned the algae from the pool! The pool drain effect has been stopped.", userID, card.Name)); err != nil {
+		if err := cardService.PlayCardFromInventoryInTransaction(tx, txUser, cardID); err != nil {
 			return fmt.Errorf("error consuming card: %v", err)
 		}
 
-		embed := BuildCardResultEmbed(card, &models.CardResult{
-			Message:     "You cleaned the algae from the pool! The algae bloom effect has been stopped.",
-			PointsDelta: 0,
-			PoolDelta:   0,
-		}, user, "", guild.Pool)
+		return nil
+	}); err != nil {
+		return err
+	}
 
-		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Embeds: []*discordgo.MessageEmbed{embed},
-				Flags:  discordgo.MessageFlagsEphemeral,
-			},
-		})
-	})
+	notificationMessage := fmt.Sprintf("<@%s> played **%s** and cleaned the algae from the pool! The pool drain effect has been stopped.", userID, card.Name)
+	if err := cardService.NotifyCardPlayedWithMessage(s, db, user, card, notificationMessage); err != nil {
+		fmt.Printf("Error sending card played notification: %v\n", err)
+	}
+
+	return nil
 }
