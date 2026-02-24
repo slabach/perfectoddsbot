@@ -10,9 +10,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// CheckExpiredInventory soft-deletes all user_inventories rows where expires_at IS NOT NULL
-// and expires_at < NOW(). For each row, it calls NotifyCardPlayed before deleting so cards
-// like Vampire and The Devil still send their expiration notification.
 func CheckExpiredInventory(s *discordgo.Session, db *gorm.DB) error {
 	now := time.Now()
 	var items []models.UserInventory

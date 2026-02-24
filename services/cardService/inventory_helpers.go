@@ -56,7 +56,8 @@ func GetExpiresAtForNewCard(cardID uint) *time.Time {
 		t := now.Add(7 * 24 * time.Hour)
 		return &t
 	case cards.HomeFieldAdvantageCardID:
-		return nil
+		t := now.Add(24 * time.Hour)
+		return &t
 	default:
 		return nil
 	}
