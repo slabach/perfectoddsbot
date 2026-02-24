@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"perfectOddsBot/models"
+	"perfectOddsBot/services/cardService"
 	"perfectOddsBot/services/common"
 	"perfectOddsBot/services/guildService"
 	"strconv"
@@ -893,13 +894,14 @@ func UpdateParlaysOnBetResolution(s *discordgo.Session, db *gorm.DB, betID uint,
 				var user models.User
 				db.First(&user, parlay.UserID)
 				payout := common.CalculateParlayPayout(parlay.Amount, parlay.TotalOdds)
+				payout, _, _ = cardService.ApplyHeismanCampaignIfApplicable(db, user, payout)
 				user.Points += payout
 				user.TotalBetsWon++
 				user.TotalPointsWon += payout
 				db.Save(&user)
 
 				if previousStatus != "lost" && previousStatus != "won" {
-					SendParlayResolutionNotification(s, db, parlay, true)
+					SendParlayResolutionNotification(s, db, parlay, true, payout)
 				}
 			}
 		} else {
@@ -911,7 +913,7 @@ func UpdateParlaysOnBetResolution(s *discordgo.Session, db *gorm.DB, betID uint,
 	return nil
 }
 
-func SendParlayResolutionNotification(s *discordgo.Session, db *gorm.DB, parlay models.Parlay, won bool) {
+func SendParlayResolutionNotification(s *discordgo.Session, db *gorm.DB, parlay models.Parlay, won bool, actualPayoutWhenWon ...float64) {
 	guild, err := guildService.GetGuildInfo(s, db, parlay.GuildID, "")
 	if err != nil || guild.BetChannelID == "" {
 		return
@@ -931,6 +933,9 @@ func SendParlayResolutionNotification(s *discordgo.Session, db *gorm.DB, parlay 
 		title = "🎉 Parlay Hit!"
 		color = 0x57F287
 		payout := common.CalculateParlayPayout(parlay.Amount, parlay.TotalOdds)
+		if len(actualPayoutWhenWon) > 0 {
+			payout = actualPayoutWhenWon[0]
+		}
 		description.WriteString(fmt.Sprintf("<@%s> Your parlay has been **won**!\n\n", user.DiscordID))
 		description.WriteString(fmt.Sprintf("**Amount Wagered:** %d points\n", parlay.Amount))
 		description.WriteString(fmt.Sprintf("**Combined Odds:** %.2fx\n", parlay.TotalOdds))

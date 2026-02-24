@@ -1945,14 +1945,11 @@ func TestApplyTheDevilIfApplicable(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{"id", "discord_id", "guild_id", "points"}).
 				AddRow(devilHolder2ID, devilHolder2DiscordID, guildID, 600.0))
 
-		// Guild query happens before the loop (line 1538-1541 in implementation)
 		mock.ExpectQuery("SELECT \\* FROM `guilds`").
 			WithArgs(guildID, 1).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "guild_id", "pool"}).
 				AddRow(1, guildID, 1000.0))
 
-		// User updates happen in the loop - GORM wraps UpdateColumn in transactions
-		// Order depends on map iteration, so we use sqlmock.AnyArg for both user IDs
 		mock.ExpectBegin()
 		mock.ExpectExec("UPDATE `users` SET `points`=").
 			WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
@@ -1965,7 +1962,6 @@ func TestApplyTheDevilIfApplicable(t *testing.T) {
 			WillReturnResult(sqlmock.NewResult(1, 1))
 		mock.ExpectCommit()
 
-		// Guild update happens after all user updates if totalDiverted > 0
 		mock.ExpectBegin()
 		mock.ExpectExec("UPDATE `guilds` SET `pool`=").
 			WithArgs(sqlmock.AnyArg(), 1).
@@ -2065,13 +2061,11 @@ func TestApplyTheDevilIfApplicable(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{"id", "discord_id", "guild_id", "points"}).
 				AddRow(devilHolderID, otherDevilHolderDiscordID, guildID, 500.0))
 
-		// Guild query happens before the loop even if no diversion happens
 		mock.ExpectQuery("SELECT \\* FROM `guilds`").
 			WithArgs(guildID, 1).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "guild_id", "pool"}).
 				AddRow(1, guildID, 1000.0))
 
-		// No guild update expected since totalDiverted is 0
 		winnerDiscordIDs := make(map[string]float64)
 		winnerDiscordIDs[winnerDiscordID] = 1000.0
 		totalDiverted, divertedList, applied, err := ApplyTheDevilIfApplicable(db, guildID, winnerDiscordIDs)
@@ -2157,13 +2151,11 @@ func TestApplyTheDevilIfApplicable(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{"id", "discord_id", "guild_id", "points"}).
 				AddRow(devilHolderID, winnerDiscordID, guildID, 500.0))
 
-		// Guild query happens before the loop even if no diversion happens
 		mock.ExpectQuery("SELECT \\* FROM `guilds`").
 			WithArgs(guildID, 1).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "guild_id", "pool"}).
 				AddRow(1, guildID, 1000.0))
 
-		// No guild update expected since totalDiverted is 0
 		winnerDiscordIDs := make(map[string]float64)
 		winnerDiscordIDs[winnerDiscordID] = 0.0
 		totalDiverted, divertedList, applied, err := ApplyTheDevilIfApplicable(db, guildID, winnerDiscordIDs)
@@ -2405,6 +2397,398 @@ func TestApplyTheEmperorIfApplicable(t *testing.T) {
 		}
 		if len(divertedList) != 0 {
 			t.Errorf("Expected 0 diverted entries, got %d", len(divertedList))
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+}
+
+func TestApplyHomeFieldAdvantageIfApplicable(t *testing.T) {
+	invCols := []string{"id", "created_at", "updated_at", "deleted_at", "user_id", "guild_id", "card_id", "target_bet_id", "target_user_id", "bet_amount", "times_applied", "expires_at"}
+
+	t.Run("User has active HFA (expires_at in future)", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		user := models.User{ID: 1, GuildID: "guild1"}
+		currentPayout := 100.0
+		expiresAt := time.Now().Add(1 * time.Hour)
+		createdAt := time.Now()
+
+		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
+			WithArgs(user.ID, user.GuildID, cards.HomeFieldAdvantageCardID, 1).
+			WillReturnRows(sqlmock.NewRows(invCols).
+				AddRow(1, createdAt, createdAt, nil, user.ID, user.GuildID, cards.HomeFieldAdvantageCardID, nil, nil, 0.0, 0, expiresAt))
+
+		payout, applied, err := ApplyHomeFieldAdvantageIfApplicable(db, user, currentPayout)
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if !applied {
+			t.Error("Expected Home Field Advantage to be applied")
+		}
+		if payout != currentPayout+15 {
+			t.Errorf("Expected payout %.2f, got %.2f", currentPayout+15, payout)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+
+	t.Run("User has expired HFA (expires_at in past)", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		user := models.User{ID: 1, GuildID: "guild1"}
+		currentPayout := 100.0
+		expiresAt := time.Now().Add(-1 * time.Hour)
+		createdAt := time.Now()
+
+		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
+			WithArgs(user.ID, user.GuildID, cards.HomeFieldAdvantageCardID, 1).
+			WillReturnRows(sqlmock.NewRows(invCols).
+				AddRow(1, createdAt, createdAt, nil, user.ID, user.GuildID, cards.HomeFieldAdvantageCardID, nil, nil, 0.0, 0, expiresAt))
+
+		mock.ExpectBegin()
+		mock.ExpectExec("UPDATE `user_inventories` SET `deleted_at`=").
+			WithArgs(sqlmock.AnyArg(), 1).
+			WillReturnResult(sqlmock.NewResult(0, 1))
+		mock.ExpectCommit()
+
+		payout, applied, err := ApplyHomeFieldAdvantageIfApplicable(db, user, currentPayout)
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if applied {
+			t.Error("Expected Home Field Advantage NOT to be applied (expired)")
+		}
+		if payout != currentPayout {
+			t.Errorf("Expected payout %.2f, got %.2f", currentPayout, payout)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+
+	t.Run("User has no HFA", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		user := models.User{ID: 1, GuildID: "guild1"}
+		currentPayout := 100.0
+
+		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
+			WithArgs(user.ID, user.GuildID, cards.HomeFieldAdvantageCardID, 1).
+			WillReturnRows(sqlmock.NewRows(invCols))
+
+		payout, applied, err := ApplyHomeFieldAdvantageIfApplicable(db, user, currentPayout)
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if applied {
+			t.Error("Expected Home Field Advantage NOT to be applied")
+		}
+		if payout != currentPayout {
+			t.Errorf("Expected payout %.2f, got %.2f", currentPayout, payout)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+
+	t.Run("User has HFA not yet played (expires_at nil)", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		user := models.User{ID: 1, GuildID: "guild1"}
+		currentPayout := 100.0
+		createdAt := time.Now()
+
+		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
+			WithArgs(user.ID, user.GuildID, cards.HomeFieldAdvantageCardID, 1).
+			WillReturnRows(sqlmock.NewRows(invCols).
+				AddRow(1, createdAt, createdAt, nil, user.ID, user.GuildID, cards.HomeFieldAdvantageCardID, nil, nil, 0.0, 0, nil))
+
+		payout, applied, err := ApplyHomeFieldAdvantageIfApplicable(db, user, currentPayout)
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if applied {
+			t.Error("Expected Home Field Advantage NOT to be applied (not yet played)")
+		}
+		if payout != currentPayout {
+			t.Errorf("Expected payout %.2f, got %.2f", currentPayout, payout)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+}
+
+func TestApplyRoughingTheKickerIfApplicable(t *testing.T) {
+	invCols := []string{"id", "created_at", "updated_at", "deleted_at", "user_id", "guild_id", "card_id", "target_bet_id", "target_user_id", "bet_amount", "times_applied", "expires_at"}
+
+	t.Run("User has Roughing the Kicker in inventory (payout reduced by 15%%, card consumed)", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		user := models.User{ID: 1, GuildID: "guild1"}
+		currentPayout := 100.0
+		expectedPayout := 85.0
+		createdAt := time.Now()
+
+		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
+			WithArgs(user.ID, user.GuildID, cards.RoughingTheKickerCardID, 1).
+			WillReturnRows(sqlmock.NewRows(invCols).
+				AddRow(1, createdAt, createdAt, nil, user.ID, user.GuildID, cards.RoughingTheKickerCardID, nil, nil, 0.0, 0, nil))
+
+		mock.ExpectBegin()
+		mock.ExpectExec("UPDATE `user_inventories` SET `deleted_at`=").
+			WithArgs(sqlmock.AnyArg(), 1).
+			WillReturnResult(sqlmock.NewResult(0, 1))
+		mock.ExpectCommit()
+
+		payout, applied, err := ApplyRoughingTheKickerIfApplicable(db, user, currentPayout)
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if !applied {
+			t.Error("Expected Roughing the Kicker to be applied")
+		}
+		if payout != expectedPayout {
+			t.Errorf("Expected payout %.2f (15%% reduction), got %.2f", expectedPayout, payout)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+
+	t.Run("User has no Roughing the Kicker (payout unchanged)", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		user := models.User{ID: 1, GuildID: "guild1"}
+		currentPayout := 100.0
+
+		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
+			WithArgs(user.ID, user.GuildID, cards.RoughingTheKickerCardID, 1).
+			WillReturnRows(sqlmock.NewRows(invCols))
+
+		payout, applied, err := ApplyRoughingTheKickerIfApplicable(db, user, currentPayout)
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if applied {
+			t.Error("Expected Roughing the Kicker NOT to be applied")
+		}
+		if payout != currentPayout {
+			t.Errorf("Expected payout %.2f, got %.2f", currentPayout, payout)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+
+	t.Run("User has Roughing the Kicker, payout 200 -> 170", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		user := models.User{ID: 2, GuildID: "guild2"}
+		currentPayout := 200.0
+		expectedPayout := 170.0
+		createdAt := time.Now()
+
+		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
+			WithArgs(user.ID, user.GuildID, cards.RoughingTheKickerCardID, 1).
+			WillReturnRows(sqlmock.NewRows(invCols).
+				AddRow(2, createdAt, createdAt, nil, user.ID, user.GuildID, cards.RoughingTheKickerCardID, nil, nil, 0.0, 0, nil))
+
+		mock.ExpectBegin()
+		mock.ExpectExec("UPDATE `user_inventories` SET `deleted_at`=").
+			WithArgs(sqlmock.AnyArg(), 2).
+			WillReturnResult(sqlmock.NewResult(0, 1))
+		mock.ExpectCommit()
+
+		payout, applied, err := ApplyRoughingTheKickerIfApplicable(db, user, currentPayout)
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if !applied {
+			t.Error("Expected Roughing the Kicker to be applied")
+		}
+		if payout != expectedPayout {
+			t.Errorf("Expected payout %.2f, got %.2f", expectedPayout, payout)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+}
+
+func TestApplyHeismanCampaignIfApplicable(t *testing.T) {
+	invCols := []string{"id", "created_at", "updated_at", "deleted_at", "user_id", "guild_id", "card_id", "target_bet_id", "target_user_id", "bet_amount", "times_applied", "expires_at"}
+
+	t.Run("User has Heisman Campaign in inventory (payout reduced by 15%%, card consumed)", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		user := models.User{ID: 1, GuildID: "guild1"}
+		currentPayout := 100.0
+		expectedPayout := 85.0
+		createdAt := time.Now()
+
+		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
+			WithArgs(user.ID, user.GuildID, cards.HeismanCampaignCardID, 1).
+			WillReturnRows(sqlmock.NewRows(invCols).
+				AddRow(1, createdAt, createdAt, nil, user.ID, user.GuildID, cards.HeismanCampaignCardID, nil, nil, 0.0, 0, nil))
+
+		mock.ExpectBegin()
+		mock.ExpectExec("UPDATE `user_inventories` SET `deleted_at`=").
+			WithArgs(sqlmock.AnyArg(), 1).
+			WillReturnResult(sqlmock.NewResult(0, 1))
+		mock.ExpectCommit()
+
+		payout, applied, err := ApplyHeismanCampaignIfApplicable(db, user, currentPayout)
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if !applied {
+			t.Error("Expected Heisman Campaign to be applied")
+		}
+		if payout != expectedPayout {
+			t.Errorf("Expected payout %.2f (15%% reduction), got %.2f", expectedPayout, payout)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+
+	t.Run("User has no Heisman Campaign (payout unchanged)", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		user := models.User{ID: 1, GuildID: "guild1"}
+		currentPayout := 100.0
+
+		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
+			WithArgs(user.ID, user.GuildID, cards.HeismanCampaignCardID, 1).
+			WillReturnRows(sqlmock.NewRows(invCols))
+
+		payout, applied, err := ApplyHeismanCampaignIfApplicable(db, user, currentPayout)
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if applied {
+			t.Error("Expected Heisman Campaign NOT to be applied")
+		}
+		if payout != currentPayout {
+			t.Errorf("Expected payout %.2f, got %.2f", currentPayout, payout)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("Unmet expectations: %v", err)
+		}
+	})
+
+	t.Run("User has Heisman Campaign, payout 200 -> 170", func(t *testing.T) {
+		db, mock, err := newMockDB()
+		if err != nil {
+			t.Fatalf("Failed to create mock DB: %v", err)
+		}
+		defer func() {
+			sqlDB, _ := db.DB()
+			sqlDB.Close()
+		}()
+
+		user := models.User{ID: 2, GuildID: "guild2"}
+		currentPayout := 200.0
+		expectedPayout := 170.0
+		createdAt := time.Now()
+
+		mock.ExpectQuery("SELECT \\* FROM `user_inventories`").
+			WithArgs(user.ID, user.GuildID, cards.HeismanCampaignCardID, 1).
+			WillReturnRows(sqlmock.NewRows(invCols).
+				AddRow(2, createdAt, createdAt, nil, user.ID, user.GuildID, cards.HeismanCampaignCardID, nil, nil, 0.0, 0, nil))
+
+		mock.ExpectBegin()
+		mock.ExpectExec("UPDATE `user_inventories` SET `deleted_at`=").
+			WithArgs(sqlmock.AnyArg(), 2).
+			WillReturnResult(sqlmock.NewResult(0, 1))
+		mock.ExpectCommit()
+
+		payout, applied, err := ApplyHeismanCampaignIfApplicable(db, user, currentPayout)
+
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+		if !applied {
+			t.Error("Expected Heisman Campaign to be applied")
+		}
+		if payout != expectedPayout {
+			t.Errorf("Expected payout %.2f, got %.2f", expectedPayout, payout)
 		}
 		if err := mock.ExpectationsWereMet(); err != nil {
 			t.Errorf("Unmet expectations: %v", err)

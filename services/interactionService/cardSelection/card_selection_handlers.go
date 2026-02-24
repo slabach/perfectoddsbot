@@ -156,7 +156,7 @@ func HandleGrandLarcenySelection(s *discordgo.Session, i *discordgo.InteractionC
 			if result.TargetUserID != nil {
 				targetName = fmt.Sprintf("<@%s>", *result.TargetUserID)
 			}
-			result.Message = fmt.Sprintf("Grand Larceny successful! You stole %.0f points from %s!", result.PointsDelta, targetName)
+			result.Message = fmt.Sprintf("Grand Larceny successful! <@%s> stole %.0f points from %s!", userID, result.PointsDelta, targetName)
 		}
 
 		embed := BuildCardResultEmbed(card, result, user, targetUsername, guild.Pool)
@@ -390,12 +390,136 @@ func HandleTransferPortalSelection(s *discordgo.Session, i *discordgo.Interactio
 			return err
 		}
 		result := &models.CardResult{
-			Message:     fmt.Sprintf("You swapped **%s** for **%s** with %s!", drawerCardName, targetCardName, targetUsername),
+			Message:     fmt.Sprintf("<@%s> swapped **%s** for **%s** with %s!", drawer.DiscordID, drawerCardName, targetCardName, targetUsername),
 			PointsDelta: 0,
 			PoolDelta:   0,
 		}
 		embed := BuildCardResultEmbed(card, result, drawer, targetUsername, guild.Pool)
 
+		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Embeds: []*discordgo.MessageEmbed{embed},
+			},
+		})
+	})
+}
+
+func HandleBlindsideBlockSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, userID string, targetUserID string, guildID string) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		result, err := cards.ExecuteBlindsideBlock(tx, userID, targetUserID, guildID)
+		if err != nil {
+			return err
+		}
+
+		guild, err := guildService.GetGuildInfo(s, tx, guildID, i.ChannelID)
+		if err != nil {
+			return err
+		}
+
+		var user models.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("discord_id = ? AND guild_id = ?", userID, guildID).
+			First(&user).Error; err != nil {
+			return err
+		}
+
+		targetUsername := common.GetUsernameWithDB(tx, s, guildID, targetUserID)
+
+		card := cardService.GetCardByID(cards.BlindsideBlockCardID)
+		if card == nil {
+			return fmt.Errorf("card not found")
+		}
+
+		embed := BuildCardResultEmbed(card, result, user, targetUsername, guild.Pool)
+
+		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Embeds: []*discordgo.MessageEmbed{embed},
+			},
+		})
+	})
+}
+
+func HandleBracketBusterSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, userID string, targetUserID string, guildID string) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		var targetUser models.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("discord_id = ? AND guild_id = ?", targetUserID, guildID).
+			First(&targetUser).Error; err != nil {
+			return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "Target user not found in this server.",
+					Flags:   discordgo.MessageFlagsEphemeral,
+				},
+			})
+		}
+
+		var activeBetIDs []uint
+		if err := tx.Model(&models.Bet{}).Where("guild_id = ? AND paid = ? AND deleted_at IS NULL", guildID, false).Pluck("id", &activeBetIDs).Error; err != nil {
+			return err
+		}
+		if len(activeBetIDs) == 0 {
+			return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "There are no active (unpaid) bets in this server. Bracket Buster fizzles out.",
+					Flags:   discordgo.MessageFlagsEphemeral,
+				},
+			})
+		}
+
+		var entry models.BetEntry
+		if err := tx.Where("user_id = ? AND bet_id IN ? AND deleted_at IS NULL", targetUser.ID, activeBetIDs).
+			Order("amount ASC").
+			First(&entry).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: fmt.Sprintf("<@%s> has no active bet entries. Bracket Buster fizzles out.", targetUserID),
+						Flags:   discordgo.MessageFlagsEphemeral,
+					},
+				})
+			}
+			return err
+		}
+
+		wagerAmount := float64(entry.Amount)
+		var bet models.Bet
+		if err := tx.First(&bet, entry.BetID).Error; err != nil {
+			return err
+		}
+		if err := tx.Delete(&entry).Error; err != nil {
+			return err
+		}
+
+		var guild models.Guild
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("guild_id = ?", guildID).First(&guild).Error; err != nil {
+			return err
+		}
+		guild.Pool += wagerAmount
+		if err := tx.Save(&guild).Error; err != nil {
+			return err
+		}
+
+		var drawer models.User
+		if err := tx.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&drawer).Error; err != nil {
+			return err
+		}
+		targetUsername := common.GetUsernameWithDB(tx, s, guildID, targetUserID)
+		card := cardService.GetCardByID(cards.BracketBusterCardID)
+		if card == nil {
+			return fmt.Errorf("card not found")
+		}
+		result := &models.CardResult{
+			Message:     fmt.Sprintf("Bracket Buster! <%s> cancelled <@%s>'s smallest active bet on \"%s\" (%.0f points). %.0f points have been added to the pool.", userID, targetUserID, bet.Description, wagerAmount, wagerAmount),
+			PointsDelta: 0,
+			PoolDelta:   wagerAmount,
+		}
+		embed := BuildCardResultEmbed(card, result, drawer, targetUsername, guild.Pool)
 		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
@@ -529,7 +653,7 @@ func HandleAntiAntiBetSelection(s *discordgo.Session, i *discordgo.InteractionCr
 		}
 
 		embed := BuildCardResultEmbed(card, &models.CardResult{
-			Message:     fmt.Sprintf("Anti-Anti-Bet active! You bet %.0f points that <@%s> will lose their next bet. If they lose, you'll get %.0f points at even odds (+100).", betAmount, targetUserID, betAmount*2),
+			Message:     fmt.Sprintf("Anti-Anti-Bet active! <@%s> bet %.0f points that <@%s> will lose their next bet. If they lose, they'll get %.0f points at even odds (+100).", user.DiscordID, betAmount, targetUserID, betAmount*2),
 			PointsDelta: -betAmount,
 			PoolDelta:   0,
 		}, user, targetUsername, guild.Pool)
@@ -883,7 +1007,7 @@ func HandleTheMagicianSelection(s *discordgo.Session, i *discordgo.InteractionCr
 			return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
-					Content: fmt.Sprintf("The Magician tried to borrow from %s, but they have no eligible cards (Mythic cards are excluded). The card fizzles out.", targetMention),
+					Content: fmt.Sprintf("The Magician (<@%s>) tried to borrow from %s, but they have no eligible cards (Mythic cards are excluded). The card fizzles out.", userID, targetMention),
 					Flags:   discordgo.MessageFlagsEphemeral,
 				},
 			})
@@ -924,7 +1048,7 @@ func HandleTheMagicianSelection(s *discordgo.Session, i *discordgo.InteractionCr
 			return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
-					Content: fmt.Sprintf("The Magician tried to borrow from %s, but they have no eligible cards. The card fizzles out.", targetMention),
+					Content: fmt.Sprintf("The Magician (<@%s>) tried to borrow from %s, but they have no eligible cards. The card fizzles out.", userID, targetMention),
 					Flags:   discordgo.MessageFlagsEphemeral,
 				},
 			})

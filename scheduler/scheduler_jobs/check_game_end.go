@@ -347,6 +347,21 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 				hasGambler = false
 			}
 
+			modifiedPayout, hasHomeFieldAdvantage, err := cardService.ApplyHomeFieldAdvantageIfApplicable(db, user, modifiedPayout)
+			if err != nil {
+				log.Printf("Error checking Home Field Advantage for auto-resolved bet: %v", err)
+			}
+
+			modifiedPayout, hasRoughingTheKicker, err := cardService.ApplyRoughingTheKickerIfApplicable(db, user, modifiedPayout)
+			if err != nil {
+				log.Printf("Error checking Roughing the Kicker for auto-resolved bet: %v", err)
+			}
+
+			modifiedPayout, hasHeismanCampaign, err := cardService.ApplyHeismanCampaignIfApplicable(db, user, modifiedPayout)
+			if err != nil {
+				log.Printf("Error checking Heisman Campaign for auto-resolved bet: %v", err)
+			}
+
 			hedgeRefund, hedgeApplied, err := cardService.ApplyEmotionalHedgeIfApplicable(db, consumer, user, bet, entry.Option, float64(entry.Amount), scoreDiff)
 			if err != nil {
 				log.Printf("Error checking Emotional Hedge: %v", err)
@@ -383,6 +398,18 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 						gamblerMsg = " (The Gambler: consumed, no double)"
 					}
 				}
+				hfaMsg := ""
+				if hasHomeFieldAdvantage {
+					hfaMsg = " (Home Field Advantage: +15!)"
+				}
+				rtkMsg := ""
+				if hasRoughingTheKicker {
+					rtkMsg = " (Roughing the Kicker: -15% payout)"
+				}
+				heismanMsg := ""
+				if hasHeismanCampaign {
+					heismanMsg = " (Heisman Campaign: -15% payout)"
+				}
 				hedgeMsg := ""
 				if hedgeApplied && hedgeRefund > 0 {
 					hedgeMsg = fmt.Sprintf(" (Emotional Hedge: Refunding $%.1f)", hedgeRefund)
@@ -395,9 +422,9 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 				}
 
 				if spreadDisplay != "" {
-					winnersList += fmt.Sprintf("%s - Bet: %s %s - **Won $%.1f**%s%s%s%s\n", username, betOption, spreadDisplay, modifiedPayout, doubleDownMsg, gamblerMsg, hedgeMsg, insuranceMsg)
+					winnersList += fmt.Sprintf("%s - Bet: %s %s - **Won $%.1f**%s%s%s%s%s%s%s\n", username, betOption, spreadDisplay, modifiedPayout, doubleDownMsg, gamblerMsg, hfaMsg, rtkMsg, heismanMsg, hedgeMsg, insuranceMsg)
 				} else {
-					winnersList += fmt.Sprintf("%s - Bet: %s - **Won $%.1f**%s%s%s%s\n", username, betOption, modifiedPayout, doubleDownMsg, gamblerMsg, hedgeMsg, insuranceMsg)
+					winnersList += fmt.Sprintf("%s - Bet: %s - **Won $%.1f**%s%s%s%s%s%s%s\n", username, betOption, modifiedPayout, doubleDownMsg, gamblerMsg, hfaMsg, rtkMsg, heismanMsg, hedgeMsg, insuranceMsg)
 				}
 			}
 		} else {
@@ -426,6 +453,21 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 				if err != nil {
 					log.Printf("Error checking Gambler for auto-resolved bet (Uno Reverse): %v", err)
 					hasGambler = false
+				}
+
+				modifiedPayout, hasHomeFieldAdvantage, err := cardService.ApplyHomeFieldAdvantageIfApplicable(db, user, modifiedPayout)
+				if err != nil {
+					log.Printf("Error checking Home Field Advantage (Uno Reverse): %v", err)
+				}
+
+				modifiedPayout, hasRoughingTheKicker, err := cardService.ApplyRoughingTheKickerIfApplicable(db, user, modifiedPayout)
+				if err != nil {
+					log.Printf("Error checking Roughing the Kicker (Uno Reverse): %v", err)
+				}
+
+				modifiedPayout, hasHeismanCampaign, err := cardService.ApplyHeismanCampaignIfApplicable(db, user, modifiedPayout)
+				if err != nil {
+					log.Printf("Error checking Heisman Campaign (Uno Reverse): %v", err)
 				}
 
 				hedgeRefund, hedgeApplied, err := cardService.ApplyEmotionalHedgeIfApplicable(db, consumer, user, bet, entry.Option, float64(entry.Amount), scoreDiff)
@@ -464,6 +506,18 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 							gamblerMsg = " (The Gambler: consumed, no double)"
 						}
 					}
+					hfaMsg := ""
+					if hasHomeFieldAdvantage {
+						hfaMsg = " (Home Field Advantage: +15!)"
+					}
+					rtkMsg := ""
+					if hasRoughingTheKicker {
+						rtkMsg = " (Roughing the Kicker: -15% payout)"
+					}
+					heismanMsg := ""
+					if hasHeismanCampaign {
+						heismanMsg = " (Heisman Campaign: -15% payout)"
+					}
 					hedgeMsg := ""
 					if hedgeApplied && hedgeRefund > 0 {
 						hedgeMsg = fmt.Sprintf(" (Emotional Hedge: Refunding $%.1f)", hedgeRefund)
@@ -476,9 +530,9 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 					}
 
 					if spreadDisplay != "" {
-						winnersList += fmt.Sprintf("%s - Bet: %s %s - **Won $%.1f** (Uno Reverse!)%s%s%s%s\n", username, betOption, spreadDisplay, modifiedPayout, doubleDownMsg, gamblerMsg, hedgeMsg, insuranceMsg)
+						winnersList += fmt.Sprintf("%s - Bet: %s %s - **Won $%.1f** (Uno Reverse!)%s%s%s%s%s%s%s\n", username, betOption, spreadDisplay, modifiedPayout, doubleDownMsg, gamblerMsg, hfaMsg, rtkMsg, heismanMsg, hedgeMsg, insuranceMsg)
 					} else {
-						winnersList += fmt.Sprintf("%s - Bet: %s - **Won $%.1f** (Uno Reverse!)%s%s%s%s\n", username, betOption, modifiedPayout, doubleDownMsg, gamblerMsg, hedgeMsg, insuranceMsg)
+						winnersList += fmt.Sprintf("%s - Bet: %s - **Won $%.1f** (Uno Reverse!)%s%s%s%s%s%s%s\n", username, betOption, modifiedPayout, doubleDownMsg, gamblerMsg, hfaMsg, rtkMsg, heismanMsg, hedgeMsg, insuranceMsg)
 					}
 				}
 				continue

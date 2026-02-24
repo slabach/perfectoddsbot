@@ -6,6 +6,7 @@ import (
 	"perfectOddsBot/services/cardService/cards"
 	"perfectOddsBot/services/common"
 	"perfectOddsBot/services/guildService"
+	"strings"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -106,6 +107,21 @@ func MyInventory(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.
 	hasUnluckyCat := cardCounts[cards.UnluckyCatCardID] > 0
 	if hasUnluckyCat {
 		nextDrawCost = nextDrawCost * 2.0
+	}
+
+	hasExcessiveCelebration := cardCounts[cards.ExcessiveCelebrationCardID] > 0
+	if hasExcessiveCelebration {
+		nextDrawCost = nextDrawCost * 2.0
+	}
+
+	hasFullCourtPress := cardCounts[cards.FullCourtPressCardID] > 0
+	if hasFullCourtPress {
+		nextDrawCost = nextDrawCost * 2.0
+	}
+
+	hasFullRide := cardCounts[cards.FullRideCardID] > 0
+	if hasFullRide {
+		nextDrawCost = 0
 	}
 
 	hasCoupon := cardCounts[cards.CouponCardID] > 0
@@ -251,9 +267,34 @@ func MyInventory(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.
 
 	costText := fmt.Sprintf("%.0f points", nextDrawCost)
 	if nextDrawCost == 0 {
-		costText = "Free (Generous Donation)"
-	} else if hasShoppingSpree {
-		costText = fmt.Sprintf("%.0f points (Shopping Spree: -50%%)", nextDrawCost)
+		if hasFullRide {
+			costText = "Free (Full Ride)"
+		} else {
+			costText = "Free (Generous Donation)"
+		}
+	} else {
+		modifiers := []string{}
+		if hasShoppingSpree {
+			modifiers = append(modifiers, "Shopping Spree: -50%")
+		}
+		if hasLuckyHorseshoe {
+			modifiers = append(modifiers, "Lucky Horseshoe: 50%")
+		}
+		if hasUnluckyCat {
+			modifiers = append(modifiers, "Unlucky Cat: 2x")
+		}
+		if hasExcessiveCelebration {
+			modifiers = append(modifiers, "Excessive Celebration: 2x")
+		}
+		if hasFullCourtPress {
+			modifiers = append(modifiers, "Full Court Press: 2x")
+		}
+		if hasCoupon {
+			modifiers = append(modifiers, "Coupon: 25%% off")
+		}
+		if len(modifiers) > 0 {
+			costText = fmt.Sprintf("%.0f points (%s)", nextDrawCost, strings.Join(modifiers, ", "))
+		}
 	}
 	embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
 		Name:   "💰 Next Draw Cost",

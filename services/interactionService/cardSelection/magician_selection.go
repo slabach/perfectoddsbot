@@ -176,9 +176,10 @@ func HandleMagicianCardSelection(s *discordgo.Session, i *discordgo.InteractionC
 
 		if card.AddToInventory {
 			inventory := models.UserInventory{
-				UserID:  drawerUser.ID,
-				GuildID: guildID,
-				CardID:  card.ID,
+				UserID:   drawerUser.ID,
+				GuildID:  guildID,
+				CardID:   card.ID,
+				CardCode: card.Code,
 			}
 			if err := tx.Create(&inventory).Error; err != nil {
 				return err
@@ -187,7 +188,7 @@ func HandleMagicianCardSelection(s *discordgo.Session, i *discordgo.InteractionC
 
 		targetUsername := common.GetUsernameWithDB(tx, s, guildID, targetUserID)
 		embed := BuildCardResultEmbed(card, cardResult, drawerUser, targetUsername, guild.Pool)
-		embed.Description = fmt.Sprintf("🎴 The Magician borrowed **%s** from %s!\n\n%s", card.Name, targetUsername, cardResult.Message)
+		embed.Description = fmt.Sprintf("🎴 The Magician (**<@%s>**) borrowed **%s** from <@%s>!\n\n%s", drawerUser.DiscordID, card.Name, targetUserID, cardResult.Message)
 
 		if cardResult.RequiresSelection {
 			if cardResult.SelectionType == "user" {

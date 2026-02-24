@@ -391,6 +391,62 @@ func RunUserInventoryTimesAppliedBackfill(db *gorm.DB) error {
 	return nil
 }
 
+func RunUserInventoryCardCodeBackfill(db *gorm.DB) error {
+	const migrationName = "user_inventory_card_code_backfill"
+	var existing models.Migration
+	if err := db.Where("name = ?", migrationName).First(&existing).Error; err == nil && existing.ID != 0 {
+		log.Println("User inventory card code backfill already executed. Skipping.")
+		return nil
+	}
+	log.Println("Backfilling user_inventories.card_code: setting NULL to card code...")
+	res := db.Exec("UPDATE user_inventories SET card_code = (SELECT code FROM cards WHERE id = user_inventories.card_id)")
+	if res.Error != nil {
+		return fmt.Errorf("user_inventory card code backfill: %w", res.Error)
+	}
+	log.Printf("User inventory card code backfill completed. Rows updated: %d", res.RowsAffected)
+
+	if err := db.Create(&models.Migration{Name: migrationName, ExecutedAt: time.Now()}).Error; err != nil {
+		return fmt.Errorf("error recording user_inventory_card_code_backfill migration: %w", err)
+	}
+	return nil
+}
+
+func RunVampireDevilExpiresAtBackfill(db *gorm.DB) error {
+	const migrationName = "vampire_devil_expires_at_backfill"
+	var existing models.Migration
+	if err := db.Where("name = ?", migrationName).First(&existing).Error; err == nil && existing.ID != 0 {
+		log.Println("Vampire/Devil expires_at backfill already executed. Skipping.")
+		return nil
+	}
+
+	log.Println("Backfilling expires_at for legacy Vampire and The Devil inventory rows...")
+
+	res := db.Exec(
+		"UPDATE user_inventories SET expires_at = DATE_ADD(created_at, INTERVAL 24 HOUR) WHERE card_id = ? AND expires_at IS NULL AND deleted_at IS NULL",
+		cards.VampireCardID,
+	)
+	if res.Error != nil {
+		return fmt.Errorf("vampire expires_at backfill: %w", res.Error)
+	}
+	vampireUpdated := res.RowsAffected
+
+	res = db.Exec(
+		"UPDATE user_inventories SET expires_at = DATE_ADD(created_at, INTERVAL 7 DAY) WHERE card_id = ? AND expires_at IS NULL AND deleted_at IS NULL",
+		cards.TheDevilCardID,
+	)
+	if res.Error != nil {
+		return fmt.Errorf("devil expires_at backfill: %w", res.Error)
+	}
+	devilUpdated := res.RowsAffected
+
+	log.Printf("Vampire/Devil expires_at backfill completed. Vampire: %d rows, Devil: %d rows.", vampireUpdated, devilUpdated)
+
+	if err := db.Create(&models.Migration{Name: migrationName, ExecutedAt: time.Now()}).Error; err != nil {
+		return fmt.Errorf("error recording vampire_devil_expires_at_backfill migration: %w", err)
+	}
+	return nil
+}
+
 func RunCardMigration(db *gorm.DB) error {
 	var existingMigration models.Migration
 	result := db.Where("name = ?", "card_migration").First(&existingMigration)

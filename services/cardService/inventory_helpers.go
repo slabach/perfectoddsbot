@@ -43,11 +43,32 @@ func processRoyaltyPayment(tx *gorm.DB, card *models.Card, royaltyGuildID string
 	return nil
 }
 
-func addCardToInventory(db *gorm.DB, userID uint, guildID string, cardID uint) error {
+func GetExpiresAtForNewCard(cardID uint) *time.Time {
+	now := time.Now()
+	switch cardID {
+	case cards.RedshirtCardID:
+		t := now.Add(2 * time.Hour)
+		return &t
+	case cards.VampireCardID:
+		t := now.Add(24 * time.Hour)
+		return &t
+	case cards.TheDevilCardID:
+		t := now.Add(7 * 24 * time.Hour)
+		return &t
+	case cards.HomeFieldAdvantageCardID:
+		return nil
+	default:
+		return nil
+	}
+}
+
+func addCardToInventory(db *gorm.DB, userID uint, guildID string, cardID uint, cardCode string, expiresAt *time.Time) error {
 	inventory := models.UserInventory{
-		UserID:  userID,
-		GuildID: guildID,
-		CardID:  cardID,
+		UserID:    userID,
+		GuildID:   guildID,
+		CardID:    cardID,
+		CardCode:  cardCode,
+		ExpiresAt: expiresAt,
 	}
 	return db.Create(&inventory).Error
 }

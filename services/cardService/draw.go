@@ -12,6 +12,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
+
 func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
 	userID := i.Member.User.ID
 	guildID := i.GuildID
@@ -137,9 +138,9 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 
 	var inventoryItems []models.UserInventory
 	err = tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-		Where("user_id = ? AND guild_id = ? AND card_id IN (?, ?, ?)",
+		Where("user_id = ? AND guild_id = ? AND card_id IN (?, ?, ?, ?, ?, ?)",
 			user.ID, guildID,
-			cards.LuckyHorseshoeCardID, cards.UnluckyCatCardID, cards.CouponCardID).
+			cards.LuckyHorseshoeCardID, cards.UnluckyCatCardID, cards.CouponCardID, cards.ExcessiveCelebrationCardID, cards.FullCourtPressCardID, cards.FullRideCardID).
 		Find(&inventoryItems).Error
 	if err != nil {
 		tx.Rollback()
@@ -168,6 +169,9 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	var shoppingSpreeInventory *models.UserInventory
 	var unluckyCatInventory *models.UserInventory
 	var couponInventory *models.UserInventory
+	var excessiveCelebrationInventory *models.UserInventory
+	var fullCourtPressInventory *models.UserInventory
+	var fullRideInventory *models.UserInventory
 
 	expirationTime := now.Add(-12 * time.Hour)
 	var expiredShoppingSpreeItems []*models.UserInventory
@@ -207,9 +211,27 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		drawCardCost = drawCardCost * 0.75
 	}
 
+	if inv, ok := inventoryMap[cards.ExcessiveCelebrationCardID]; ok {
+		excessiveCelebrationInventory = inv
+		drawCardCost = drawCardCost * 2.0
+	}
+
+	if inv, ok := inventoryMap[cards.FullCourtPressCardID]; ok {
+		fullCourtPressInventory = inv
+		drawCardCost = drawCardCost * 2.0
+	}
+
+	if inv, ok := inventoryMap[cards.FullRideCardID]; ok {
+		fullRideInventory = inv
+		drawCardCost = 0
+	}
+
 	hasLuckyHorseshoe := horseshoeInventory != nil
 	hasUnluckyCat := unluckyCatInventory != nil
 	hasCoupon := couponInventory != nil
+	hasExcessiveCelebration := excessiveCelebrationInventory != nil
+	hasFullCourtPress := fullCourtPressInventory != nil
+	hasFullRide := fullRideInventory != nil
 
 	var lockedUser models.User
 	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&lockedUser, user.ID).Error; err != nil {
@@ -275,6 +297,30 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		if err := tx.Delete(couponInventory).Error; err != nil {
 			tx.Rollback()
 			common.SendError(s, i, fmt.Errorf("error consuming Coupon: %v", err), db)
+			return
+		}
+	}
+
+	if hasExcessiveCelebration {
+		if err := tx.Delete(excessiveCelebrationInventory).Error; err != nil {
+			tx.Rollback()
+			common.SendError(s, i, fmt.Errorf("error consuming Excessive Celebration: %v", err), db)
+			return
+		}
+	}
+
+	if hasFullCourtPress {
+		if err := tx.Delete(fullCourtPressInventory).Error; err != nil {
+			tx.Rollback()
+			common.SendError(s, i, fmt.Errorf("error consuming Full Court Press: %v", err), db)
+			return
+		}
+	}
+
+	if hasFullRide {
+		if err := tx.Delete(fullRideInventory).Error; err != nil {
+			tx.Rollback()
+			common.SendError(s, i, fmt.Errorf("error consuming Full Ride: %v", err), db)
 			return
 		}
 	}
@@ -397,7 +443,7 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	}
 
 	if card.AddToInventory || card.UserPlayable {
-		if err := addCardToInventory(tx, user.ID, guildID, card.ID); err != nil {
+		if err := addCardToInventory(tx, user.ID, guildID, card.ID, card.Code, GetExpiresAtForNewCard(card.ID)); err != nil {
 			tx.Rollback()
 			common.SendError(s, i, fmt.Errorf("error adding card to inventory: %v", err), db)
 			return
@@ -415,6 +461,13 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	if err := tx.Where("discord_id = ? AND guild_id = ?", userID, guildID).First(&user).Error; err != nil {
 		tx.Rollback()
 		common.SendError(s, i, fmt.Errorf("error reloading user after card effect: %v", err), db)
+		return
+	}
+
+	// Reload guild to capture any changes made by the card handler (e.g. PoolDrainUntil from Algae Bloom)
+	if err := tx.First(guild, guild.ID).Error; err != nil {
+		tx.Rollback()
+		common.SendError(s, i, fmt.Errorf("error reloading guild after card effect: %v", err), db)
 		return
 	}
 
@@ -523,29 +576,45 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 			}
 			randomUserID, err := getRandomUserForMoonFromCards(tx, guildID, []uint{user.ID})
 			if err != nil {
-				hasShield, err := hasShieldInInventory(tx, user.ID, guildID)
+				_ = cards.BurnExpiredRedshirts(tx, user.ID, guildID)
+				hasActiveRedshirt, err := cards.HasActiveRedshirt(tx, user.ID, guildID)
 				if err != nil {
 					tx.Rollback()
 					common.SendError(s, i, err, db)
 					return
 				}
-				if hasShield {
-					if err := PlayCardFromInventory(s, tx, user, cards.ShieldCardID); err != nil {
+				if hasActiveRedshirt {
+					cardResult.PointsDelta = 0
+					if cardResult.Message == "" {
+						cardResult.Message = "Your Moon illusion tried to redirect, but no eligible users found. Your Redshirt blocked the hit!"
+					} else {
+						cardResult.Message += " (Your Moon illusion tried to redirect, but no eligible users found. Your Redshirt blocked the hit!)"
+					}
+				} else {
+					hasShield, err := hasShieldInInventory(tx, user.ID, guildID)
+					if err != nil {
 						tx.Rollback()
 						common.SendError(s, i, err, db)
 						return
 					}
-					cardResult.PointsDelta = 0
-					if cardResult.Message == "" {
-						cardResult.Message = "Your Moon illusion tried to redirect, but no eligible users found. Shield blocked the hit!"
+					if hasShield {
+						if err := PlayCardFromInventory(s, tx, user, cards.ShieldCardID); err != nil {
+							tx.Rollback()
+							common.SendError(s, i, err, db)
+							return
+						}
+						cardResult.PointsDelta = 0
+						if cardResult.Message == "" {
+							cardResult.Message = "Your Moon illusion tried to redirect, but no eligible users found. Shield blocked the hit!"
+						} else {
+							cardResult.Message += " (Your Moon illusion tried to redirect, but no eligible users found. Shield blocked the hit!)"
+						}
 					} else {
-						cardResult.Message += " (Your Moon illusion tried to redirect, but no eligible users found. Shield blocked the hit!)"
-					}
-				} else {
-					if cardResult.Message == "" {
-						cardResult.Message = "Your Moon illusion tried to redirect, but no eligible users found."
-					} else {
-						cardResult.Message += " (Your Moon illusion tried to redirect, but no eligible users found.)"
+						if cardResult.Message == "" {
+							cardResult.Message = "Your Moon illusion tried to redirect, but no eligible users found."
+						} else {
+							cardResult.Message += " (Your Moon illusion tried to redirect, but no eligible users found.)"
+						}
 					}
 				}
 			} else {
@@ -574,24 +643,40 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 				}
 			}
 		} else {
-			hasShield, err := hasShieldInInventory(tx, user.ID, guildID)
+			_ = cards.BurnExpiredRedshirts(tx, user.ID, guildID)
+			hasActiveRedshirt, err := cards.HasActiveRedshirt(tx, user.ID, guildID)
 			if err != nil {
 				tx.Rollback()
 				common.SendError(s, i, err, db)
 				return
 			}
-			if hasShield {
-				if err := PlayCardFromInventory(s, tx, user, cards.ShieldCardID); err != nil {
+			if hasActiveRedshirt {
+				cardResult.PointsDelta = 0
+				if cardResult.Message == "" {
+					cardResult.Message = "Your Redshirt blocked the hit!"
+				} else {
+					cardResult.Message += " (Your Redshirt blocked the hit!)"
+				}
+			} else {
+				hasShield, err := hasShieldInInventory(tx, user.ID, guildID)
+				if err != nil {
 					tx.Rollback()
 					common.SendError(s, i, err, db)
 					return
 				}
+				if hasShield {
+					if err := PlayCardFromInventory(s, tx, user, cards.ShieldCardID); err != nil {
+						tx.Rollback()
+						common.SendError(s, i, err, db)
+						return
+					}
 
-				cardResult.PointsDelta = 0
-				if cardResult.Message == "" {
-					cardResult.Message = "Your Shield blocked the hit!"
-				} else {
-					cardResult.Message += " (Your Shield blocked the hit!)"
+					cardResult.PointsDelta = 0
+					if cardResult.Message == "" {
+						cardResult.Message = "Your Shield blocked the hit!"
+					} else {
+						cardResult.Message += " (Your Shield blocked the hit!)"
+					}
 				}
 			}
 		}
@@ -623,29 +708,45 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 					}
 					randomUserID, err := getRandomUserForMoonFromCards(tx, guildID, []uint{targetUser.ID, user.ID})
 					if err != nil {
-						hasShield, err := hasShieldInInventory(tx, targetUser.ID, guildID)
+						_ = cards.BurnExpiredRedshirts(tx, targetUser.ID, guildID)
+						hasActiveRedshirt, err := cards.HasActiveRedshirt(tx, targetUser.ID, guildID)
 						if err != nil {
 							tx.Rollback()
 							common.SendError(s, i, err, db)
 							return
 						}
-						if hasShield {
-							if err := PlayCardFromInventory(s, tx, targetUser, cards.ShieldCardID); err != nil {
+						if hasActiveRedshirt {
+							cardResult.TargetPointsDelta = 0
+							if cardResult.Message == "" {
+								cardResult.Message = fmt.Sprintf("%s's Moon illusion tried to redirect, but no eligible users found. Their Redshirt blocked the hit!", targetMention)
+							} else {
+								cardResult.Message += fmt.Sprintf(" (%s's Moon illusion tried to redirect, but no eligible users found. Their Redshirt blocked the hit!)", targetMention)
+							}
+						} else {
+							hasShield, err := hasShieldInInventory(tx, targetUser.ID, guildID)
+							if err != nil {
 								tx.Rollback()
 								common.SendError(s, i, err, db)
 								return
 							}
-							cardResult.TargetPointsDelta = 0
-							if cardResult.Message == "" {
-								cardResult.Message = fmt.Sprintf("%s's Moon illusion tried to redirect, but no eligible users found. Shield blocked the hit!", targetMention)
+							if hasShield {
+								if err := PlayCardFromInventory(s, tx, targetUser, cards.ShieldCardID); err != nil {
+									tx.Rollback()
+									common.SendError(s, i, err, db)
+									return
+								}
+								cardResult.TargetPointsDelta = 0
+								if cardResult.Message == "" {
+									cardResult.Message = fmt.Sprintf("%s's Moon illusion tried to redirect, but no eligible users found. Shield blocked the hit!", targetMention)
+								} else {
+									cardResult.Message += fmt.Sprintf(" (%s's Moon illusion tried to redirect, but no eligible users found. Shield blocked the hit!)", targetMention)
+								}
 							} else {
-								cardResult.Message += fmt.Sprintf(" (%s's Moon illusion tried to redirect, but no eligible users found. Shield blocked the hit!)", targetMention)
-							}
-						} else {
-							if cardResult.Message == "" {
-								cardResult.Message = fmt.Sprintf("%s's Moon illusion tried to redirect, but no eligible users found.", targetMention)
-							} else {
-								cardResult.Message += fmt.Sprintf(" (%s's Moon illusion tried to redirect, but no eligible users found.)", targetMention)
+								if cardResult.Message == "" {
+									cardResult.Message = fmt.Sprintf("%s's Moon illusion tried to redirect, but no eligible users found.", targetMention)
+								} else {
+									cardResult.Message += fmt.Sprintf(" (%s's Moon illusion tried to redirect, but no eligible users found.)", targetMention)
+								}
 							}
 						}
 					} else {
@@ -673,24 +774,40 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 						}
 					}
 				} else {
-					hasShield, err := hasShieldInInventory(tx, targetUser.ID, guildID)
+					_ = cards.BurnExpiredRedshirts(tx, targetUser.ID, guildID)
+					hasActiveRedshirt, err := cards.HasActiveRedshirt(tx, targetUser.ID, guildID)
 					if err != nil {
 						tx.Rollback()
 						common.SendError(s, i, err, db)
 						return
 					}
-					if hasShield {
-						if err := PlayCardFromInventory(s, tx, targetUser, cards.ShieldCardID); err != nil {
+					if hasActiveRedshirt {
+						cardResult.TargetPointsDelta = 0
+						if cardResult.Message == "" {
+							cardResult.Message = fmt.Sprintf("%s's Redshirt blocked the hit!", targetMention)
+						} else {
+							cardResult.Message += fmt.Sprintf(" (%s's Redshirt blocked the hit!)", targetMention)
+						}
+					} else {
+						hasShield, err := hasShieldInInventory(tx, targetUser.ID, guildID)
+						if err != nil {
 							tx.Rollback()
 							common.SendError(s, i, err, db)
 							return
 						}
+						if hasShield {
+							if err := PlayCardFromInventory(s, tx, targetUser, cards.ShieldCardID); err != nil {
+								tx.Rollback()
+								common.SendError(s, i, err, db)
+								return
+							}
 
-						cardResult.TargetPointsDelta = 0
-						if cardResult.Message == "" {
-							cardResult.Message = fmt.Sprintf("%s's Shield blocked the hit!", targetMention)
-						} else {
-							cardResult.Message += fmt.Sprintf(" (%s's Shield blocked the hit!)", targetMention)
+							cardResult.TargetPointsDelta = 0
+							if cardResult.Message == "" {
+								cardResult.Message = fmt.Sprintf("%s's Shield blocked the hit!", targetMention)
+							} else {
+								cardResult.Message += fmt.Sprintf(" (%s's Shield blocked the hit!)", targetMention)
+							}
 						}
 					}
 				}

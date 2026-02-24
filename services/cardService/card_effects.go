@@ -515,3 +515,50 @@ func ApplyGamblerIfAvailable(db *gorm.DB, consumer CardConsumer, user models.Use
 
 	return originalPayout, false, nil
 }
+
+func ApplyHomeFieldAdvantageIfApplicable(db *gorm.DB, user models.User, currentPayout float64) (float64, bool, error) {
+	var inv models.UserInventory
+	err := db.Where("user_id = ? AND guild_id = ? AND card_id = ? AND deleted_at IS NULL",
+		user.ID, user.GuildID, cards.HomeFieldAdvantageCardID).First(&inv).Error
+	if err != nil {
+		return currentPayout, false, nil
+	}
+	if inv.ExpiresAt == nil {
+		return currentPayout, false, nil
+	}
+	if time.Now().Before(*inv.ExpiresAt) {
+		return currentPayout + 15, true, nil
+	}
+	_ = db.Delete(&inv).Error
+	return currentPayout, false, nil
+}
+
+func ApplyRoughingTheKickerIfApplicable(db *gorm.DB, user models.User, currentPayout float64) (float64, bool, error) {
+	var inv models.UserInventory
+	err := db.Where("user_id = ? AND guild_id = ? AND card_id = ? AND deleted_at IS NULL",
+		user.ID, user.GuildID, cards.RoughingTheKickerCardID).First(&inv).Error
+	if err != nil {
+		return currentPayout, false, nil
+	}
+	reducedPayout := currentPayout * 0.85
+	if err := db.Delete(&inv).Error; err != nil {
+		return currentPayout, false, err
+	}
+	return reducedPayout, true, nil
+}
+
+// ApplyHeismanCampaignIfApplicable reduces the winner's payout by 15% if they have Heisman Campaign
+// in inventory. The card is consumed (soft-deleted) when applied. Stacks with other modifiers (e.g. Roughing the Kicker).
+func ApplyHeismanCampaignIfApplicable(db *gorm.DB, user models.User, currentPayout float64) (float64, bool, error) {
+	var inv models.UserInventory
+	err := db.Where("user_id = ? AND guild_id = ? AND card_id = ? AND deleted_at IS NULL",
+		user.ID, user.GuildID, cards.HeismanCampaignCardID).First(&inv).Error
+	if err != nil {
+		return currentPayout, false, nil
+	}
+	reducedPayout := currentPayout * 0.85
+	if err := db.Delete(&inv).Error; err != nil {
+		return currentPayout, false, err
+	}
+	return reducedPayout, true, nil
+}

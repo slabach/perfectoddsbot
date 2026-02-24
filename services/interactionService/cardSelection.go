@@ -110,6 +110,10 @@ func HandleCardUserSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 		err = cardSelection.HandleAlleyOopSelection(s, i, db, userID, targetUserID, guildID)
 	case cards.TransferPortalCardID:
 		err = cardSelection.HandleTransferPortalSelection(s, i, db, userID, targetUserID, guildID)
+	case cards.BlindsideBlockCardID:
+		err = cardSelection.HandleBlindsideBlockSelection(s, i, db, userID, targetUserID, guildID)
+	case cards.BracketBusterCardID:
+		err = cardSelection.HandleBracketBusterSelection(s, i, db, userID, targetUserID, guildID)
 	default:
 		cardService.UnmarkSelectorUsed(customID)
 		return fmt.Errorf("card %d does not support user selection", cardID)
@@ -121,8 +125,6 @@ func HandleCardUserSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 
 	return err
 }
-
-
 
 func HandleCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) error {
 	customID := i.MessageComponentData().CustomID
@@ -206,7 +208,7 @@ func HandleCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCreate
 		}
 
 		embed := cardSelection.BuildCardResultEmbed(card, &models.CardResult{
-			Message:     fmt.Sprintf("Uno Reverse card active! If you lose on '%s', you win (and vice versa)!", bet.Description),
+			Message:     fmt.Sprintf("<@%s> has the Uno Reverse card active! If they lose on '%s', they win (and vice versa)!", user.DiscordID, bet.Description),
 			PointsDelta: 0,
 			PoolDelta:   0,
 		}, user, "", guild.Pool)
@@ -373,7 +375,7 @@ func HandleCardOptionSelection(s *discordgo.Session, i *discordgo.InteractionCre
 			}
 
 			embed := cardSelection.BuildCardResultEmbed(card, &models.CardResult{
-				Message:     fmt.Sprintf("<@%s> chose 'No'. The card fizzles out and is not added to your inventory.", user.DiscordID),
+				Message:     fmt.Sprintf("<@%s> chose 'No'. The card fizzles out and is not added to their inventory.", user.DiscordID),
 				PointsDelta: 0,
 				PoolDelta:   0,
 			}, user, "", guild.Pool)
@@ -387,7 +389,7 @@ func HandleCardOptionSelection(s *discordgo.Session, i *discordgo.InteractionCre
 		}
 
 		embed := cardSelection.BuildCardResultEmbed(card, &models.CardResult{
-			Message:     fmt.Sprintf("<@%s> chose 'Yes'! The Gambler has been added to your inventory. Your next bet resolution has a 50/50 chance to double your win or loss.", user.DiscordID),
+			Message:     fmt.Sprintf("<@%s> chose 'Yes'! The Gambler has been added to their inventory. Their next bet resolution has a 50/50 chance to double their win or loss.", user.DiscordID),
 			PointsDelta: 0,
 			PoolDelta:   0,
 		}, user, "", guild.Pool)
@@ -459,7 +461,6 @@ func HandlePlayCardSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 		},
 	})
 }
-
 
 func HandlePlayCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) error {
 	customID := i.MessageComponentData().CustomID
@@ -576,4 +577,3 @@ func HandlePlayCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCr
 		})
 	})
 }
-

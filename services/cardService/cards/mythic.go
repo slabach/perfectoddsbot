@@ -26,13 +26,6 @@ func registerMythicCards(deck *[]models.Card) {
 		// 	Description: "All active bets currently placed are cancelled; all money bet on them goes to the Pool.",
 		// 	Handler:     handleMarketCrash,
 		// },
-		// {
-		// 	ID:          51,
-		// 	Code:        "TTM",
-		// 	Name:        "To the Moon 🚀",
-		// 	Description: "All active bets currently placed are resolved as wins.",
-		// 	Handler:     handleToTheMoon,
-		// },
 		{
 			ID:          52,
 			Code:        "POT",
@@ -73,20 +66,28 @@ func registerMythicCards(deck *[]models.Card) {
 			Handler:     handleTheWorld,
 			Expansion:   "Tarot",
 		},
-		// {
-		// 	ID:             179,
-		// 	Name:           "Heisman Trophy (🏟️)",
-		// 	Description:    "Win 5% of the Pool and your next winning bet payout is doubled.",
-		// 	Handler:        handleHeismanTrophy,
-		// 	AddToInventory: true,
-		// },
-		// {
-		// 	ID:          169,
-		// 	Name:        "National Championship (🏟️)",
-		// 	Description: "You win 20% of the current Pool, and every other active player gains 200 points.",
-		// 	Handler:     handleNationalChampionship,
-		// 	Expansion:   "Collegiate",
-		// },
+		{
+			ID:          50001,
+			Code:        "HT",
+			Name:        "Heisman Trophy (🏟️)",
+			Description: "Win 5% of the Pool and your next winning bet payout is doubled (receive a Double Down card).",
+			Handler:     handleHeismanTrophy,
+		},
+		{
+			ID:          50002,
+			Code:        "NC",
+			Name:        "National Championship (🏟️)",
+			Description: "You win 20% of the current Pool, and every other active player gains 200 points (or remaining points in pool divided equally if less than 200) (paid from the Pool).",
+			Handler:     handleNationalChampionship,
+			Expansion:   "Collegiate",
+		},
+		{
+			ID:          50003,
+			Code:        "TTM",
+			Name:        "To the Moon 🚀",
+			Description: "All active bets currently placed are resolved as wins.",
+			Handler:     handleToTheMoon,
+		},
 	}
 
 	*deck = append(*deck, mythicCards...)

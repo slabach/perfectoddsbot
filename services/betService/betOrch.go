@@ -193,6 +193,24 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 				return
 			}
 
+			modifiedPayout, hasHomeFieldAdvantage, err := cardService.ApplyHomeFieldAdvantageIfApplicable(db, user, modifiedPayout)
+			if err != nil {
+				common.SendError(s, i, fmt.Errorf("error checking Home Field Advantage: %v", err), db)
+				return
+			}
+
+			modifiedPayout, hasRoughingTheKicker, err := cardService.ApplyRoughingTheKickerIfApplicable(db, user, modifiedPayout)
+			if err != nil {
+				common.SendError(s, i, fmt.Errorf("error checking Roughing the Kicker: %v", err), db)
+				return
+			}
+
+			modifiedPayout, hasHeismanCampaign, err := cardService.ApplyHeismanCampaignIfApplicable(db, user, modifiedPayout)
+			if err != nil {
+				common.SendError(s, i, fmt.Errorf("error checking Heisman Campaign: %v", err), db)
+				return
+			}
+
 			_, insuranceApplied, err := cardService.ApplyBetInsuranceIfApplicable(db, consumer, user, 0, true)
 			if err != nil {
 				common.SendError(s, i, fmt.Errorf("error checking Bet Insurance: %v", err), db)
@@ -221,11 +239,23 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 						gamblerMsg = " (The Gambler: consumed, no double)"
 					}
 				}
+				hfaMsg := ""
+				if hasHomeFieldAdvantage {
+					hfaMsg = " (Home Field Advantage: +15!)"
+				}
+				rtkMsg := ""
+				if hasRoughingTheKicker {
+					rtkMsg = " (Roughing the Kicker: -15% payout)"
+				}
+				heismanMsg := ""
+				if hasHeismanCampaign {
+					heismanMsg = " (Heisman Campaign: -15% payout)"
+				}
 				insuranceMsg := ""
 				if insuranceApplied {
 					insuranceMsg = " (Bet Insurance: consumed)"
 				}
-				winnersList += fmt.Sprintf("%s - Won $%.1f%s%s%s\n", username, modifiedPayout, doubleDownMsg, gamblerMsg, insuranceMsg)
+				winnersList += fmt.Sprintf("%s - Won $%.1f%s%s%s%s%s%s\n", username, modifiedPayout, doubleDownMsg, gamblerMsg, hfaMsg, rtkMsg, heismanMsg, insuranceMsg)
 			}
 		} else {
 			unoApplied, isWinAfterUno, err := cardService.ApplyUnoReverseIfApplicable(db, user, bet.ID, false)
@@ -252,6 +282,24 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 				modifiedPayout, hasGambler, err := cardService.ApplyGamblerIfAvailable(db, consumer, user, modifiedPayout, true)
 				if err != nil {
 					common.SendError(s, i, fmt.Errorf("error checking Gambler: %v", err), db)
+					return
+				}
+
+				modifiedPayout, hasHomeFieldAdvantage, err := cardService.ApplyHomeFieldAdvantageIfApplicable(db, user, modifiedPayout)
+				if err != nil {
+					common.SendError(s, i, fmt.Errorf("error checking Home Field Advantage: %v", err), db)
+					return
+				}
+
+				modifiedPayout, hasRoughingTheKicker, err := cardService.ApplyRoughingTheKickerIfApplicable(db, user, modifiedPayout)
+				if err != nil {
+					common.SendError(s, i, fmt.Errorf("error checking Roughing the Kicker: %v", err), db)
+					return
+				}
+
+				modifiedPayout, hasHeismanCampaign, err := cardService.ApplyHeismanCampaignIfApplicable(db, user, modifiedPayout)
+				if err != nil {
+					common.SendError(s, i, fmt.Errorf("error checking Heisman Campaign: %v", err), db)
 					return
 				}
 
@@ -294,6 +342,18 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 						gamblerMsg = " (The Gambler: consumed, no double)"
 					}
 				}
+				hfaMsg := ""
+				if hasHomeFieldAdvantage {
+					hfaMsg = " (Home Field Advantage: +15!)"
+				}
+				rtkMsg := ""
+				if hasRoughingTheKicker {
+					rtkMsg = " (Roughing the Kicker: -15% payout)"
+				}
+				heismanMsg := ""
+				if hasHeismanCampaign {
+					heismanMsg = " (Heisman Campaign: -15% payout)"
+				}
 				hedgeMsg := ""
 				if hedgeApplied && hedgeRefund > 0 {
 					hedgeMsg = fmt.Sprintf(" (Emotional Hedge: Refunding $%.1f)", hedgeRefund)
@@ -305,7 +365,7 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 					insuranceMsg = " (Bet Insurance: consumed)"
 				}
 
-				winnersList += fmt.Sprintf("%s - Won $%.1f (Uno Reverse!)%s%s%s%s\n", username, modifiedPayout, doubleDownMsg, gamblerMsg, hedgeMsg, insuranceMsg)
+				winnersList += fmt.Sprintf("%s - Won $%.1f (Uno Reverse!)%s%s%s%s%s%s%s\n", username, modifiedPayout, doubleDownMsg, gamblerMsg, hfaMsg, rtkMsg, heismanMsg, hedgeMsg, insuranceMsg)
 				continue
 			}
 

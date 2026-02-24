@@ -86,14 +86,14 @@ func SetupCron(s *discordgo.Session, db *gorm.DB) {
 
 	// Card expiration jobs. All card checks should be run every hour.
 	_, err = cronService.AddFunc("0 0 */1 * * *", func() {
-		// Runs every hour to collect Loan Shark debts
-		err := scheduled_cards.CheckLoanShark(s, db)
+		// Soft-delete inventory rows past expires_at (Vampire, Devil, Redshirt, Home Field Advantage, etc.)
+		err := scheduled_cards.CheckExpiredInventory(s, db)
 		if err != nil {
 			fmt.Println(err)
 		}
 
-		// // Runs every hour to expire Vampire cards after 24 hours
-		err = scheduled_cards.CheckVampire(s, db)
+		// Runs every hour to collect Loan Shark debts
+		err = scheduled_cards.CheckLoanShark(s, db)
 		if err != nil {
 			fmt.Println(err)
 		}
@@ -106,12 +106,6 @@ func SetupCron(s *discordgo.Session, db *gorm.DB) {
 
 		// Runs every hour to process The Hanged Man cards after 24 hours
 		err = scheduled_cards.CheckHangedMan(s, db)
-		if err != nil {
-			fmt.Println(err)
-		}
-
-		// Runs every hour to expire The Devil cards after 7 days
-		err = scheduled_cards.CheckTheDevil(s, db)
 		if err != nil {
 			fmt.Println(err)
 		}

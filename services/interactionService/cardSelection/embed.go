@@ -29,8 +29,8 @@ func BuildCardResultEmbed(card *models.Card, result *models.CardResult, user mod
 			sign = ""
 		}
 		embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
-			Name:   "You",
-			Value:  fmt.Sprintf("<@%s>: %s%.1f points (Total: %.1f)", user.DiscordID, sign, result.PointsDelta, user.Points),
+			Name:   fmt.Sprintf("<@%s>", user.DiscordID),
+			Value:  fmt.Sprintf("%s%.1f points (Total: %.1f)", sign, result.PointsDelta, user.Points),
 			Inline: true,
 		})
 	}
