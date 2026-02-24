@@ -72,6 +72,7 @@ func registerMythicCards(deck *[]models.Card) {
 			Name:        "Heisman Trophy (🏟️)",
 			Description: "Win 5% of the Pool and your next winning bet payout is doubled (receive a Double Down card).",
 			Handler:     handleHeismanTrophy,
+			Expansion:   "Collegiate",
 		},
 		{
 			ID:          50002,

@@ -74,7 +74,8 @@ func CheckHangedMan(s *discordgo.Session, db *gorm.DB) error {
 			continue
 		}
 
-		if err := cardService.NotifyCardPlayed(s, db, user, card); err != nil {
+		expirationMessage := fmt.Sprintf("<@%s>'s **%s** has expired", user.DiscordID, card.Name)
+		if err := cardService.NotifyCardPlayedWithMessage(s, db, user, card, expirationMessage); err != nil {
 			fmt.Printf("Error notifying hanged man payout: %v\n", err)
 		}
 	}
