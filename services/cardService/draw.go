@@ -54,6 +54,10 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	now := time.Now()
 
 	tx := db.Begin()
+	if tx.Error != nil {
+		common.SendError(s, i, fmt.Errorf("error beginning transaction: %v", tx.Error), db)
+		return
+	}
 	defer func() {
 		if r := recover(); r != nil {
 			tx.Rollback()
@@ -502,7 +506,11 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 				return
 			}
 
-			tx.Commit()
+			if err := tx.Commit().Error; err != nil {
+				tx.Rollback()
+				common.SendError(s, i, fmt.Errorf("error committing transaction: %v", err), db)
+				return
+			}
 			return
 		} else if cardResult.SelectionType == "bet" {
 			ShowBetSelectMenu(s, i, card.ID, card.Name, card.Description, userID, guildID, db)
@@ -524,7 +532,11 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 				return
 			}
 
-			tx.Commit()
+			if err := tx.Commit().Error; err != nil {
+				tx.Rollback()
+				common.SendError(s, i, fmt.Errorf("error committing transaction: %v", err), db)
+				return
+			}
 			return
 		}
 	}
@@ -549,7 +561,11 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 			return
 		}
 
-		tx.Commit()
+		if err := tx.Commit().Error; err != nil {
+			tx.Rollback()
+			common.SendError(s, i, fmt.Errorf("error committing transaction: %v", err), db)
+			return
+		}
 		return
 	}
 
@@ -834,7 +850,11 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		return
 	}
 
-	tx.Commit()
+	if err := tx.Commit().Error; err != nil {
+		tx.Rollback()
+		common.SendError(s, i, fmt.Errorf("error committing transaction: %v", err), db)
+		return
+	}
 
 	username = common.GetUsernameWithDB(db, s, guildID, user.DiscordID)
 	embed := buildCardEmbed(card, cardResult, user, username, targetUsername, guild.Pool, drawCardCost)
