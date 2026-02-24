@@ -399,7 +399,15 @@ func RunUserInventoryCardCodeBackfill(db *gorm.DB) error {
 		return nil
 	}
 	log.Println("Backfilling user_inventories.card_code: setting NULL to card code...")
-	res := db.Exec("UPDATE user_inventories SET card_code = (SELECT code FROM cards WHERE id = user_inventories.card_id)")
+	res := db.Exec(`
+		UPDATE user_inventories 
+		SET card_code = (SELECT code FROM cards WHERE id = user_inventories.card_id)
+		WHERE EXISTS (
+			SELECT 1 FROM cards 
+			WHERE cards.id = user_inventories.card_id 
+			AND cards.code IS NOT NULL
+		)
+	`)
 	if res.Error != nil {
 		return fmt.Errorf("user_inventory card code backfill: %w", res.Error)
 	}

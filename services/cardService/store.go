@@ -802,5 +802,80 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 		return err
 	}
 
+	if card.ID == cards.SpyKids3DCardID {
+		var currentGuild models.Guild
+		if err := db.Where("guild_id = ?", guildID).First(&currentGuild).Error; err != nil {
+			return nil
+		}
+
+		epicDrawsRemaining := 0
+		if currentGuild.LastEpicDrawAt == 0 {
+			if currentGuild.TotalCardDraws < 100 {
+				epicDrawsRemaining = 100 - currentGuild.TotalCardDraws
+			} else {
+				epicDrawsRemaining = 0
+			}
+		} else {
+			drawsSinceLastEpic := currentGuild.TotalCardDraws - currentGuild.LastEpicDrawAt
+			if drawsSinceLastEpic >= 100 {
+				epicDrawsRemaining = 0
+			} else {
+				epicDrawsRemaining = 100 - drawsSinceLastEpic
+			}
+		}
+
+		mythicDrawsRemaining := 0
+		if currentGuild.LastMythicDrawAt == 0 {
+			if currentGuild.TotalCardDraws < 1000 {
+				mythicDrawsRemaining = 1000 - currentGuild.TotalCardDraws
+			} else {
+				mythicDrawsRemaining = 0
+			}
+		} else {
+			drawsSinceLastMythic := currentGuild.TotalCardDraws - currentGuild.LastMythicDrawAt
+			if drawsSinceLastMythic >= 1000 {
+				mythicDrawsRemaining = 0
+			} else {
+				mythicDrawsRemaining = 1000 - drawsSinceLastMythic
+			}
+		}
+
+		epicText := fmt.Sprintf("%d cards", epicDrawsRemaining)
+		if epicDrawsRemaining == 0 {
+			epicText = "Next draw!"
+		}
+
+		mythicText := fmt.Sprintf("%d cards", mythicDrawsRemaining)
+		if mythicDrawsRemaining == 0 {
+			mythicText = "Next draw!"
+		}
+
+		infoEmbed := &discordgo.MessageEmbed{
+			Title:       "🎴 Guaranteed Card Information",
+			Description: "Here's when the next guaranteed cards will be drawn:",
+			Fields: []*discordgo.MessageEmbedField{
+				{
+					Name:   "Next Guaranteed Epic",
+					Value:  epicText,
+					Inline: true,
+				},
+				{
+					Name:   "Next Guaranteed Mythic",
+					Value:  mythicText,
+					Inline: true,
+				},
+			},
+			Color: 0x95A5A6,
+		}
+
+		_, err = s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+			Embeds: []*discordgo.MessageEmbed{infoEmbed},
+			Flags:  discordgo.MessageFlagsEphemeral,
+		})
+		if err != nil {
+			fmt.Printf("Error sending Spy Kids 3D follow-up message: %v\n", err)
+		}
+	}
+
 	return nil
 }
