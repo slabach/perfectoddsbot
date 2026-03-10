@@ -19,18 +19,18 @@ import (
 )
 
 type selectionCacheEntry struct {
-	inventoryID uint
-	cardID      uint
-	userID      string
+	inventoryID  uint
+	cardID       uint
+	userID       string
 	targetUserID string
-	guildID     string
-	expiresAt   time.Time
+	guildID      string
+	expiresAt    time.Time
 }
 
 var (
-	selectionCache     = make(map[string]*selectionCacheEntry)
-	selectionCacheMu   sync.RWMutex
-	selectionCacheTTL  = 30 * time.Minute
+	selectionCache    = make(map[string]*selectionCacheEntry)
+	selectionCacheMu  sync.RWMutex
+	selectionCacheTTL = 30 * time.Minute
 )
 
 func init() {
