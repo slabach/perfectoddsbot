@@ -437,6 +437,9 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 				user.Points = 0
 			}
 			guild.Pool += cardResult.PoolDelta
+			if guild.Pool < 0 {
+				guild.Pool = 0
+			}
 
 			if err := tx.Save(&user).Error; err != nil {
 				tx.Rollback()
@@ -484,6 +487,9 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 			user.Points = 0
 		}
 		guild.Pool += cardResult.PoolDelta
+		if guild.Pool < 0 {
+			guild.Pool = 0
+		}
 
 		if err := tx.Save(&user).Error; err != nil {
 			tx.Rollback()
@@ -626,6 +632,9 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 		user.Points = 0
 	}
 	guild.Pool += cardResult.PoolDelta
+	if guild.Pool < 0 {
+		guild.Pool = 0
+	}
 
 	var targetUsername string
 	if cardResult.TargetUserID != nil {

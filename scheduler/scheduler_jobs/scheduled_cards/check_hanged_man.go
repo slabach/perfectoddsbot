@@ -53,6 +53,9 @@ func CheckHangedMan(s *discordgo.Session, db *gorm.DB) error {
 
 			user.Points += gainAmount
 			guild.Pool -= gainAmount
+			if guild.Pool < 0 {
+				guild.Pool = 0
+			}
 
 			if err := tx.Save(&user).Error; err != nil {
 				return err

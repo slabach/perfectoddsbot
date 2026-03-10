@@ -85,7 +85,7 @@ func registerMythicCards(deck *[]models.Card) {
 		{
 			ID:          50003,
 			Code:        "TGW",
-			Name:        "The Golden Whistle",
+			Name:        "The Golden Whistle (🏟️)",
 			Description: "All active bets currently placed are resolved as wins.",
 			Handler:     handleTheGoldenWhistle,
 			Expansion:   "Collegiate",

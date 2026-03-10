@@ -5495,6 +5495,9 @@ func handleBlackHole(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 		}
 
 		guild.Pool -= poolAmount
+		if guild.Pool < 0 {
+			guild.Pool = 0
+		}
 		if err := tx.Save(&guild).Error; err != nil {
 			return err
 		}
@@ -6463,6 +6466,9 @@ func handleNationalChampionship(s *discordgo.Session, db *gorm.DB, userID string
 
 	totalDrain := poolWin + otherUserPointsDelta*float64(len(allUsers))
 	guild.Pool -= totalDrain
+	if guild.Pool < 0 {
+		guild.Pool = 0
+	}
 	if err := db.Save(&guild).Error; err != nil {
 		return nil, err
 	}

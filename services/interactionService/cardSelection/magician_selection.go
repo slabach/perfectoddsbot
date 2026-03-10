@@ -228,6 +228,9 @@ func HandleMagicianCardSelection(s *discordgo.Session, i *discordgo.InteractionC
 			drawerUser.Points = 0
 		}
 		guild.Pool += cardResult.PoolDelta
+		if guild.Pool < 0 {
+			guild.Pool = 0
+		}
 
 		if err := tx.Save(&drawerUser).Error; err != nil {
 			return err
