@@ -472,6 +472,9 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 				user.Points = 0
 			}
 			guild.Pool += cardResult.PoolDelta
+			if guild.Pool < 0 {
+				guild.Pool = 0
+			}
 
 			if err := tx.Save(&user).Error; err != nil {
 				tx.Rollback()
@@ -819,6 +822,12 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 		tx.Rollback()
 		common.SendError(s, i, err, db)
 		return err
+	}
+
+	pointsAfter := user.Points
+	pointsDelta := pointsAfter - pointsBefore
+	if err := historyService.RecordCardPlayHistory(tx, guildID, userID, user.ID, card.ID, card.Name, userID, pointsBefore, pointsAfter, pointsDelta, nil, nil, nil); err != nil {
+		log.Printf("Error recording card play history: %v", err)
 	}
 
 	tx.Commit()

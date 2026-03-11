@@ -328,7 +328,9 @@ func HandleCardOptionSelection(s *discordgo.Session, i *discordgo.InteractionCre
 					}
 
 					if allUsers[i].DiscordID != user.DiscordID {
-						if err := historyService.RecordCardPlayHistory(tx, guildID, allUsers[i].DiscordID, allUsers[i].ID, cards.TheWheelOfFortuneCardID, "The Wheel of Fortune (Chaos)", user.DiscordID, pointsBefore, allUsers[i].Points, pointsChange, nil, nil, nil); err != nil {
+						pointsAfter := allUsers[i].Points
+						pointsDelta := pointsAfter - pointsBefore
+						if err := historyService.RecordCardPlayHistory(tx, guildID, allUsers[i].DiscordID, allUsers[i].ID, cards.TheWheelOfFortuneCardID, "The Wheel of Fortune (Chaos)", user.DiscordID, pointsBefore, pointsAfter, pointsDelta, nil, nil, nil); err != nil {
 							fmt.Printf("Error recording history for Wheel Chaos: %v\n", err)
 						}
 					}

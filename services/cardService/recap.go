@@ -11,6 +11,8 @@ import (
 	"gorm.io/gorm"
 )
 
+const RecapMaxDays = 3
+
 func ShowRecap(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
 	userID := i.Member.User.ID
 	guildID := i.GuildID
@@ -35,8 +37,8 @@ func ShowRecap(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 	if days < 1 {
 		days = 1
 	}
-	if days > 30 {
-		days = 30
+	if days > RecapMaxDays {
+		days = RecapMaxDays
 	}
 
 	startTime := time.Now().AddDate(0, 0, -days)

@@ -5602,14 +5602,6 @@ func handleBlackHole(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 			affectedUsers = append(affectedUsers, displayName)
 		}
 
-		guild.Pool -= poolAmount
-		if guild.Pool < 0 {
-			guild.Pool = 0
-		}
-		if err := tx.Save(&guild).Error; err != nil {
-			return err
-		}
-
 		if len(affectedUsers) == 1 {
 			message = fmt.Sprintf("Black Hole activated! 25%% of the pool (%.0f points) was distributed to %s.", poolAmount, affectedUsers[0])
 		} else {
@@ -5721,7 +5713,7 @@ func handleDeath(s *discordgo.Session, db *gorm.DB, userID string, guildID strin
 			if err := tx.First(&u, uid).Error; err != nil {
 				continue
 			}
-			if err := historyService.RecordCardPlayHistory(db, guildID, u.DiscordID, u.ID, DeathCardID, "Death", userID, u.Points, u.Points, 0, nil, cards, nil); err != nil {
+			if err := historyService.RecordCardPlayHistory(tx, guildID, u.DiscordID, u.ID, DeathCardID, "Death", userID, u.Points, u.Points, 0, nil, cards, nil); err != nil {
 				fmt.Printf("Error recording history for Death: %v\n", err)
 			}
 		}
@@ -5949,7 +5941,7 @@ func handleTheGoldenWhistle(s *discordgo.Session, db *gorm.DB, userID string, gu
 			pointsAfter := pointsBefore + res.TotalPayout
 			pointsDelta := res.TotalPayout
 
-			if err := historyService.RecordCardPlayHistory(db, guildID, u.DiscordID, u.ID, TheGoldenWhistleCardID, "The Golden Whistle", userID, pointsBefore, pointsAfter, pointsDelta, nil, nil, res.BetIDs); err != nil {
+			if err := historyService.RecordCardPlayHistory(tx, guildID, u.DiscordID, u.ID, TheGoldenWhistleCardID, "The Golden Whistle", userID, pointsBefore, pointsAfter, pointsDelta, nil, nil, res.BetIDs); err != nil {
 				fmt.Printf("Error recording history for The Golden Whistle: %v\n", err)
 			}
 
@@ -6664,13 +6656,6 @@ func handleNationalChampionship(s *discordgo.Session, db *gorm.DB, userID string
 	}
 
 	totalDrain := poolWin + otherUserPointsDelta*float64(len(allUsers))
-	guild.Pool -= totalDrain
-	if guild.Pool < 0 {
-		guild.Pool = 0
-	}
-	if err := db.Save(&guild).Error; err != nil {
-		return nil, err
-	}
 
 	return &models.CardResult{
 		Message:     fmt.Sprintf("National Championship! You win 20%% of the current Pool, and every other active player gains %.0f points.", otherUserPointsDelta),
