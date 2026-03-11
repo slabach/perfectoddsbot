@@ -65,6 +65,8 @@ func HandleSlashCommand(s *discordgo.Session, i *discordgo.InteractionCreate, db
 		cardService.PlayCard(s, i, db)
 	case "store":
 		cardService.ShowStore(s, i, db)
+	case "recap":
+		cardService.ShowRecap(s, i, db)
 	case "toggle-card-drawing":
 		guildService.ToggleCardDrawing(s, i, db)
 	}
@@ -83,6 +85,7 @@ func ShowHelp(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		{"store", "Purchase specific cards directly from the store", false, false},
 		{"my-inventory", "View the cards currently in your hand", false, false},
 		{"play-card", "Play a card from your inventory", false, false},
+		{"recap", "View your card play history (last X days)", false, false},
 		{"create-bet", "Create a new bet", true, false},
 		{"give-points", "Give points to a user", true, false},
 		{"reset-points", "Reset all users' points to a default value", true, false},
@@ -284,6 +287,18 @@ func RegisterCommands(s *discordgo.Session) error {
 		{
 			Name:        "store",
 			Description: "Purchase specific cards directly from the store",
+		},
+		{
+			Name:        "recap",
+			Description: "View your card play history",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Name:        "days",
+					Description: "Number of days to look back (max 3)",
+					Type:        discordgo.ApplicationCommandOptionInteger,
+					Required:    false,
+				},
+			},
 		},
 		{
 			Name:        "toggle-card-drawing",

@@ -104,7 +104,7 @@ func runApp() {
 		&models.CardRarity{}, &models.Card{}, &models.CardOption{},
 		&models.Bet{}, &models.BetEntry{}, &models.BetMessage{},
 		&models.Parlay{}, &models.ParlayEntry{}, &models.UserInventory{},
-		&models.ErrorLog{},
+		&models.ErrorLog{}, &models.CardPlayHistory{},
 	)
 	if err != nil {
 		log.Fatalf("Error migrating database: %v", err)

@@ -7,6 +7,7 @@ import (
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/common"
 	"perfectOddsBot/services/guildService"
+	"perfectOddsBot/services/historyService"
 	"strings"
 	"time"
 
@@ -1231,6 +1232,7 @@ func handleJudgement(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 					deduct = randomUser.Points
 				}
 				if deduct > 0 {
+					randomUserPointsBefore := randomUser.Points
 					randomUser.Points -= deduct
 					if randomUser.Points < 0 {
 						randomUser.Points = 0
@@ -1238,6 +1240,13 @@ func handleJudgement(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 					if err := tx.Save(&randomUser).Error; err != nil {
 						return err
 					}
+
+					if randomUser.DiscordID != userID {
+						if err := historyService.RecordCardPlayHistory(tx, guildID, randomUser.DiscordID, randomUser.ID, JudgementCardID, "Judgement (Moon Redirect)", userID, randomUserPointsBefore, randomUser.Points, -deduct, nil, nil, nil); err != nil {
+							fmt.Printf("Error recording history for Judgement (Moon): %v\n", err)
+						}
+					}
+
 					totalPointsToPool += deduct
 					randomName := common.GetUsernameWithDB(tx, s, guildID, randomUser.DiscordID)
 					top50Details = append(top50Details, fmt.Sprintf("%s's Moon → %s: -%.0f points", username, randomName, deduct))
@@ -1253,6 +1262,7 @@ func handleJudgement(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 				continue
 			}
 
+			pointsBefore := lockedUser.Points
 			lockedUser.Points -= pointsLoss
 			if lockedUser.Points < 0 {
 				lockedUser.Points = 0
@@ -1260,6 +1270,13 @@ func handleJudgement(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 			if err := tx.Save(&lockedUser).Error; err != nil {
 				return err
 			}
+
+			if lockedUser.DiscordID != userID {
+				if err := historyService.RecordCardPlayHistory(tx, guildID, lockedUser.DiscordID, lockedUser.ID, JudgementCardID, "Judgement (Top 50%)", userID, pointsBefore, lockedUser.Points, -pointsLoss, nil, nil, nil); err != nil {
+					fmt.Printf("Error recording history for Judgement (Top 50%%): %v\n", err)
+				}
+			}
+
 			totalPointsToPool += pointsLoss
 			top50Details = append(top50Details, fmt.Sprintf("%s: -%.0f points", username, pointsLoss))
 		}
@@ -1282,10 +1299,18 @@ func handleJudgement(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 				return err
 			}
 
+			pointsBefore := lockedUser.Points
 			lockedUser.Points += gainPerBottomUser
 			if err := tx.Save(&lockedUser).Error; err != nil {
 				return err
 			}
+
+			if lockedUser.DiscordID != userID {
+				if err := historyService.RecordCardPlayHistory(tx, guildID, lockedUser.DiscordID, lockedUser.ID, JudgementCardID, "Judgement (Bottom 50%)", userID, pointsBefore, lockedUser.Points, gainPerBottomUser, nil, nil, nil); err != nil {
+					fmt.Printf("Error recording history for Judgement (Bottom 50%%): %v\n", err)
+				}
+			}
+
 			totalDistributed += gainPerBottomUser
 			username := common.GetUsernameWithDB(tx, s, guildID, lockedUser.DiscordID)
 			bottom50Details = append(bottom50Details, fmt.Sprintf("%s: +%.0f points", username, gainPerBottomUser))
@@ -1694,10 +1719,30 @@ func handleStimulusCheck(s *discordgo.Session, db *gorm.DB, userID string, guild
 		return nil, err
 	}
 	if updatedCount > 0 {
+		var otherUsers []models.User
+		if err := db.Where("guild_id = ? AND discord_id != ?", guildID, userID).Find(&otherUsers).Error; err != nil {
+			return nil, err
+		}
+
+		pointsBeforeMap := make(map[string]float64)
+		for _, u := range otherUsers {
+			pointsBeforeMap[u.DiscordID] = u.Points
+		}
+
 		if err := db.Model(&models.User{}).
 			Where("guild_id = ? AND discord_id != ?", guildID, userID).
 			Update("points", gorm.Expr("points + ?", gainAmount)).Error; err != nil {
 			return nil, err
+		}
+
+		for _, u := range otherUsers {
+			pointsBefore := pointsBeforeMap[u.DiscordID]
+			pointsAfter := pointsBefore + gainAmount
+			pointsDelta := gainAmount
+
+			if err := historyService.RecordCardPlayHistory(db, guildID, u.DiscordID, u.ID, StimulusCheckCardID, "Stimulus Check", userID, pointsBefore, pointsAfter, pointsDelta, nil, nil, nil); err != nil {
+				fmt.Printf("Error recording history for Stimulus Check: %v\n", err)
+			}
 		}
 	}
 
@@ -1735,10 +1780,30 @@ func handleTheHierophant(s *discordgo.Session, db *gorm.DB, userID string, guild
 		return nil, err
 	}
 	if updatedCount > 0 {
+		var otherUsers []models.User
+		if err := db.Where("guild_id = ? AND discord_id != ?", guildID, userID).Find(&otherUsers).Error; err != nil {
+			return nil, err
+		}
+
+		pointsBeforeMap := make(map[string]float64)
+		for _, u := range otherUsers {
+			pointsBeforeMap[u.DiscordID] = u.Points
+		}
+
 		if err := db.Model(&models.User{}).
 			Where("guild_id = ? AND discord_id != ?", guildID, userID).
 			Update("points", gorm.Expr("points + ?", gainAmount)).Error; err != nil {
 			return nil, err
+		}
+
+		for _, u := range otherUsers {
+			pointsBefore := pointsBeforeMap[u.DiscordID]
+			pointsAfter := pointsBefore + gainAmount
+			pointsDelta := gainAmount
+
+			if err := historyService.RecordCardPlayHistory(db, guildID, u.DiscordID, u.ID, TheHierophantCardID, "The Hierophant", userID, pointsBefore, pointsAfter, pointsDelta, nil, nil, nil); err != nil {
+				fmt.Printf("Error recording history for The Hierophant: %v\n", err)
+			}
 		}
 	}
 
@@ -3441,10 +3506,28 @@ func handleNuke(s *discordgo.Session, db *gorm.DB, userID string, guildID string
 		}, nil
 	}
 
+	pointsBeforeMap := make(map[string]float64)
+	for _, u := range allUsers {
+		pointsBeforeMap[u.DiscordID] = u.Points
+	}
+
 	if err := db.Model(&models.User{}).
 		Where("guild_id = ?", guildID).
 		Update("points", gorm.Expr("points * 0.75")).Error; err != nil {
 		return nil, err
+	}
+
+	for _, u := range allUsers {
+		if u.DiscordID == userID {
+			continue // draw.go handles the current user
+		}
+		pointsBefore := pointsBeforeMap[u.DiscordID]
+		pointsAfter := pointsBefore * 0.75
+		pointsDelta := pointsAfter - pointsBefore
+
+		if err := historyService.RecordCardPlayHistory(db, guildID, u.DiscordID, u.ID, TheNukeCardID, "The Nuke", userID, pointsBefore, pointsAfter, pointsDelta, nil, nil, nil); err != nil {
+			fmt.Printf("Error recording history for The Nuke: %v\n", err)
+		}
 	}
 
 	var guild models.Guild
@@ -3475,10 +3558,28 @@ func handleEMP(s *discordgo.Session, db *gorm.DB, userID string, guildID string)
 		}, nil
 	}
 
+	pointsBeforeMap := make(map[string]float64)
+	for _, u := range allUsers {
+		pointsBeforeMap[u.DiscordID] = u.Points
+	}
+
 	if err := db.Model(&models.User{}).
 		Where("guild_id = ?", guildID).
 		Update("points", gorm.Expr("points * 0.95")).Error; err != nil {
 		return nil, err
+	}
+
+	for _, u := range allUsers {
+		if u.DiscordID == userID {
+			continue
+		}
+		pointsBefore := pointsBeforeMap[u.DiscordID]
+		pointsAfter := pointsBefore * 0.95
+		pointsDelta := pointsAfter - pointsBefore
+
+		if err := historyService.RecordCardPlayHistory(db, guildID, u.DiscordID, u.ID, EMPCardID, "EMP", userID, pointsBefore, pointsAfter, pointsDelta, nil, nil, nil); err != nil {
+			fmt.Printf("Error recording history for EMP: %v\n", err)
+		}
 	}
 
 	var guild models.Guild
@@ -5479,9 +5580,16 @@ func handleBlackHole(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 				return err
 			}
 
+			pointsBefore := lockedPlayer.Points
 			lockedPlayer.Points += amountPerPlayer
 			if err := tx.Save(&lockedPlayer).Error; err != nil {
 				return err
+			}
+
+			if lockedPlayer.DiscordID != userID {
+				if err := historyService.RecordCardPlayHistory(tx, guildID, lockedPlayer.DiscordID, lockedPlayer.ID, BlackHoleCardID, "Black Hole", userID, pointsBefore, lockedPlayer.Points, amountPerPlayer, nil, nil, nil); err != nil {
+					fmt.Printf("Error recording history for Black Hole: %v\n", err)
+				}
 			}
 
 			playerName := lockedPlayer.Username
@@ -5492,11 +5600,6 @@ func handleBlackHole(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 				displayName = *playerName
 			}
 			affectedUsers = append(affectedUsers, displayName)
-		}
-
-		guild.Pool -= poolAmount
-		if err := tx.Save(&guild).Error; err != nil {
-			return err
 		}
 
 		if len(affectedUsers) == 1 {
@@ -5566,6 +5669,7 @@ func handleDeath(s *discordgo.Session, db *gorm.DB, userID string, guildID strin
 		var cardsToDestroy []models.UserInventory
 		var destroyedCardNames []string
 		cardNameCounts := make(map[string]int)
+		userDestroyedCards := make(map[uint][]string)
 
 		for _, inventory := range allInventories {
 			card, exists := cardMap[inventory.CardID]
@@ -5577,6 +5681,7 @@ func handleDeath(s *discordgo.Session, db *gorm.DB, userID string, guildID strin
 				cardsToDestroy = append(cardsToDestroy, inventory)
 				cardName := card.Name
 				cardNameCounts[cardName]++
+				userDestroyedCards[inventory.UserID] = append(userDestroyedCards[inventory.UserID], cardName)
 			}
 		}
 
@@ -5600,6 +5705,16 @@ func handleDeath(s *discordgo.Session, db *gorm.DB, userID string, guildID strin
 		for _, inventory := range cardsToDestroy {
 			if err := tx.Delete(&inventory).Error; err != nil {
 				return err
+			}
+		}
+
+		for uid, cards := range userDestroyedCards {
+			var u models.User
+			if err := tx.First(&u, uid).Error; err != nil {
+				continue
+			}
+			if err := historyService.RecordCardPlayHistory(tx, guildID, u.DiscordID, u.ID, DeathCardID, "Death", userID, u.Points, u.Points, 0, nil, cards, nil); err != nil {
+				fmt.Printf("Error recording history for Death: %v\n", err)
 			}
 		}
 
@@ -5645,10 +5760,36 @@ func handleTheTower(s *discordgo.Session, db *gorm.DB, userID string, guildID st
 		return nil, err
 	}
 
+	var allUsers []models.User
+	if err := db.Where("guild_id = ? and deleted_at is null", guildID).Find(&allUsers).Error; err != nil {
+		return nil, err
+	}
+
+	pointsBeforeMap := make(map[string]float64)
+	for _, u := range allUsers {
+		pointsBeforeMap[u.DiscordID] = u.Points
+	}
+
 	if err := db.Model(&models.User{}).
 		Where("guild_id = ?", guildID).
 		Update("points", gorm.Expr("GREATEST(0, points - ?)", 50)).Error; err != nil {
 		return nil, err
+	}
+
+	for _, u := range allUsers {
+		if u.DiscordID == userID {
+			continue
+		}
+		pointsBefore := pointsBeforeMap[u.DiscordID]
+		pointsAfter := pointsBefore - 50
+		if pointsAfter < 0 {
+			pointsAfter = 0
+		}
+		pointsDelta := pointsAfter - pointsBefore
+
+		if err := historyService.RecordCardPlayHistory(db, guildID, u.DiscordID, u.ID, TheTowerCardID, "The Tower", userID, pointsBefore, pointsAfter, pointsDelta, nil, nil, nil); err != nil {
+			fmt.Printf("Error recording history for The Tower: %v\n", err)
+		}
 	}
 
 	poolReduction := guild.Pool * 0.75
@@ -5724,7 +5865,7 @@ func handleTheWorld(s *discordgo.Session, db *gorm.DB, userID string, guildID st
 	return result, nil
 }
 
-func handleToTheMoon(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
+func handleTheGoldenWhistle(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
 	var result *models.CardResult
 	if err := db.Transaction(func(tx *gorm.DB) error {
 		var openBets []models.Bet
@@ -5733,7 +5874,7 @@ func handleToTheMoon(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 		}
 		if len(openBets) == 0 {
 			result = &models.CardResult{
-				Message:     "To the Moon 🚀! There were no open bets to resolve.",
+				Message:     "The Golden Whistle! There were no open bets to resolve.",
 				PointsDelta: 0,
 				PoolDelta:   0,
 			}
@@ -5751,27 +5892,63 @@ func handleToTheMoon(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 		}
 		if len(entries) == 0 {
 			result = &models.CardResult{
-				Message:     "To the Moon 🚀! There were no bet entries on open bets to resolve.",
+				Message:     "The Golden Whistle! There were no bet entries on open bets to resolve.",
 				PointsDelta: 0,
 				PoolDelta:   0,
 			}
 			return nil
 		}
 
-		totalPayout := 0.0
+		type UserResolution struct {
+			TotalPayout float64
+			BetIDs      []uint
+			Entries     []models.BetEntry
+		}
+		userResolutions := make(map[uint]*UserResolution)
+
 		for _, entry := range entries {
+			if _, exists := userResolutions[entry.UserID]; !exists {
+				userResolutions[entry.UserID] = &UserResolution{
+					BetIDs:  []uint{},
+					Entries: []models.BetEntry{},
+				}
+			}
 			bet := entry.Bet
 			payout := common.CalculatePayout(entry.Amount, entry.Option, bet)
-			if err := tx.Model(&models.User{}).Where("id = ?", entry.UserID).Updates(map[string]interface{}{
-				"points":           gorm.Expr("points + ?", payout),
-				"total_bets_won":   gorm.Expr("total_bets_won + 1"),
-				"total_points_won": gorm.Expr("total_points_won + ?", payout),
+			userResolutions[entry.UserID].TotalPayout += payout
+			res := userResolutions[entry.UserID]
+			res.BetIDs = append(res.BetIDs, bet.ID)
+			res.Entries = append(res.Entries, entry)
+		}
+
+		totalPayout := 0.0
+		for uid, res := range userResolutions {
+			var u models.User
+			if err := tx.First(&u, uid).Error; err != nil {
+				return err
+			}
+			pointsBefore := u.Points
+
+			if err := tx.Model(&u).Updates(map[string]interface{}{
+				"points":           gorm.Expr("points + ?", res.TotalPayout),
+				"total_bets_won":   gorm.Expr("total_bets_won + ?", len(res.BetIDs)),
+				"total_points_won": gorm.Expr("total_points_won + ?", res.TotalPayout),
 			}).Error; err != nil {
 				return err
 			}
-			totalPayout += payout
-			if err := tx.Delete(&entry).Error; err != nil {
-				return err
+
+			totalPayout += res.TotalPayout
+			pointsAfter := pointsBefore + res.TotalPayout
+			pointsDelta := res.TotalPayout
+
+			if err := historyService.RecordCardPlayHistory(tx, guildID, u.DiscordID, u.ID, TheGoldenWhistleCardID, "The Golden Whistle", userID, pointsBefore, pointsAfter, pointsDelta, nil, nil, res.BetIDs); err != nil {
+				fmt.Printf("Error recording history for The Golden Whistle: %v\n", err)
+			}
+
+			for _, e := range res.Entries {
+				if err := tx.Delete(&e).Error; err != nil {
+					return err
+				}
 			}
 		}
 
@@ -5783,7 +5960,7 @@ func handleToTheMoon(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 		}
 
 		result = &models.CardResult{
-			Message:     fmt.Sprintf("To the Moon 🚀! All %d open bet(s) were resolved as wins. %d entries paid out (%.0f points total).", len(openBets), len(entries), totalPayout),
+			Message:     fmt.Sprintf("The Golden Whistle! All %d open bet(s) were resolved as wins. %d entries paid out (%.0f points total).", len(openBets), len(entries), totalPayout),
 			PointsDelta: 0,
 			PoolDelta:   0,
 		}
@@ -6231,9 +6408,14 @@ func handleStormTheField(s *discordgo.Session, db *gorm.DB, userID string, guild
 	}
 
 	for _, user := range allUsers {
+		pointsBefore := user.Points
 		user.Points += 150
 		if err := db.Save(&user).Error; err != nil {
 			return nil, err
+		}
+
+		if err := historyService.RecordCardPlayHistory(db, guildID, user.DiscordID, user.ID, StormTheFieldCardID, "Storm the Field", userID, pointsBefore, user.Points, 150, nil, nil, nil); err != nil {
+			fmt.Printf("Error recording history for Storm the Field: %v\n", err)
 		}
 	}
 
@@ -6298,6 +6480,7 @@ func handleMarchMadness(s *discordgo.Session, db *gorm.DB, userID string, guildI
 	const maxLines = 25
 
 	for i := range allUsers {
+		pointsBefore := allUsers[i].Points
 		// Random multiplier in [-0.05, +0.05] (i.e. -5% to +5%)
 		multiplier := rand.Float64()*0.1 - 0.05
 		pointsChange := allUsers[i].Points * multiplier
@@ -6309,6 +6492,12 @@ func handleMarchMadness(s *discordgo.Session, db *gorm.DB, userID string, guildI
 
 		if err := db.Save(&allUsers[i]).Error; err != nil {
 			return nil, err
+		}
+
+		if allUsers[i].DiscordID != userID {
+			if err := historyService.RecordCardPlayHistory(db, guildID, allUsers[i].DiscordID, allUsers[i].ID, MarchMadnessCardID, "March Madness", userID, pointsBefore, allUsers[i].Points, pointsChange, nil, nil, nil); err != nil {
+				fmt.Printf("Error recording history for March Madness: %v\n", err)
+			}
 		}
 
 		if shown < maxLines {
@@ -6455,17 +6644,18 @@ func handleNationalChampionship(s *discordgo.Session, db *gorm.DB, userID string
 		otherUserPointsDelta = math.Min(200.0, (guild.Pool-poolWin)/float64(len(allUsers)))
 	}
 	for _, user := range allUsers {
+		pointsBefore := user.Points
 		user.Points += otherUserPointsDelta
 		if err := db.Save(&user).Error; err != nil {
 			return nil, err
 		}
+
+		if err := historyService.RecordCardPlayHistory(db, guildID, user.DiscordID, user.ID, NationalChampionshipCardID, "National Championship", userID, pointsBefore, user.Points, otherUserPointsDelta, nil, nil, nil); err != nil {
+			fmt.Printf("Error recording history for National Championship: %v\n", err)
+		}
 	}
 
 	totalDrain := poolWin + otherUserPointsDelta*float64(len(allUsers))
-	guild.Pool -= totalDrain
-	if err := db.Save(&guild).Error; err != nil {
-		return nil, err
-	}
 
 	return &models.CardResult{
 		Message:     fmt.Sprintf("National Championship! You win 20%% of the current Pool, and every other active player gains %.0f points.", otherUserPointsDelta),

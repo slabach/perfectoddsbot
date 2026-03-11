@@ -19,18 +19,18 @@ import (
 )
 
 type selectionCacheEntry struct {
-	inventoryID uint
-	cardID      uint
-	userID      string
+	inventoryID  uint
+	cardID       uint
+	userID       string
 	targetUserID string
-	guildID     string
-	expiresAt   time.Time
+	guildID      string
+	expiresAt    time.Time
 }
 
 var (
-	selectionCache     = make(map[string]*selectionCacheEntry)
-	selectionCacheMu   sync.RWMutex
-	selectionCacheTTL  = 30 * time.Minute
+	selectionCache    = make(map[string]*selectionCacheEntry)
+	selectionCacheMu  sync.RWMutex
+	selectionCacheTTL = 30 * time.Minute
 )
 
 func init() {
@@ -228,6 +228,9 @@ func HandleMagicianCardSelection(s *discordgo.Session, i *discordgo.InteractionC
 			drawerUser.Points = 0
 		}
 		guild.Pool += cardResult.PoolDelta
+		if guild.Pool < 0 {
+			guild.Pool = 0
+		}
 
 		if err := tx.Save(&drawerUser).Error; err != nil {
 			return err

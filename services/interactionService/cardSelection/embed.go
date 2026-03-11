@@ -29,8 +29,8 @@ func BuildCardResultEmbed(card *models.Card, result *models.CardResult, user mod
 			sign = ""
 		}
 		embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
-			Name:   fmt.Sprintf("<@%s>", user.DiscordID),
-			Value:  fmt.Sprintf("%s%.1f points (Total: %.1f)", sign, result.PointsDelta, user.Points),
+			Name:   "Points Change",
+			Value:  fmt.Sprintf("<@%s>: %s%.1f points (Total: %.1f)", user.DiscordID, sign, result.PointsDelta, user.Points),
 			Inline: true,
 		})
 	}
@@ -40,12 +40,8 @@ func BuildCardResultEmbed(card *models.Card, result *models.CardResult, user mod
 		if result.TargetPointsDelta < 0 {
 			sign = ""
 		}
-		fieldName := "Target"
-		if targetUsername != "" {
-			fieldName = targetUsername
-		}
 		embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
-			Name:   fieldName,
+			Name:   "Target Change",
 			Value:  fmt.Sprintf("<@%s>: %s%.1f points", *result.TargetUserID, sign, result.TargetPointsDelta),
 			Inline: true,
 		})
