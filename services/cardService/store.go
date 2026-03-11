@@ -356,6 +356,8 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 
 	*guild = lockedGuild
 
+	pointsBefore := user.Points
+
 	user.Points -= storeCost
 	guild.Pool += storeCost
 
@@ -397,8 +399,6 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 			return err
 		}
 	}
-
-	pointsBefore := user.Points
 
 	cardResult, err := card.Handler(s, tx, userID, guildID)
 	if err != nil {
