@@ -294,7 +294,7 @@ func RegisterCommands(s *discordgo.Session) error {
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Name:        "days",
-					Description: "Number of days to look back (max 3)",
+					Description: "Number of days to look back (default 1; max 3)",
 					Type:        discordgo.ApplicationCommandOptionInteger,
 					Required:    false,
 				},

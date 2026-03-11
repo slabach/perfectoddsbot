@@ -24,8 +24,8 @@ func ShowRecap(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 	}
 
 	// Default to 7 days
-	days := 7
-	
+	days := 1
+
 	// Check if user provided options
 	options := i.ApplicationCommandData().Options
 	for _, opt := range options {
@@ -85,7 +85,7 @@ func ShowRecap(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 		}
 
 		timestamp := fmt.Sprintf("<t:%d:R>", h.CreatedAt.Unix())
-		
+
 		var actionText string
 		if h.PlayedByUserID == userID {
 			actionText = "You played"
@@ -94,7 +94,7 @@ func ShowRecap(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 		}
 
 		value := fmt.Sprintf("%s **%s**\n", actionText, h.CardName)
-		
+
 		if h.PointsDelta != 0 {
 			sign := "+"
 			if h.PointsDelta < 0 {
