@@ -7,6 +7,7 @@ import (
 	cardService "perfectOddsBot/services/cardService"
 	"perfectOddsBot/services/cardService/cards"
 	"perfectOddsBot/services/guildService"
+	"perfectOddsBot/services/historyService"
 	cardSelection "perfectOddsBot/services/interactionService/cardSelection"
 	"strconv"
 	"strings"
@@ -311,6 +312,7 @@ func HandleCardOptionSelection(s *discordgo.Session, i *discordgo.InteractionCre
 				const maxLines = 25
 
 				for i := range allUsers {
+					pointsBefore := allUsers[i].Points
 					pointsChange := float64(rand.Intn(500) + 1)
 					if rand.Intn(2) == 0 {
 						pointsChange = -pointsChange
@@ -323,6 +325,12 @@ func HandleCardOptionSelection(s *discordgo.Session, i *discordgo.InteractionCre
 
 					if err := tx.Save(&allUsers[i]).Error; err != nil {
 						return err
+					}
+
+					if allUsers[i].DiscordID != user.DiscordID {
+						if err := historyService.RecordCardPlayHistory(tx, guildID, allUsers[i].DiscordID, allUsers[i].ID, cards.TheWheelOfFortuneCardID, "The Wheel of Fortune (Chaos)", user.DiscordID, pointsBefore, allUsers[i].Points, pointsChange, nil, nil, nil); err != nil {
+							fmt.Printf("Error recording history for Wheel Chaos: %v\n", err)
+						}
 					}
 
 					if shown < maxLines {
@@ -590,6 +598,8 @@ func HandlePlayCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCr
 			return fmt.Errorf("user not found: %v", err)
 		}
 
+		pointsBefore := txUser.Points
+
 		txUser.Points += float64(refundAmount)
 		if err := tx.Save(&txUser).Error; err != nil {
 			return fmt.Errorf("error refunding points: %v", err)
@@ -604,15 +614,19 @@ func HandlePlayCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCr
 			return fmt.Errorf("error consuming card: %v", err)
 		}
 
+		pointsAfter := txUser.Points
+		pointsDelta := pointsAfter - pointsBefore
+		if err := historyService.RecordCardPlayHistory(tx, guildID, userID, txUser.ID, cardID, card.Name, userID, pointsBefore, pointsAfter, pointsDelta, nil, nil, nil); err != nil {
+			fmt.Printf("Error recording card play history: %v\n", err)
+		}
+
 		return nil
 	}); err != nil {
 		return err
 	}
 
-	// Only send public notification after successful commit
 	notificationMessage := fmt.Sprintf("<@%s> played **%s** and cancelled bet: **%s**", userID, card.Name, bet.Description)
 	if err := cardService.NotifyCardPlayedWithMessage(s, db, user, card, notificationMessage); err != nil {
-		// Log error but don't fail - notification is best-effort
 		fmt.Printf("Error sending card played notification: %v\n", err)
 	}
 

@@ -7,6 +7,7 @@ const (
 	RickRollCardID           = 59
 	DoubleDownCardID         = 27
 	JesterCardID             = 29
+	StimulusCheckCardID      = 30
 	PettyTheftCardID         = 4
 	GenerousDonationCardID   = 28
 	BetFreezeCardID          = 34
@@ -17,11 +18,14 @@ const (
 	GrandLarcenyCardID       = 31
 	AntiAntiBetCardID        = 68
 	VampireCardID            = 44
+	TheNukeCardID            = 46
 	HostileTakeoverCardID    = 48
 	StopTheStealCardID       = 70
 	GamblerCardID            = 72
 	GamblerOptionYes         = 7201
 	GamblerOptionNo          = 7202
+	EMPCardID                = 84
+	BlackHoleCardID          = 87
 	TheWheelOfFortuneCardID  = 97
 	WheelOptionDeflation     = 9701
 	WheelOptionChaos         = 9702
@@ -38,6 +42,7 @@ const (
 	PoolBoyCardID            = 86
 	LeechCardID              = 78
 	TheLoversCardID          = 219
+	TheHierophantCardID      = 220
 	TheHighPriestessCardID   = 88
 	TheChariotCardID         = 90
 	JusticeCardID            = 91
@@ -48,6 +53,7 @@ const (
 	TheEmperorCardID         = 96
 	TheSunCardID             = 100
 	JudgementCardID          = 101
+	TheTowerCardID           = 102
 	TheDevilCardID           = 99
 	DeathCardID              = 98
 	TheWorldCardID           = 103
@@ -62,7 +68,11 @@ const (
 	RoughingTheKickerCardID    = 20009
 	FullRideCardID             = 30002
 	HeismanCampaignCardID      = 30003
+	NationalChampionshipCardID = 50002
+	StormTheFieldCardID        = 40001
+	MarchMadnessCardID         = 40004
 	BracketBusterCardID        = 40006
+	TheGoldenWhistleCardID     = 50003
 
 	RoyaltyGuildID = "761721066959667220"
 )

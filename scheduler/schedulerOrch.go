@@ -115,6 +115,9 @@ func SetupCron(s *discordgo.Session, db *gorm.DB) {
 		if err != nil {
 			fmt.Println(err)
 		}
+
+		// Runs every hour to clean up old play history
+		scheduler_jobs.CleanupPlayHistory(s, db)
 	})
 
 	if err != nil {

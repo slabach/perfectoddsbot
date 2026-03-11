@@ -2,10 +2,12 @@ package cardService
 
 import (
 	"fmt"
+	"log"
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/cardService/cards"
 	"perfectOddsBot/services/common"
 	"perfectOddsBot/services/guildService"
+	"perfectOddsBot/services/historyService"
 	"strings"
 	"time"
 
@@ -396,6 +398,8 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 		}
 	}
 
+	pointsBefore := user.Points
+
 	cardResult, err := card.Handler(s, tx, userID, guildID)
 	if err != nil {
 		tx.Rollback()
@@ -452,6 +456,12 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 				return err
 			}
 
+			pointsAfter := user.Points
+			pointsDelta := pointsAfter - pointsBefore
+			if err := historyService.RecordCardPlayHistory(tx, guildID, userID, user.ID, card.ID, card.Name, userID, pointsBefore, pointsAfter, pointsDelta, nil, nil, nil); err != nil {
+				log.Printf("Error recording card play history: %v", err)
+			}
+
 			tx.Commit()
 			return nil
 		} else if cardResult.SelectionType == "bet" {
@@ -472,6 +482,12 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 				tx.Rollback()
 				common.SendError(s, i, err, db)
 				return err
+			}
+
+			pointsAfter := user.Points
+			pointsDelta := pointsAfter - pointsBefore
+			if err := historyService.RecordCardPlayHistory(tx, guildID, userID, user.ID, card.ID, card.Name, userID, pointsBefore, pointsAfter, pointsDelta, nil, nil, nil); err != nil {
+				log.Printf("Error recording card play history: %v", err)
 			}
 
 			tx.Commit()
@@ -500,6 +516,12 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 			tx.Rollback()
 			common.SendError(s, i, err, db)
 			return err
+		}
+
+		pointsAfter := user.Points
+		pointsDelta := pointsAfter - pointsBefore
+		if err := historyService.RecordCardPlayHistory(tx, guildID, userID, user.ID, card.ID, card.Name, userID, pointsBefore, pointsAfter, pointsDelta, nil, nil, nil); err != nil {
+			log.Printf("Error recording card play history: %v", err)
 		}
 
 		tx.Commit()
@@ -765,6 +787,9 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 				Where("discord_id = ? AND guild_id = ?", *cardResult.TargetUserID, guildID).
 				First(&userToUpdate).Error; err == nil {
+
+				targetPointsBefore := userToUpdate.Points
+
 				userToUpdate.Points += cardResult.TargetPointsDelta
 				if userToUpdate.Points < 0 {
 					userToUpdate.Points = 0
@@ -773,6 +798,12 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 					tx.Rollback()
 					common.SendError(s, i, err, db)
 					return err
+				}
+
+				targetPointsAfter := userToUpdate.Points
+				targetPointsDelta := targetPointsAfter - targetPointsBefore
+				if err := historyService.RecordCardPlayHistory(tx, guildID, *cardResult.TargetUserID, userToUpdate.ID, card.ID, card.Name, userID, targetPointsBefore, targetPointsAfter, targetPointsDelta, nil, nil, nil); err != nil {
+					log.Printf("Error recording card play history for target: %v", err)
 				}
 			}
 			targetUsername = common.GetUsernameWithDB(db, s, guildID, *cardResult.TargetUserID)
