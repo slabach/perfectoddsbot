@@ -604,7 +604,7 @@ func HandleBracketBusterSelection(s *discordgo.Session, i *discordgo.Interaction
 			return fmt.Errorf("card not found")
 		}
 		result := &models.CardResult{
-			Message:      fmt.Sprintf("Bracket Buster! <%s> cancelled <@%s>'s smallest active bet on \"%s\" (%.0f points). %.0f points have been added to the pool.", userID, targetUserID, bet.Description, wagerAmount, wagerAmount),
+			Message:      fmt.Sprintf("Bracket Buster! <@%s> cancelled <@%s>'s smallest active bet on \"%s\" (%.0f points). %.0f points have been added to the pool.", userID, targetUserID, bet.Description, wagerAmount, wagerAmount),
 			PointsDelta:  0,
 			PoolDelta:    wagerAmount,
 			TargetUserID: &targetUserID,

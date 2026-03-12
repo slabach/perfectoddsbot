@@ -1386,7 +1386,7 @@ func handleMajorGlitch(s *discordgo.Session, db *gorm.DB, userID string, guildID
 	updatedCount := int64(0)
 	if err := db.Transaction(func(tx *gorm.DB) error {
 		var affectedUsers []models.User
-		if err := tx.Where("guild_id = ? AND discord_id != ?", guildID, userID).Find(&affectedUsers).Error; err != nil {
+		if err := tx.Where("guild_id = ? AND discord_id != ?", guildID, userID).Order("id").Find(&affectedUsers).Error; err != nil {
 			return err
 		}
 
