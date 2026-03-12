@@ -55,7 +55,7 @@ func ShowRecap(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
-				Content: fmt.Sprintf("No card history found for you in the last %d days.", days),
+				Content: fmt.Sprintf("You haven't been affected by anyone else's cards in the last %d days.", days),
 				Flags:   discordgo.MessageFlagsEphemeral,
 			},
 		})
