@@ -102,8 +102,11 @@ func showPlayableCardSelectMenu(s *discordgo.Session, i *discordgo.InteractionCr
 			label = fmt.Sprintf("%s (x%d)", pc.Card.Name, pc.Count)
 		}
 
-		if len(label) > 100 {
-			label = label[:97] + "..."
+		if len(label) == 0 {
+			label = fmt.Sprintf("Card %d", pc.Card.ID)
+		}
+		if len(label) > 25 {
+			label = label[:22] + "..."
 		}
 
 		description := pc.Card.Description

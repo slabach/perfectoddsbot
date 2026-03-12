@@ -84,8 +84,11 @@ func ShowPointRangeUserSelectMenu(s *discordgo.Session, i *discordgo.Interaction
 			displayName = *username
 		}
 
-		if len(displayName) > 100 {
-			displayName = displayName[:97] + "..."
+		if len(displayName) == 0 {
+			displayName = fmt.Sprintf("User %s", u.DiscordID)
+		}
+		if len(displayName) > 25 {
+			displayName = displayName[:22] + "..."
 		}
 
 		description := fmt.Sprintf("%.1f points", u.Points)
@@ -183,8 +186,11 @@ func ShowTransferPortalUserSelectMenu(s *discordgo.Session, i *discordgo.Interac
 		} else {
 			displayName = fmt.Sprintf("User %s", u.DiscordID)
 		}
-		if len(displayName) > 100 {
-			displayName = displayName[:97] + "..."
+		if len(displayName) == 0 {
+			displayName = fmt.Sprintf("User %s", u.DiscordID)
+		}
+		if len(displayName) > 25 {
+			displayName = displayName[:22] + "..."
 		}
 		description := fmt.Sprintf("%.1f points", u.Points)
 		if len(description) > 100 {
@@ -274,8 +280,11 @@ func ShowBetSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, car
 		}
 
 		label := fmt.Sprintf("%s (Pick: %s)", res.Description, pickedTeam)
-		if len(label) > 100 {
-			label = label[:97] + "..."
+		if len(label) == 0 {
+			label = fmt.Sprintf("Bet %d", res.BetID)
+		}
+		if len(label) > 25 {
+			label = label[:22] + "..."
 		}
 
 		value := fmt.Sprintf("%d", res.BetID)
@@ -326,8 +335,11 @@ func ShowCardOptionsMenu(s *discordgo.Session, i *discordgo.InteractionCreate, c
 		label := opt.Name
 		description := opt.Description
 
-		if len(label) > 100 {
-			label = label[:97] + "..."
+		if len(label) == 0 {
+			label = fmt.Sprintf("Option %d", opt.ID)
+		}
+		if len(label) > 25 {
+			label = label[:22] + "..."
 		}
 		if len(description) > 100 {
 			description = description[:97] + "..."

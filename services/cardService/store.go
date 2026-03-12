@@ -155,8 +155,11 @@ func ShowStore(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 		}
 
 		label := card.Name
-		if len(label) > 100 {
-			label = label[:97] + "..."
+		if len(label) == 0 {
+			label = fmt.Sprintf("Card %d", card.ID)
+		}
+		if len(label) > 25 {
+			label = label[:22] + "..."
 		}
 
 		description := fmt.Sprintf("%.0f points", cost)

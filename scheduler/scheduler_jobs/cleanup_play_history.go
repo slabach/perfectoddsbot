@@ -13,7 +13,6 @@ import (
 func CleanupPlayHistory(s *discordgo.Session, db *gorm.DB) {
 	log.Println("Running cleanup play history job...")
 
-	// Delete records older than RecapMaxDays (matches maximum recap query window)
 	cutoffTime := time.Now().AddDate(0, 0, -cardService.RecapMaxDays)
 
 	result := db.Unscoped().Where("created_at < ?", cutoffTime).Delete(&models.CardPlayHistory{})

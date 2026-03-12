@@ -117,7 +117,6 @@ func HandleEmperorPlay(s *discordgo.Session, i *discordgo.InteractionCreate, db 
 		PoolDelta:   0,
 	}, user, "", guild.Pool)
 
-	// Fail fast on Discord errors - respond first
 	if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
@@ -186,7 +185,6 @@ func HandlePoolBoyPlay(s *discordgo.Session, i *discordgo.InteractionCreate, db 
 		return fmt.Errorf("guild not found: %v", err)
 	}
 
-	// Check if a pool drain is active before proceeding
 	if guild.PoolDrainUntil == nil {
 		if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -231,17 +229,14 @@ func HandlePoolBoyPlay(s *discordgo.Session, i *discordgo.InteractionCreate, db 
 			return fmt.Errorf("guild not found: %v", err)
 		}
 
-		// Check again in transaction (race condition protection)
 		if txGuild.PoolDrainUntil == nil {
-			// Send followup ephemeral message since we already responded
 			if _, err := s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
 				Content: "The pool drain was already cleared by another action. Your card was not consumed.",
 				Flags:   discordgo.MessageFlagsEphemeral,
 			}); err != nil {
-				// Log but don't fail the transaction
 				fmt.Printf("Error sending followup message: %v\n", err)
 			}
-			return nil // Return nil to avoid consuming the card
+			return nil
 		}
 
 		txGuild.PoolDrainUntil = nil

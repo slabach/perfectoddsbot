@@ -291,59 +291,40 @@ func handleSmallRebate(s *discordgo.Session, db *gorm.DB, userID string, guildID
 }
 
 func handleTipJar(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
-	var result *models.CardResult
-	if err := db.Transaction(func(tx *gorm.DB) error {
-		var user models.User
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Where("discord_id = ? AND guild_id = ?", userID, guildID).
-			First(&user).Error; err != nil {
-			return err
-		}
-
-		var userAbove models.User
-		query := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Where("guild_id = ? AND (points > ? OR (points = ? AND id < ?))", guildID, user.Points, user.Points, user.ID).
-			Order("points DESC, id ASC").
-			First(&userAbove)
-
-		if query.Error != nil || userAbove.ID == 0 {
-			result = &models.CardResult{
-				Message:     "You're at the top of the leaderboard! No one to tip you. The card fizzles out.",
-				PointsDelta: 0,
-				PoolDelta:   0,
-			}
-			return nil
-		}
-
-		transferAmount := 10.0
-		if userAbove.Points < transferAmount {
-			transferAmount = userAbove.Points
-		}
-
-		user.Points += transferAmount
-		userAbove.Points -= transferAmount
-
-		if err := tx.Save(&user).Error; err != nil {
-			return err
-		}
-		if err := tx.Save(&userAbove).Error; err != nil {
-			return err
-		}
-
-		targetID := userAbove.DiscordID
-		result = &models.CardResult{
-			Message:           fmt.Sprintf("You shook the tip jar! The person above you gave you %.1f points.", transferAmount),
-			PointsDelta:       transferAmount,
-			PoolDelta:         0,
-			TargetUserID:      &targetID,
-			TargetPointsDelta: -transferAmount,
-		}
-		return nil
-	}); err != nil {
+	var user models.User
+	if err := db.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("discord_id = ? AND guild_id = ?", userID, guildID).
+		First(&user).Error; err != nil {
 		return nil, err
 	}
 
-	return result, nil
+	var userAbove models.User
+	query := db.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("guild_id = ? AND (points > ? OR (points = ? AND id < ?))", guildID, user.Points, user.Points, user.ID).
+		Order("points DESC, id ASC").
+		First(&userAbove)
+
+	if query.Error != nil || userAbove.ID == 0 {
+		return &models.CardResult{
+			Message:     "You're at the top of the leaderboard! No one to tip you. The card fizzles out.",
+			PointsDelta: 0,
+			PoolDelta:   0,
+		}, nil
+	}
+
+	transferAmount := 10.0
+	if userAbove.Points < transferAmount {
+		transferAmount = userAbove.Points
+	}
+
+	targetID := userAbove.DiscordID
+	return &models.CardResult{
+		Message:           fmt.Sprintf("You shook the tip jar! The person above you gave you %.1f points.", transferAmount),
+		PointsDelta:       transferAmount,
+		PoolDelta:         0,
+		TargetUserID:      &targetID,
+		TargetPointsDelta: -transferAmount,
+	}, nil
 }
 
 func handleNeutralSiteGame(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
