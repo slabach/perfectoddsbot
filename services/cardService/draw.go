@@ -448,8 +448,6 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		}
 	}
 
-	pointsBefore := user.Points
-
 	cardResult, err := card.Handler(s, tx, userID, guildID)
 	if err != nil {
 		tx.Rollback()
@@ -512,12 +510,6 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 				return
 			}
 
-			pointsAfter := user.Points
-			pointsDelta := pointsAfter - pointsBefore
-			if err := historyService.RecordCardPlayHistory(tx, guildID, userID, user.ID, card.ID, card.Name, userID, pointsBefore, pointsAfter, pointsDelta, nil, nil, nil); err != nil {
-				log.Printf("Error recording card play history: %v", err)
-			}
-
 			if err := tx.Commit().Error; err != nil {
 				tx.Rollback()
 				common.SendError(s, i, fmt.Errorf("error committing transaction: %v", err), db)
@@ -545,12 +537,6 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 				tx.Rollback()
 				common.SendError(s, i, err, db)
 				return
-			}
-
-			pointsAfter := user.Points
-			pointsDelta := pointsAfter - pointsBefore
-			if err := historyService.RecordCardPlayHistory(tx, guildID, userID, user.ID, card.ID, card.Name, userID, pointsBefore, pointsAfter, pointsDelta, nil, nil, nil); err != nil {
-				log.Printf("Error recording card play history: %v", err)
 			}
 
 			if err := tx.Commit().Error; err != nil {
@@ -583,12 +569,6 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 			tx.Rollback()
 			common.SendError(s, i, err, db)
 			return
-		}
-
-		pointsAfter := user.Points
-		pointsDelta := pointsAfter - pointsBefore
-		if err := historyService.RecordCardPlayHistory(tx, guildID, userID, user.ID, card.ID, card.Name, userID, pointsBefore, pointsAfter, pointsDelta, nil, nil, nil); err != nil {
-			log.Printf("Error recording card play history: %v", err)
 		}
 
 		if err := tx.Commit().Error; err != nil {
@@ -873,8 +853,10 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 
 				targetPointsAfter := userToUpdate.Points
 				targetPointsDelta := targetPointsAfter - targetPointsBefore
-				if err := historyService.RecordCardPlayHistory(tx, guildID, *cardResult.TargetUserID, userToUpdate.ID, card.ID, card.Name, userID, targetPointsBefore, targetPointsAfter, targetPointsDelta, nil, nil, nil); err != nil {
-					log.Printf("Error recording card play history for target: %v", err)
+				if *cardResult.TargetUserID != userID {
+					if err := historyService.RecordCardPlayHistory(tx, guildID, *cardResult.TargetUserID, userToUpdate.ID, card.ID, card.Name, userID, targetPointsBefore, targetPointsAfter, targetPointsDelta, nil, nil, nil); err != nil {
+						log.Printf("Error recording card play history for target: %v", err)
+					}
 				}
 			}
 			targetUsername = common.GetUsernameWithDB(db, s, guildID, *cardResult.TargetUserID)
@@ -890,12 +872,6 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		tx.Rollback()
 		common.SendError(s, i, err, db)
 		return
-	}
-
-	pointsAfter := user.Points
-	pointsDelta := pointsAfter - pointsBefore
-	if err := historyService.RecordCardPlayHistory(tx, guildID, userID, user.ID, card.ID, card.Name, userID, pointsBefore, pointsAfter, pointsDelta, nil, nil, nil); err != nil {
-		log.Printf("Error recording card play history: %v", err)
 	}
 
 	if err := tx.Commit().Error; err != nil {

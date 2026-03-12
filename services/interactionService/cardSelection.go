@@ -21,16 +21,6 @@ func HandleCardUserSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 	customID := i.MessageComponentData().CustomID
 	var err error
 
-	if !cardService.TryMarkSelectorUsed(customID) {
-		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Content: "❌ This card has already been played. You can only use each card once.",
-				Flags:   discordgo.MessageFlagsEphemeral,
-			},
-		})
-	}
-
 	parts := strings.Split(customID, "_")
 	if len(parts) != 6 {
 		return fmt.Errorf("invalid card selection custom ID format")
@@ -39,6 +29,16 @@ func HandleCardUserSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 	cardID, err := strconv.Atoi(parts[1])
 	if err != nil {
 		return fmt.Errorf("invalid card ID: %v", err)
+	}
+
+	if !cardService.TryMarkSelectorUsed(customID) {
+		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "❌ This card has already been played. You can only use each card once.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
 	}
 
 	userID := parts[3]
@@ -130,16 +130,6 @@ func HandleCardUserSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 func HandleCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) error {
 	customID := i.MessageComponentData().CustomID
 
-	if !cardService.TryMarkSelectorUsed(customID) {
-		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Content: "❌ This card has already been played. You can only use each card once.",
-				Flags:   discordgo.MessageFlagsEphemeral,
-			},
-		})
-	}
-
 	parts := strings.Split(customID, "_")
 	if len(parts) != 6 {
 		return fmt.Errorf("invalid card bet selection custom ID format")
@@ -150,6 +140,16 @@ func HandleCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCreate
 		return fmt.Errorf("invalid card ID: %v", err)
 	}
 	cardID := uint(cardIDInt)
+
+	if !cardService.TryMarkSelectorUsed(customID) {
+		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "❌ This card has already been played. You can only use each card once.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+	}
 
 	userID := parts[3]
 	guildID := parts[4]
@@ -232,16 +232,6 @@ func HandleCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCreate
 func HandleCardOptionSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) error {
 	customID := i.MessageComponentData().CustomID
 
-	if !cardService.TryMarkSelectorUsed(customID) {
-		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Content: "❌ This card has already been played. You can only use each card once.",
-				Flags:   discordgo.MessageFlagsEphemeral,
-			},
-		})
-	}
-
 	parts := strings.Split(customID, "_")
 	if len(parts) != 6 {
 		return fmt.Errorf("invalid card option selection custom ID format")
@@ -252,6 +242,16 @@ func HandleCardOptionSelection(s *discordgo.Session, i *discordgo.InteractionCre
 		return fmt.Errorf("invalid card ID: %v", err)
 	}
 	cardID := uint(cardIDInt)
+
+	if !cardService.TryMarkSelectorUsed(customID) {
+		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "❌ This card has already been played. You can only use each card once.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+	}
 
 	userID := parts[3]
 	guildID := parts[4]
@@ -600,8 +600,6 @@ func HandlePlayCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCr
 			return fmt.Errorf("user not found: %v", err)
 		}
 
-		pointsBefore := txUser.Points
-
 		txUser.Points += float64(refundAmount)
 		if err := tx.Save(&txUser).Error; err != nil {
 			return fmt.Errorf("error refunding points: %v", err)
@@ -614,12 +612,6 @@ func HandlePlayCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCr
 
 		if err := cardService.PlayCardFromInventoryInTransaction(tx, txUser, cardID); err != nil {
 			return fmt.Errorf("error consuming card: %v", err)
-		}
-
-		pointsAfter := txUser.Points
-		pointsDelta := pointsAfter - pointsBefore
-		if err := historyService.RecordCardPlayHistory(tx, guildID, userID, txUser.ID, cardID, card.Name, userID, pointsBefore, pointsAfter, pointsDelta, nil, nil, nil); err != nil {
-			fmt.Printf("Error recording card play history: %v\n", err)
 		}
 
 		return nil
