@@ -13,28 +13,22 @@ func RecordCardPlayHistory(db *gorm.DB, guildID string, targetUserID string, tar
 	var gainedJSON, lostJSON, betsJSON []byte
 	var err error
 
-	if len(handCardsGained) > 0 {
-		gainedJSON, err = json.Marshal(handCardsGained)
-		if err != nil {
-			log.Printf("Error marshaling handCardsGained: %v", err)
-			return err
-		}
+	gainedJSON, err = json.Marshal(handCardsGained)
+	if err != nil {
+		log.Printf("Error marshaling handCardsGained: %v", err)
+		return err
 	}
 
-	if len(handCardsLost) > 0 {
-		lostJSON, err = json.Marshal(handCardsLost)
-		if err != nil {
-			log.Printf("Error marshaling handCardsLost: %v", err)
-			return err
-		}
+	lostJSON, err = json.Marshal(handCardsLost)
+	if err != nil {
+		log.Printf("Error marshaling handCardsLost: %v", err)
+		return err
 	}
 
-	if len(betsResolved) > 0 {
-		betsJSON, err = json.Marshal(betsResolved)
-		if err != nil {
-			log.Printf("Error marshaling betsResolved: %v", err)
-			return err
-		}
+	betsJSON, err = json.Marshal(betsResolved)
+	if err != nil {
+		log.Printf("Error marshaling betsResolved: %v", err)
+		return err
 	}
 
 	history := models.CardPlayHistory{
