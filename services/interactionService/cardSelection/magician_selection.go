@@ -8,6 +8,7 @@ import (
 	cardService "perfectOddsBot/services/cardService"
 	"perfectOddsBot/services/cardService/cards"
 	"perfectOddsBot/services/common"
+	"perfectOddsBot/services/historyService"
 	"strconv"
 	"strings"
 	"sync"
@@ -213,9 +214,35 @@ func HandleMagicianCardSelection(s *discordgo.Session, i *discordgo.InteractionC
 			First(&guild).Error; err != nil {
 			return err
 		}
+		var targetUser models.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("discord_id = ? AND guild_id = ?", targetUserID, guildID).
+			First(&targetUser).Error; err != nil {
+			return err
+		}
+		targetPointsBeforeBorrow := targetUser.Points
 
 		if err := tx.Delete(&inventoryItem).Error; err != nil {
 			return err
+		}
+		if targetUser.DiscordID != drawerUserID {
+			if err := historyService.RecordCardPlayHistory(
+				tx,
+				guildID,
+				targetUser.DiscordID,
+				targetUser.ID,
+				cards.TheMagicianCardID,
+				"The Magician",
+				drawerUserID,
+				targetPointsBeforeBorrow,
+				targetPointsBeforeBorrow,
+				0,
+				nil,
+				[]string{card.Name},
+				nil,
+			); err != nil {
+				fmt.Printf("Error recording history for The Magician card borrow: %v\n", err)
+			}
 		}
 
 		cardResult, err := card.Handler(s, tx, drawerUserID, guildID)
@@ -244,12 +271,32 @@ func HandleMagicianCardSelection(s *discordgo.Session, i *discordgo.InteractionC
 			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 				Where("discord_id = ? AND guild_id = ?", *cardResult.TargetUserID, guildID).
 				First(&targetUser).Error; err == nil {
+				targetPointsBefore := targetUser.Points
 				targetUser.Points += cardResult.TargetPointsDelta
 				if targetUser.Points < 0 {
 					targetUser.Points = 0
 				}
 				if err := tx.Save(&targetUser).Error; err != nil {
 					return err
+				}
+				if targetUser.DiscordID != drawerUserID {
+					if err := historyService.RecordCardPlayHistory(
+						tx,
+						guildID,
+						targetUser.DiscordID,
+						targetUser.ID,
+						card.ID,
+						card.Name,
+						drawerUserID,
+						targetPointsBefore,
+						targetUser.Points,
+						targetUser.Points-targetPointsBefore,
+						nil,
+						nil,
+						nil,
+					); err != nil {
+						fmt.Printf("Error recording history for borrowed card target effect: %v\n", err)
+					}
 				}
 			}
 		}

@@ -359,8 +359,6 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 
 	*guild = lockedGuild
 
-	pointsBefore := user.Points
-
 	user.Points -= storeCost
 	guild.Pool += storeCost
 
@@ -459,12 +457,6 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 				return err
 			}
 
-			pointsAfter := user.Points
-			pointsDelta := pointsAfter - pointsBefore
-			if err := historyService.RecordCardPlayHistory(tx, guildID, userID, user.ID, card.ID, card.Name, userID, pointsBefore, pointsAfter, pointsDelta, nil, nil, nil); err != nil {
-				log.Printf("Error recording card play history: %v", err)
-			}
-
 			tx.Commit()
 			return nil
 		} else if cardResult.SelectionType == "bet" {
@@ -488,12 +480,6 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 				tx.Rollback()
 				common.SendError(s, i, err, db)
 				return err
-			}
-
-			pointsAfter := user.Points
-			pointsDelta := pointsAfter - pointsBefore
-			if err := historyService.RecordCardPlayHistory(tx, guildID, userID, user.ID, card.ID, card.Name, userID, pointsBefore, pointsAfter, pointsDelta, nil, nil, nil); err != nil {
-				log.Printf("Error recording card play history: %v", err)
 			}
 
 			tx.Commit()
@@ -522,12 +508,6 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 			tx.Rollback()
 			common.SendError(s, i, err, db)
 			return err
-		}
-
-		pointsAfter := user.Points
-		pointsDelta := pointsAfter - pointsBefore
-		if err := historyService.RecordCardPlayHistory(tx, guildID, userID, user.ID, card.ID, card.Name, userID, pointsBefore, pointsAfter, pointsDelta, nil, nil, nil); err != nil {
-			log.Printf("Error recording card play history: %v", err)
 		}
 
 		tx.Commit()
@@ -808,8 +788,10 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 
 				targetPointsAfter := userToUpdate.Points
 				targetPointsDelta := targetPointsAfter - targetPointsBefore
-				if err := historyService.RecordCardPlayHistory(tx, guildID, *cardResult.TargetUserID, userToUpdate.ID, card.ID, card.Name, userID, targetPointsBefore, targetPointsAfter, targetPointsDelta, nil, nil, nil); err != nil {
-					log.Printf("Error recording card play history for target: %v", err)
+				if *cardResult.TargetUserID != userID {
+					if err := historyService.RecordCardPlayHistory(tx, guildID, *cardResult.TargetUserID, userToUpdate.ID, card.ID, card.Name, userID, targetPointsBefore, targetPointsAfter, targetPointsDelta, nil, nil, nil); err != nil {
+						log.Printf("Error recording card play history for target: %v", err)
+					}
 				}
 			}
 			targetUsername = common.GetUsernameWithDB(db, s, guildID, *cardResult.TargetUserID)
@@ -825,12 +807,6 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 		tx.Rollback()
 		common.SendError(s, i, err, db)
 		return err
-	}
-
-	pointsAfter := user.Points
-	pointsDelta := pointsAfter - pointsBefore
-	if err := historyService.RecordCardPlayHistory(tx, guildID, userID, user.ID, card.ID, card.Name, userID, pointsBefore, pointsAfter, pointsDelta, nil, nil, nil); err != nil {
-		log.Printf("Error recording card play history: %v", err)
 	}
 
 	tx.Commit()

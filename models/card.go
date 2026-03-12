@@ -49,12 +49,14 @@ type CardRarity struct {
 }
 
 type CardResult struct {
-	ID                uint
-	Message           string
-	PointsDelta       float64
-	PoolDelta         float64
-	TargetUserID      *string
-	TargetPointsDelta float64
-	RequiresSelection bool
-	SelectionType     string
+	ID                 uint
+	Message            string
+	PointsDelta        float64
+	PoolDelta          float64
+	TargetUserID       *string
+	TargetUserDBID     uint
+	TargetPointsBefore float64
+	TargetPointsDelta  float64
+	RequiresSelection  bool
+	SelectionType      string
 }

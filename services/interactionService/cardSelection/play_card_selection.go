@@ -5,7 +5,6 @@ import (
 	"perfectOddsBot/models"
 	cardService "perfectOddsBot/services/cardService"
 	"perfectOddsBot/services/common"
-	"perfectOddsBot/services/historyService"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -153,10 +152,6 @@ func HandleEmperorPlay(s *discordgo.Session, i *discordgo.InteractionCreate, db 
 			return fmt.Errorf("error consuming card: %v", err)
 		}
 
-		if err := historyService.RecordCardPlayHistory(tx, guildID, userID, txUser.ID, cardID, card.Name, userID, txUser.Points, txUser.Points, 0, nil, nil, nil); err != nil {
-			fmt.Printf("Error recording card play history: %v\n", err)
-		}
-
 		return nil
 	}); err != nil {
 		return err
@@ -246,10 +241,6 @@ func HandlePoolBoyPlay(s *discordgo.Session, i *discordgo.InteractionCreate, db 
 
 		if err := cardService.PlayCardFromInventoryInTransaction(tx, txUser, cardID); err != nil {
 			return fmt.Errorf("error consuming card: %v", err)
-		}
-
-		if err := historyService.RecordCardPlayHistory(tx, guildID, userID, txUser.ID, cardID, card.Name, userID, txUser.Points, txUser.Points, 0, nil, nil, nil); err != nil {
-			fmt.Printf("Error recording card play history: %v\n", err)
 		}
 
 		return nil

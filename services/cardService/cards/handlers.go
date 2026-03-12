@@ -1383,18 +1383,35 @@ func handleMajorGlitch(s *discordgo.Session, db *gorm.DB, userID string, guildID
 	}
 
 	gainAmount := 100.0
-	var updatedCount int64
-	if err := db.Model(&models.User{}).
-		Where("guild_id = ? AND discord_id != ?", guildID, userID).
-		Count(&updatedCount).Error; err != nil {
-		return nil, err
-	}
-	if updatedCount > 0 {
-		if err := db.Model(&models.User{}).
-			Where("guild_id = ? AND discord_id != ?", guildID, userID).
-			Update("points", gorm.Expr("points + ?", gainAmount)).Error; err != nil {
-			return nil, err
+	updatedCount := int64(0)
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		var affectedUsers []models.User
+		if err := tx.Where("guild_id = ? AND discord_id != ?", guildID, userID).Find(&affectedUsers).Error; err != nil {
+			return err
 		}
+
+		for _, affected := range affectedUsers {
+			var locked models.User
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&locked, affected.ID).Error; err != nil {
+				return err
+			}
+
+			pointsBefore := locked.Points
+			locked.Points += gainAmount
+			if err := tx.Save(&locked).Error; err != nil {
+				return err
+			}
+
+			if locked.DiscordID != userID {
+				if err := historyService.RecordCardPlayHistory(tx, guildID, locked.DiscordID, locked.ID, 26, "Major Glitch", userID, pointsBefore, locked.Points, locked.Points-pointsBefore, nil, nil, nil); err != nil {
+					fmt.Printf("Error recording history for Major Glitch: %v\n", err)
+				}
+			}
+			updatedCount++
+		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 
 	return &models.CardResult{
@@ -2379,12 +2396,18 @@ func handleSocialism(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 					actualTake = randomUser.Points
 				}
 				if actualTake > 0 {
+					pointsBefore := randomUser.Points
 					randomUser.Points -= actualTake
 					if randomUser.Points < 0 {
 						randomUser.Points = 0
 					}
 					if err := tx.Save(&randomUser).Error; err != nil {
 						return err
+					}
+					if randomUser.DiscordID != userID {
+						if err := historyService.RecordCardPlayHistory(tx, guildID, randomUser.DiscordID, randomUser.ID, 41, "Socialism", userID, pointsBefore, randomUser.Points, randomUser.Points-pointsBefore, nil, nil, nil); err != nil {
+							fmt.Printf("Error recording history for Socialism redirect target: %v\n", err)
+						}
 					}
 					totalCollected += actualTake
 					randomDisplayName := fmt.Sprintf("<@%s>", randomUser.DiscordID)
@@ -2407,10 +2430,16 @@ func handleSocialism(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 			}
 
 			if takeAmount > 0 {
+				pointsBefore := lockedTop.Points
 				lockedTop.Points -= takeAmount
 				totalCollected += takeAmount
 				if err := tx.Save(&lockedTop).Error; err != nil {
 					return err
+				}
+				if lockedTop.DiscordID != userID {
+					if err := historyService.RecordCardPlayHistory(tx, guildID, lockedTop.DiscordID, lockedTop.ID, 41, "Socialism", userID, pointsBefore, lockedTop.Points, lockedTop.Points-pointsBefore, nil, nil, nil); err != nil {
+						fmt.Printf("Error recording history for Socialism top player: %v\n", err)
+					}
 				}
 				topMessage += fmt.Sprintf("%s lost %.0f points\n", topDisplayName, takeAmount)
 			}
@@ -2425,9 +2454,15 @@ func handleSocialism(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 					return err
 				}
 
+				pointsBefore := lockedBottom.Points
 				lockedBottom.Points += amountPerBottomPlayer
 				if err := tx.Save(&lockedBottom).Error; err != nil {
 					return err
+				}
+				if lockedBottom.DiscordID != userID {
+					if err := historyService.RecordCardPlayHistory(tx, guildID, lockedBottom.DiscordID, lockedBottom.ID, 41, "Socialism", userID, pointsBefore, lockedBottom.Points, lockedBottom.Points-pointsBefore, nil, nil, nil); err != nil {
+						fmt.Printf("Error recording history for Socialism bottom player: %v\n", err)
+					}
 				}
 
 				bottomPlayerName := lockedBottom.Username
@@ -2587,6 +2622,11 @@ func handleRobinHood(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 			if err := tx.Save(&randomUser).Error; err != nil {
 				return err
 			}
+			if randomUser.DiscordID != userID {
+				if err := historyService.RecordCardPlayHistory(tx, guildID, randomUser.DiscordID, randomUser.ID, 42, "Robin Hood", userID, randomUser.Points+takeAmount, randomUser.Points, -takeAmount, nil, nil, nil); err != nil {
+					fmt.Printf("Error recording history for Robin Hood redirect target: %v\n", err)
+				}
+			}
 
 			randomUsername := randomUser.Username
 			randomDisplayName := ""
@@ -2634,14 +2674,26 @@ func handleRobinHood(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 			return nil
 		}
 
+		topPointsBefore := lockedTop.Points
 		lockedTop.Points -= takeAmount
 		if err := tx.Save(&lockedTop).Error; err != nil {
 			return err
 		}
+		if lockedTop.DiscordID != userID {
+			if err := historyService.RecordCardPlayHistory(tx, guildID, lockedTop.DiscordID, lockedTop.ID, 42, "Robin Hood", userID, topPointsBefore, lockedTop.Points, lockedTop.Points-topPointsBefore, nil, nil, nil); err != nil {
+				fmt.Printf("Error recording history for Robin Hood richest target: %v\n", err)
+			}
+		}
 
+		bottomPointsBefore := lockedBottom.Points
 		lockedBottom.Points += 150.0
 		if err := tx.Save(&lockedBottom).Error; err != nil {
 			return err
+		}
+		if lockedBottom.DiscordID != userID {
+			if err := historyService.RecordCardPlayHistory(tx, guildID, lockedBottom.DiscordID, lockedBottom.ID, 42, "Robin Hood", userID, bottomPointsBefore, lockedBottom.Points, lockedBottom.Points-bottomPointsBefore, nil, nil, nil); err != nil {
+				fmt.Printf("Error recording history for Robin Hood poorest target: %v\n", err)
+			}
 		}
 
 		message := fmt.Sprintf("Robin Hood strikes! Stole %.0f points from %s, gave 150 to %s, and kept 50 for yourself!", takeAmount, topDisplayName, bottomDisplayName)
@@ -2770,9 +2822,15 @@ func handleRedShells(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 					loss = randomLockedTarget.Points
 				}
 
+				pointsBefore := randomLockedTarget.Points
 				randomLockedTarget.Points -= loss
 				if err := tx.Save(&randomLockedTarget).Error; err != nil {
 					return err
+				}
+				if randomLockedTarget.DiscordID != userID {
+					if err := historyService.RecordCardPlayHistory(tx, guildID, randomLockedTarget.DiscordID, randomLockedTarget.ID, 64, "Red Shells", userID, pointsBefore, randomLockedTarget.Points, randomLockedTarget.Points-pointsBefore, nil, nil, nil); err != nil {
+						fmt.Printf("Error recording history for Red Shells redirect target: %v\n", err)
+					}
 				}
 
 				targetName := lockedTarget.Username
@@ -2820,9 +2878,15 @@ func handleRedShells(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 			}
 
 			if loss > 0 {
+				pointsBefore := lockedTarget.Points
 				lockedTarget.Points -= loss
 				if err := tx.Save(&lockedTarget).Error; err != nil {
 					return err
+				}
+				if lockedTarget.DiscordID != userID {
+					if err := historyService.RecordCardPlayHistory(tx, guildID, lockedTarget.DiscordID, lockedTarget.ID, 64, "Red Shells", userID, pointsBefore, lockedTarget.Points, lockedTarget.Points-pointsBefore, nil, nil, nil); err != nil {
+						fmt.Printf("Error recording history for Red Shells target: %v\n", err)
+					}
 				}
 				message += fmt.Sprintf("%s was hit for %.0f points! ", displayName, loss)
 			}
@@ -5694,6 +5758,9 @@ func handleDeath(s *discordgo.Session, db *gorm.DB, userID string, guildID strin
 			if err := tx.First(&u, uid).Error; err != nil {
 				continue
 			}
+			if u.DiscordID == userID {
+				continue
+			}
 			if err := historyService.RecordCardPlayHistory(tx, guildID, u.DiscordID, u.ID, DeathCardID, "Death", userID, u.Points, u.Points, 0, nil, cards, nil); err != nil {
 				fmt.Printf("Error recording history for Death: %v\n", err)
 			}
@@ -5922,8 +5989,10 @@ func handleTheGoldenWhistle(s *discordgo.Session, db *gorm.DB, userID string, gu
 			pointsAfter := pointsBefore + res.TotalPayout
 			pointsDelta := res.TotalPayout
 
-			if err := historyService.RecordCardPlayHistory(tx, guildID, u.DiscordID, u.ID, TheGoldenWhistleCardID, "The Golden Whistle", userID, pointsBefore, pointsAfter, pointsDelta, nil, nil, res.BetIDs); err != nil {
-				fmt.Printf("Error recording history for The Golden Whistle: %v\n", err)
+			if u.DiscordID != userID {
+				if err := historyService.RecordCardPlayHistory(tx, guildID, u.DiscordID, u.ID, TheGoldenWhistleCardID, "The Golden Whistle", userID, pointsBefore, pointsAfter, pointsDelta, nil, nil, res.BetIDs); err != nil {
+					fmt.Printf("Error recording history for The Golden Whistle: %v\n", err)
+				}
 			}
 
 			for _, e := range res.Entries {

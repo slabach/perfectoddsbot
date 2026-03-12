@@ -8,11 +8,53 @@ import (
 	"perfectOddsBot/services/cardService/cards"
 	"perfectOddsBot/services/common"
 	"perfectOddsBot/services/guildService"
+	"perfectOddsBot/services/historyService"
 
 	"github.com/bwmarrin/discordgo"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
+
+func recordAffectedTargetHistory(tx *gorm.DB, guildID string, playedByUserID string, card *models.Card, result *models.CardResult) error {
+	if card == nil || result == nil || result.TargetUserID == nil {
+		return nil
+	}
+
+	targetUserID := *result.TargetUserID
+	if targetUserID == "" || targetUserID == playedByUserID {
+		return nil
+	}
+
+	var targetUser models.User
+	if err := tx.Where("discord_id = ? AND guild_id = ?", targetUserID, guildID).First(&targetUser).Error; err != nil {
+		return err
+	}
+
+	pointsAfter := targetUser.Points
+	pointsBefore := pointsAfter - result.TargetPointsDelta
+
+	if result.TargetPointsBefore != 0 || (result.TargetPointsBefore == 0 && pointsAfter == 0 && result.TargetPointsDelta == 0) {
+		pointsBefore = result.TargetPointsBefore
+	}
+
+	pointsDelta := pointsAfter - pointsBefore
+
+	return historyService.RecordCardPlayHistory(
+		tx,
+		guildID,
+		targetUserID,
+		targetUser.ID,
+		card.ID,
+		card.Name,
+		playedByUserID,
+		pointsBefore,
+		pointsAfter,
+		pointsDelta,
+		nil,
+		nil,
+		nil,
+	)
+}
 
 func HandlePettyTheftSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, userID string, targetUserID string, guildID string) error {
 	return db.Transaction(func(tx *gorm.DB) error {
@@ -38,6 +80,9 @@ func HandlePettyTheftSelection(s *discordgo.Session, i *discordgo.InteractionCre
 		card := cardService.GetCardByID(cards.PettyTheftCardID)
 		if card == nil {
 			return fmt.Errorf("card not found")
+		}
+		if err := recordAffectedTargetHistory(tx, guildID, userID, card, result); err != nil {
+			return err
 		}
 
 		embed := BuildCardResultEmbed(card, result, user, targetUsername, guild.Pool)
@@ -76,6 +121,9 @@ func HandleJesterSelection(s *discordgo.Session, i *discordgo.InteractionCreate,
 		if card == nil {
 			return fmt.Errorf("card not found")
 		}
+		if err := recordAffectedTargetHistory(tx, guildID, userID, card, result); err != nil {
+			return err
+		}
 
 		embed := BuildCardResultEmbed(card, result, user, targetUsername, guild.Pool)
 
@@ -113,6 +161,9 @@ func HandleBetFreezeSelection(s *discordgo.Session, i *discordgo.InteractionCrea
 		if card == nil {
 			return fmt.Errorf("card not found")
 		}
+		if err := recordAffectedTargetHistory(tx, guildID, userID, card, result); err != nil {
+			return err
+		}
 
 		embed := BuildCardResultEmbed(card, result, user, targetUsername, guild.Pool)
 
@@ -149,6 +200,9 @@ func HandleGrandLarcenySelection(s *discordgo.Session, i *discordgo.InteractionC
 		card := cardService.GetCardByID(cards.GrandLarcenyCardID)
 		if card == nil {
 			return fmt.Errorf("card not found")
+		}
+		if err := recordAffectedTargetHistory(tx, guildID, userID, card, result); err != nil {
+			return err
 		}
 
 		if result.PointsDelta > 0 {
@@ -195,6 +249,9 @@ func HandleTheGossipSelection(s *discordgo.Session, i *discordgo.InteractionCrea
 		if card == nil {
 			return fmt.Errorf("card not found")
 		}
+		if err := recordAffectedTargetHistory(tx, guildID, userID, card, result); err != nil {
+			return err
+		}
 
 		embed := BuildCardResultEmbed(card, result, user, targetUsername, guild.Pool)
 
@@ -231,6 +288,9 @@ func HandleDuelSelection(s *discordgo.Session, i *discordgo.InteractionCreate, d
 		card := cardService.GetCardByID(cards.DuelCardID)
 		if card == nil {
 			return fmt.Errorf("card not found")
+		}
+		if err := recordAffectedTargetHistory(tx, guildID, userID, card, result); err != nil {
+			return err
 		}
 
 		embed := BuildCardResultEmbed(card, result, user, targetUsername, guild.Pool)
@@ -269,6 +329,9 @@ func HandleTagSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db
 		if card == nil {
 			return fmt.Errorf("card not found")
 		}
+		if err := recordAffectedTargetHistory(tx, guildID, userID, card, result); err != nil {
+			return err
+		}
 
 		embed := BuildCardResultEmbed(card, result, user, targetUsername, guild.Pool)
 
@@ -305,6 +368,9 @@ func HandleAlleyOopSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 		card := cardService.GetCardByID(cards.AlleyOopCardID)
 		if card == nil {
 			return fmt.Errorf("card not found")
+		}
+		if err := recordAffectedTargetHistory(tx, guildID, userID, card, result); err != nil {
+			return err
 		}
 
 		embed := BuildCardResultEmbed(card, result, user, targetUsername, guild.Pool)
@@ -390,9 +456,29 @@ func HandleTransferPortalSelection(s *discordgo.Session, i *discordgo.Interactio
 			return err
 		}
 		result := &models.CardResult{
-			Message:     fmt.Sprintf("<@%s> swapped **%s** for **%s** with %s!", drawer.DiscordID, drawerCardName, targetCardName, targetUsername),
-			PointsDelta: 0,
-			PoolDelta:   0,
+			Message:      fmt.Sprintf("<@%s> swapped **%s** for **%s** with %s!", drawer.DiscordID, drawerCardName, targetCardName, targetUsername),
+			PointsDelta:  0,
+			PoolDelta:    0,
+			TargetUserID: &targetUserID,
+		}
+		if targetUserID != userID {
+			if err := historyService.RecordCardPlayHistory(
+				tx,
+				guildID,
+				targetUserID,
+				targetUser.ID,
+				card.ID,
+				card.Name,
+				userID,
+				targetUser.Points,
+				targetUser.Points,
+				0,
+				[]string{drawerCardName},
+				[]string{targetCardName},
+				nil,
+			); err != nil {
+				return err
+			}
 		}
 		embed := BuildCardResultEmbed(card, result, drawer, targetUsername, guild.Pool)
 
@@ -429,6 +515,9 @@ func HandleBlindsideBlockSelection(s *discordgo.Session, i *discordgo.Interactio
 		card := cardService.GetCardByID(cards.BlindsideBlockCardID)
 		if card == nil {
 			return fmt.Errorf("card not found")
+		}
+		if err := recordAffectedTargetHistory(tx, guildID, userID, card, result); err != nil {
+			return err
 		}
 
 		embed := BuildCardResultEmbed(card, result, user, targetUsername, guild.Pool)
@@ -515,9 +604,29 @@ func HandleBracketBusterSelection(s *discordgo.Session, i *discordgo.Interaction
 			return fmt.Errorf("card not found")
 		}
 		result := &models.CardResult{
-			Message:     fmt.Sprintf("Bracket Buster! <%s> cancelled <@%s>'s smallest active bet on \"%s\" (%.0f points). %.0f points have been added to the pool.", userID, targetUserID, bet.Description, wagerAmount, wagerAmount),
-			PointsDelta: 0,
-			PoolDelta:   wagerAmount,
+			Message:      fmt.Sprintf("Bracket Buster! <%s> cancelled <@%s>'s smallest active bet on \"%s\" (%.0f points). %.0f points have been added to the pool.", userID, targetUserID, bet.Description, wagerAmount, wagerAmount),
+			PointsDelta:  0,
+			PoolDelta:    wagerAmount,
+			TargetUserID: &targetUserID,
+		}
+		if targetUserID != userID {
+			if err := historyService.RecordCardPlayHistory(
+				tx,
+				guildID,
+				targetUserID,
+				targetUser.ID,
+				card.ID,
+				card.Name,
+				userID,
+				targetUser.Points,
+				targetUser.Points,
+				0,
+				nil,
+				nil,
+				[]uint{bet.ID},
+			); err != nil {
+				return err
+			}
 		}
 		embed := BuildCardResultEmbed(card, result, drawer, targetUsername, guild.Pool)
 		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -553,6 +662,9 @@ func HandleBountyHunterSelection(s *discordgo.Session, i *discordgo.InteractionC
 		card := cardService.GetCardByID(cards.BountyHunterCardID)
 		if card == nil {
 			return fmt.Errorf("card not found")
+		}
+		if err := recordAffectedTargetHistory(tx, guildID, userID, card, result); err != nil {
+			return err
 		}
 
 		embed := BuildCardResultEmbed(card, result, user, targetUsername, guild.Pool)
@@ -590,6 +702,9 @@ func HandleSocialDistancingSelection(s *discordgo.Session, i *discordgo.Interact
 		card := cardService.GetCardByID(cards.SocialDistancingCardID)
 		if card == nil {
 			return fmt.Errorf("card not found")
+		}
+		if err := recordAffectedTargetHistory(tx, guildID, userID, card, result); err != nil {
+			return err
 		}
 
 		embed := BuildCardResultEmbed(card, result, user, targetUsername, guild.Pool)
@@ -720,6 +835,9 @@ func HandleHostileTakeoverSelection(s *discordgo.Session, i *discordgo.Interacti
 		if card == nil {
 			return fmt.Errorf("card not found")
 		}
+		if err := recordAffectedTargetHistory(tx, guildID, userID, card, result); err != nil {
+			return err
+		}
 
 		embed := BuildCardResultEmbed(card, result, drawerAfter, targetUsername, guild.Pool)
 
@@ -807,6 +925,9 @@ func HandleJusticeSelection(s *discordgo.Session, i *discordgo.InteractionCreate
 		if card == nil {
 			return fmt.Errorf("card not found")
 		}
+		if err := recordAffectedTargetHistory(tx, guildID, userID, card, result); err != nil {
+			return err
+		}
 
 		embed := BuildCardResultEmbed(card, result, user, targetUsername, guild.Pool)
 
@@ -843,6 +964,9 @@ func HandleTheLoversSelection(s *discordgo.Session, i *discordgo.InteractionCrea
 		card := cardService.GetCardByID(cards.TheLoversCardID)
 		if card == nil {
 			return fmt.Errorf("card not found")
+		}
+		if err := recordAffectedTargetHistory(tx, guildID, userID, card, result); err != nil {
+			return err
 		}
 
 		embed := BuildCardResultEmbed(card, result, user, targetUsername, guild.Pool)
@@ -883,6 +1007,17 @@ func HandleTheHighPriestessSelection(s *discordgo.Session, i *discordgo.Interact
 		}
 
 		targetMention := "<@" + targetUserID + ">"
+		card := cardService.GetCardByID(cards.TheHighPriestessCardID)
+		if card == nil {
+			return fmt.Errorf("card not found")
+		}
+		targetID := targetUserID
+		if err := recordAffectedTargetHistory(tx, guildID, userID, card, &models.CardResult{
+			TargetUserID:      &targetID,
+			TargetPointsDelta: 0,
+		}); err != nil {
+			return err
+		}
 
 		if len(cardCounts) == 0 {
 			return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
