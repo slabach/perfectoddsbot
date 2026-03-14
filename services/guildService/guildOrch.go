@@ -29,6 +29,9 @@ func GetGuildInfo(s *discordgo.Session, db *gorm.DB, guildID string, channelId s
 			CardDrawCost:            10,
 			CardDrawCooldownMinutes: 60,
 			CardDrawingEnabled:      true,
+			RestrictedDrawEnabled:   false,
+			RestrictedDrawUserIDs:   "[]",
+			RestrictedDrawCardIDs:   "[]",
 		}
 		newGuildResult := db.Create(newGuild)
 		if newGuildResult.Error != nil {

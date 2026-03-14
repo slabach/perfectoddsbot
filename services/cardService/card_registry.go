@@ -69,11 +69,19 @@ func RegisterAllCards() {
 	populateHandlerRegistry()
 }
 
-func PickRandomCard(hasSubscription bool, rarityMultiplier float64, guild *models.Guild) *models.Card {
+func PickRandomCard(hasSubscription bool, rarityMultiplier float64, guild *models.Guild, allowedCardIDs []uint) *models.Card {
 	deckMu.RLock()
 	if len(Deck) == 0 {
 		deckMu.RUnlock()
 		return nil
+	}
+
+	var allowedCardIDMap map[uint]struct{}
+	if len(allowedCardIDs) > 0 {
+		allowedCardIDMap = make(map[uint]struct{}, len(allowedCardIDs))
+		for _, cardID := range allowedCardIDs {
+			allowedCardIDMap[cardID] = struct{}{}
+		}
 	}
 
 	var eligibleCards []*models.Card
@@ -86,6 +94,11 @@ func PickRandomCard(hasSubscription bool, rarityMultiplier float64, guild *model
 		}
 		if !guild.CollegiateExpansion && Deck[i].Expansion == "Collegiate" {
 			continue
+		}
+		if len(allowedCardIDMap) > 0 {
+			if _, ok := allowedCardIDMap[Deck[i].ID]; !ok {
+				continue
+			}
 		}
 
 		if Deck[i].CardRarity.ID != 0 {
@@ -141,17 +154,30 @@ func PickRandomCard(hasSubscription bool, rarityMultiplier float64, guild *model
 	return eligibleCards[0]
 }
 
-func PickCardByRarity(hasSubscription bool, rarityName string) *models.Card {
+func PickCardByRarity(hasSubscription bool, rarityName string, allowedCardIDs []uint) *models.Card {
 	deckMu.RLock()
 	if len(Deck) == 0 {
 		deckMu.RUnlock()
 		return nil
 	}
 
+	var allowedCardIDMap map[uint]struct{}
+	if len(allowedCardIDs) > 0 {
+		allowedCardIDMap = make(map[uint]struct{}, len(allowedCardIDs))
+		for _, cardID := range allowedCardIDs {
+			allowedCardIDMap[cardID] = struct{}{}
+		}
+	}
+
 	var eligibleCards []*models.Card
 	for i := range Deck {
 		if Deck[i].RequiredSubscription && !hasSubscription {
 			continue
+		}
+		if len(allowedCardIDMap) > 0 {
+			if _, ok := allowedCardIDMap[Deck[i].ID]; !ok {
+				continue
+			}
 		}
 
 		if Deck[i].CardRarity.ID != 0 && Deck[i].CardRarity.Name == rarityName {

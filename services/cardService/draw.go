@@ -398,23 +398,47 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	rarityMultiplier := calculateRarityMultiplier(distanceFromTop5)
 
 	hasSubscription := guild.SubscribedTeam != nil && *guild.SubscribedTeam != ""
+	var allowedCardIDs []uint
+	if guild.RestrictedDrawEnabled {
+		restrictedUserIDs, restrictedUserIDsErr := guild.RestrictedDrawUserIDsSlice()
+		if restrictedUserIDsErr != nil {
+			log.Printf("Restricted draw users JSON invalid for guild %s: %v", guildID, restrictedUserIDsErr)
+		} else {
+			isRestrictedUser := false
+			for _, restrictedUserID := range restrictedUserIDs {
+				if restrictedUserID == userID {
+					isRestrictedUser = true
+					break
+				}
+			}
+
+			if isRestrictedUser {
+				restrictedCardIDs, restrictedCardIDsErr := guild.RestrictedDrawCardIDsSlice()
+				if restrictedCardIDsErr != nil {
+					log.Printf("Restricted draw cards JSON invalid for guild %s: %v", guildID, restrictedCardIDsErr)
+				} else if len(restrictedCardIDs) > 0 {
+					allowedCardIDs = restrictedCardIDs
+				}
+			}
+		}
+	}
 
 	var card *models.Card
 	needsMythic := guild.TotalCardDraws >= 1000 && (guild.LastMythicDrawAt == 0 || (guild.TotalCardDraws-guild.LastMythicDrawAt) >= 1000)
 	needsEpic := guild.TotalCardDraws >= 100 && (guild.LastEpicDrawAt == 0 || (guild.TotalCardDraws-guild.LastEpicDrawAt) >= 100)
 
 	if needsMythic {
-		card = PickCardByRarity(hasSubscription, "Mythic")
+		card = PickCardByRarity(hasSubscription, "Mythic", allowedCardIDs)
 		if card == nil {
-			card = PickRandomCard(hasSubscription, rarityMultiplier, guild)
+			card = PickRandomCard(hasSubscription, rarityMultiplier, guild, allowedCardIDs)
 		}
 	} else if needsEpic {
-		card = PickCardByRarity(hasSubscription, "Epic")
+		card = PickCardByRarity(hasSubscription, "Epic", allowedCardIDs)
 		if card == nil {
-			card = PickRandomCard(hasSubscription, rarityMultiplier, guild)
+			card = PickRandomCard(hasSubscription, rarityMultiplier, guild, allowedCardIDs)
 		}
 	} else {
-		card = PickRandomCard(hasSubscription, rarityMultiplier, guild)
+		card = PickRandomCard(hasSubscription, rarityMultiplier, guild, allowedCardIDs)
 	}
 
 	if card == nil {
