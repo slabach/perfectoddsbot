@@ -1,7 +1,6 @@
 package betService
 
 import (
-	"errors"
 	"fmt"
 	"math"
 	"perfectOddsBot/models"
@@ -23,6 +22,22 @@ var (
 	cbbPaginatedOptionsMap = make(map[string][][]discordgo.SelectMenuOption)
 	cbbPaginatedOptionsMu  sync.RWMutex
 )
+
+func parseCBBGameStartTime(date string) (time.Time, error) {
+	layouts := []string{time.RFC3339, "2006-01-02T15:04Z"}
+	for _, layout := range layouts {
+		parsedTime, err := time.Parse(layout, date)
+		if err == nil {
+			return parsedTime, nil
+		}
+	}
+
+	return time.Time{}, fmt.Errorf("unable to parse game start time: %s", date)
+}
+
+func isFutureCBBGame(startTime time.Time) bool {
+	return startTime.After(time.Now().UTC())
+}
 
 func GetCBBPaginatedOptions(sessionID string) ([][]discordgo.SelectMenuOption, bool) {
 	cbbPaginatedOptionsMu.RLock()
@@ -84,6 +99,16 @@ func CreateCBBBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 			common.SendError(s, i, err, db)
 			return
 		}
+
+		gameStartTime, err := parseCBBGameStartTime(cbbEvent.Date)
+		if err != nil {
+			common.SendError(s, i, err, db)
+			return
+		}
+		if !isFutureCBBGame(gameStartTime) {
+			common.SendError(s, i, fmt.Errorf("cannot create a bet for a game that has already started or finished"), db)
+			return
+		}
 		homeTeam := ""
 		awayTeam := ""
 		for _, competitor := range cbbEvent.Competitions[0].Competitors {
@@ -104,16 +129,11 @@ func CreateCBBBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 		}
 
 		fmt.Println(cbbEvent.Date)
-		espnDateLayout := "2006-01-02T15:04Z"
-		utcTime, err := time.Parse(espnDateLayout, cbbEvent.Date)
-		if err != nil {
-			common.SendError(s, i, errors.New(fmt.Sprintf("err parsing time: %v", err)), db)
-			return
-		}
+		utcTime := gameStartTime
 
 		loc, err := time.LoadLocation("America/New_York")
 		if err != nil {
-			common.SendError(s, i, errors.New(fmt.Sprintf("err converting time: %v", err)), db)
+			common.SendError(s, i, fmt.Errorf("err converting time: %v", err), db)
 			return
 		}
 		t := utcTime.In(loc)
@@ -194,8 +214,6 @@ func CreateCBBBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 	}
 
 	db.Save(&dbBet)
-
-	return
 }
 
 func CreateCBBBetSelector(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
@@ -217,6 +235,10 @@ func CreateCBBBetSelector(s *discordgo.Session, i *discordgo.InteractionCreate, 
 
 	var selectOptions []discordgo.SelectMenuOption
 	for _, event := range events {
+		gameStartTime, timeErr := parseCBBGameStartTime(event.Date)
+		if timeErr != nil || !isFutureCBBGame(gameStartTime) {
+			continue
+		}
 		if len(event.Competitions) > 0 && event.Competitions[0].Status.Type.Name != "STATUS_FINAL" {
 			homeTeam := ""
 			awayTeam := ""
@@ -340,8 +362,6 @@ func CreateCBBBetSelector(s *discordgo.Session, i *discordgo.InteractionCreate, 
 		common.SendError(s, i, err, db)
 		return
 	}
-
-	return
 }
 
 func ShowCBBBetTypeSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, betID int) error {
@@ -513,6 +533,14 @@ func CreateCBBBetFromGameID(s *discordgo.Session, i *discordgo.InteractionCreate
 		if err != nil {
 			return err
 		}
+
+		gameStartTime, err := parseCBBGameStartTime(cbbEvent.Date)
+		if err != nil {
+			return err
+		}
+		if !isFutureCBBGame(gameStartTime) {
+			return fmt.Errorf("cannot create a bet for a game that has already started or finished")
+		}
 		homeTeam := ""
 		awayTeam := ""
 		for _, competitor := range cbbEvent.Competitions[0].Competitors {
@@ -525,11 +553,7 @@ func CreateCBBBetFromGameID(s *discordgo.Session, i *discordgo.InteractionCreate
 		}
 
 		fmt.Println(cbbEvent.Date)
-		espnDateLayout := "2006-01-02T15:04Z"
-		utcTime, err := time.Parse(espnDateLayout, cbbEvent.Date)
-		if err != nil {
-			return fmt.Errorf("err parsing time: %v", err)
-		}
+		utcTime := gameStartTime
 
 		loc, err := time.LoadLocation("America/New_York")
 		if err != nil {

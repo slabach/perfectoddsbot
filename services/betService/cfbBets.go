@@ -22,6 +22,10 @@ var (
 	cfbPaginatedOptionsMu  sync.RWMutex
 )
 
+func isFutureCFBGame(startTime time.Time) bool {
+	return startTime.After(time.Now().UTC())
+}
+
 func GetCFBPaginatedOptions(sessionID string) ([][]discordgo.SelectMenuOption, bool) {
 	cfbPaginatedOptionsMu.RLock()
 	defer cfbPaginatedOptionsMu.RUnlock()
@@ -67,6 +71,10 @@ func CreateCFBBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 		cfbdBet, err := extService.GetCfbdBet(betID)
 		if err != nil {
 			common.SendError(s, i, err, db)
+			return
+		}
+		if !isFutureCFBGame(cfbdBet.StartDate) {
+			common.SendError(s, i, fmt.Errorf("cannot create a bet for a game that has already started or finished"), db)
 			return
 		}
 
@@ -168,8 +176,6 @@ func CreateCFBBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 	}
 
 	db.Save(&dbBet)
-
-	return
 }
 
 func CreateCFBBetSelector(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB) {
@@ -193,7 +199,8 @@ func CreateCFBBetSelector(s *discordgo.Session, i *discordgo.InteractionCreate, 
 	var selectOptions []discordgo.SelectMenuOption
 	for _, bet := range bettingLines {
 		if (common.Contains(conferenceList, bet.HomeConference) || common.Contains(conferenceList, bet.AwayConference)) &&
-			bet.HomeScore == nil && bet.AwayScore == nil {
+			bet.HomeScore == nil && bet.AwayScore == nil &&
+			isFutureCFBGame(bet.StartDate) {
 			line, lineErr := common.PickLine(bet.Lines)
 			if lineErr != nil {
 				continue
@@ -295,8 +302,6 @@ func CreateCFBBetSelector(s *discordgo.Session, i *discordgo.InteractionCreate, 
 		common.SendError(s, i, err, db)
 		return
 	}
-
-	return
 }
 
 func ShowCFBBetTypeSelection(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB, betID int) error {
@@ -439,6 +444,9 @@ func CreateCFBBetFromGameID(s *discordgo.Session, i *discordgo.InteractionCreate
 		cfbdBet, err := extService.GetCfbdBet(betID)
 		if err != nil {
 			return err
+		}
+		if !isFutureCFBGame(cfbdBet.StartDate) {
+			return fmt.Errorf("cannot create a bet for a game that has already started or finished")
 		}
 
 		line, err := common.PickLine(cfbdBet.Lines)

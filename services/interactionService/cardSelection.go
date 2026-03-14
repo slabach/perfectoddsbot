@@ -182,6 +182,22 @@ func HandleCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCreate
 			return err
 		}
 
+		card := cardService.GetCardByID(cardID)
+		if card == nil {
+			return fmt.Errorf("card not found")
+		}
+
+		var bet models.Bet
+		if err := tx.Model(&models.Bet{}).
+			Joins("JOIN bet_entries ON bet_entries.bet_id = bets.id").
+			Where("bets.id = ? AND bets.guild_id = ? AND bets.active = ? AND bets.paid = ? AND bets.deleted_at IS NULL AND bet_entries.user_id = ? AND bet_entries.deleted_at IS NULL", targetBetID, guildID, true, false, user.ID).
+			First(&bet).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return fmt.Errorf("selected bet is no longer eligible")
+			}
+			return err
+		}
+
 		inventory := models.UserInventory{
 			UserID:      user.ID,
 			GuildID:     guildID,
@@ -191,16 +207,6 @@ func HandleCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCreate
 
 		if err := tx.Create(&inventory).Error; err != nil {
 			return err
-		}
-
-		card := cardService.GetCardByID(cardID)
-		if card == nil {
-			return fmt.Errorf("card not found")
-		}
-
-		var bet models.Bet
-		if err := tx.First(&bet, targetBetID).Error; err != nil {
-			return fmt.Errorf("bet not found")
 		}
 
 		guild, err := guildService.GetGuildInfo(s, tx, guildID, i.ChannelID)
@@ -223,6 +229,16 @@ func HandleCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCreate
 	})
 
 	if err != nil {
+		if err.Error() == "selected bet is no longer eligible" {
+			cardService.UnmarkSelectorUsed(customID)
+			return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "That bet is no longer active or has already been paid. Please select an active unpaid bet.",
+					Flags:   discordgo.MessageFlagsEphemeral,
+				},
+			})
+		}
 		cardService.UnmarkSelectorUsed(customID)
 	}
 
