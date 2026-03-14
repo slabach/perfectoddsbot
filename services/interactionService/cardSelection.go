@@ -188,10 +188,19 @@ func HandleCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCreate
 		}
 
 		var bet models.Bet
-		if err := tx.Model(&models.Bet{}).
-			Joins("JOIN bet_entries ON bet_entries.bet_id = bets.id").
-			Where("bets.id = ? AND bets.guild_id = ? AND bets.active = ? AND bets.paid = ? AND bets.deleted_at IS NULL AND bet_entries.user_id = ? AND bet_entries.deleted_at IS NULL", targetBetID, guildID, true, false, user.ID).
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("id = ? AND guild_id = ? AND active = ? AND paid = ? AND deleted_at IS NULL", targetBetID, guildID, true, false).
 			First(&bet).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return fmt.Errorf("selected bet is no longer eligible")
+			}
+			return err
+		}
+
+		var betEntry models.BetEntry
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("bet_id = ? AND user_id = ? AND deleted_at IS NULL", bet.ID, user.ID).
+			First(&betEntry).Error; err != nil {
 			if err == gorm.ErrRecordNotFound {
 				return fmt.Errorf("selected bet is no longer eligible")
 			}
