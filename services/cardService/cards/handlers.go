@@ -2257,7 +2257,7 @@ func handleUnoReverse(s *discordgo.Session, db *gorm.DB, userID string, guildID 
 	var count int64
 	err := db.Table("bet_entries").
 		Joins("JOIN bets ON bets.id = bet_entries.bet_id").
-		Where("bet_entries.user_id = ? AND bets.paid = ? and bet_entries.deleted_at is null", user.ID, false).
+		Where("bet_entries.user_id = ? AND bets.active = ? AND bets.paid = ? AND bet_entries.deleted_at IS NULL", user.ID, true, false).
 		Count(&count).Error
 
 	if err != nil {

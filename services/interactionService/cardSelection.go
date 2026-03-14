@@ -182,6 +182,31 @@ func HandleCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCreate
 			return err
 		}
 
+		card := cardService.GetCardByID(cardID)
+		if card == nil {
+			return fmt.Errorf("card not found")
+		}
+
+		var bet models.Bet
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("id = ? AND guild_id = ? AND active = ? AND paid = ? AND deleted_at IS NULL", targetBetID, guildID, true, false).
+			First(&bet).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return fmt.Errorf("selected bet is no longer eligible")
+			}
+			return err
+		}
+
+		var betEntry models.BetEntry
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("bet_id = ? AND user_id = ? AND deleted_at IS NULL", bet.ID, user.ID).
+			First(&betEntry).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return fmt.Errorf("selected bet is no longer eligible")
+			}
+			return err
+		}
+
 		inventory := models.UserInventory{
 			UserID:      user.ID,
 			GuildID:     guildID,
@@ -191,16 +216,6 @@ func HandleCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCreate
 
 		if err := tx.Create(&inventory).Error; err != nil {
 			return err
-		}
-
-		card := cardService.GetCardByID(cardID)
-		if card == nil {
-			return fmt.Errorf("card not found")
-		}
-
-		var bet models.Bet
-		if err := tx.First(&bet, targetBetID).Error; err != nil {
-			return fmt.Errorf("bet not found")
 		}
 
 		guild, err := guildService.GetGuildInfo(s, tx, guildID, i.ChannelID)
@@ -223,6 +238,16 @@ func HandleCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCreate
 	})
 
 	if err != nil {
+		if err.Error() == "selected bet is no longer eligible" {
+			cardService.UnmarkSelectorUsed(customID)
+			return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "That bet is no longer active or has already been paid. Please select an active unpaid bet.",
+					Flags:   discordgo.MessageFlagsEphemeral,
+				},
+			})
+		}
 		cardService.UnmarkSelectorUsed(customID)
 	}
 

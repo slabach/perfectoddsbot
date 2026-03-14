@@ -249,7 +249,7 @@ func ShowBetSelectMenu(s *discordgo.Session, i *discordgo.InteractionCreate, car
 	err := db.Table("bet_entries").
 		Select("bets.id as bet_id, bets.description, bet_entries.option, bets.option1, bets.option2").
 		Joins("JOIN bets ON bets.id = bet_entries.bet_id").
-		Where("bet_entries.user_id = (SELECT id FROM users WHERE discord_id = ? AND guild_id = ?) AND bets.paid = ?", userID, guildID, false).
+		Where("bet_entries.user_id = (SELECT id FROM users WHERE discord_id = ? AND guild_id = ?) AND bets.active = ? AND bets.paid = ? AND bet_entries.deleted_at IS NULL AND bets.deleted_at IS NULL", userID, guildID, true, false).
 		Limit(25).
 		Scan(&results).Error
 
