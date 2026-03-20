@@ -17,7 +17,13 @@ func CheckLeech(s *discordgo.Session, db *gorm.DB) error {
 	twelveHoursAgo := now.Add(-12 * time.Hour)
 
 	var activeLeeches []models.UserInventory
-	err := db.Where("card_id = ? AND created_at >= ? AND created_at < ? AND deleted_at IS NULL", cards.LeechCardID, twelveHoursAgo, now).Find(&activeLeeches).Error
+	err := db.Where(
+		`card_id = ? AND deleted_at IS NULL AND (
+			(expires_at IS NOT NULL AND expires_at > ?) OR
+			(expires_at IS NULL AND created_at >= ? AND created_at < ?)
+		)`,
+		cards.LeechCardID, now, twelveHoursAgo, now,
+	).Find(&activeLeeches).Error
 	if err != nil {
 		return err
 	}
@@ -111,7 +117,13 @@ func CheckLeech(s *discordgo.Session, db *gorm.DB) error {
 	}
 
 	var expiredLeeches []models.UserInventory
-	err = db.Where("card_id = ? AND created_at < ? AND deleted_at IS NULL", cards.LeechCardID, twelveHoursAgo).Find(&expiredLeeches).Error
+	err = db.Where(
+		`card_id = ? AND deleted_at IS NULL AND (
+			(expires_at IS NOT NULL AND expires_at <= ?) OR
+			(expires_at IS NULL AND created_at < ?)
+		)`,
+		cards.LeechCardID, now, twelveHoursAgo,
+	).Find(&expiredLeeches).Error
 	if err != nil {
 		return err
 	}
