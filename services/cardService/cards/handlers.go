@@ -8,6 +8,7 @@ import (
 	"perfectOddsBot/services/common"
 	"perfectOddsBot/services/guildService"
 	"perfectOddsBot/services/historyService"
+	"perfectOddsBot/services/messageService"
 	"strings"
 	"time"
 
@@ -5915,6 +5916,7 @@ func handleTheWorld(s *discordgo.Session, db *gorm.DB, userID string, guildID st
 
 func handleTheGoldenWhistle(s *discordgo.Session, db *gorm.DB, userID string, guildID string) (*models.CardResult, error) {
 	var result *models.CardResult
+	var closedBets []models.Bet
 	if err := db.Transaction(func(tx *gorm.DB) error {
 		var openBets []models.Bet
 		if err := tx.Where("guild_id = ? AND paid = ? AND deleted_at IS NULL", guildID, false).Find(&openBets).Error; err != nil {
@@ -6009,6 +6011,7 @@ func handleTheGoldenWhistle(s *discordgo.Session, db *gorm.DB, userID string, gu
 			return err
 		}
 
+		closedBets = openBets
 		result = &models.CardResult{
 			Message:     fmt.Sprintf("The Golden Whistle! All %d open bet(s) were resolved as wins. %d entries paid out (%.0f points total).", len(openBets), len(entries), totalPayout),
 			PointsDelta: 0,
@@ -6018,6 +6021,11 @@ func handleTheGoldenWhistle(s *discordgo.Session, db *gorm.DB, userID string, gu
 	}); err != nil {
 		return nil, err
 	}
+
+	for _, bet := range closedBets {
+		messageService.CloseBetMessages(s, db, bet, "📢 Bet has been CLOSED (Resolved by The Golden Whistle)")
+	}
+
 	return result, nil
 }
 

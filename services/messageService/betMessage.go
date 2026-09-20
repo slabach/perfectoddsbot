@@ -2,10 +2,69 @@ package messageService
 
 import (
 	"fmt"
+	"log"
+	"perfectOddsBot/models"
 	"perfectOddsBot/services/common"
 
 	"github.com/bwmarrin/discordgo"
+	"gorm.io/gorm"
 )
+
+func CloseBetMessages(s *discordgo.Session, db *gorm.DB, bet models.Bet, title string) {
+	embed := &discordgo.MessageEmbed{
+		Title:       title,
+		Description: bet.Description,
+		Fields: []*discordgo.MessageEmbedField{
+			{
+				Name:  fmt.Sprintf("1️⃣ %s", bet.Option1),
+				Value: fmt.Sprintf("Odds: %s", common.FormatOdds(float64(bet.Odds1))),
+			},
+			{
+				Name:  fmt.Sprintf("2️⃣ %s", bet.Option2),
+				Value: fmt.Sprintf("Odds: %s", common.FormatOdds(float64(bet.Odds2))),
+			},
+		},
+		Color: 0x3498db,
+	}
+
+	if bet.MessageID != nil {
+		_, err := s.ChannelMessageEditComplex(&discordgo.MessageEdit{
+			ID:         *bet.MessageID,
+			Channel:    bet.ChannelID,
+			Embeds:     &[]*discordgo.MessageEmbed{embed},
+			Components: &[]discordgo.MessageComponent{},
+		})
+		if err != nil {
+			log.Printf("Error closing Discord message for bet %d: %v", bet.ID, err)
+		}
+	}
+
+	var secondaryMsgs []models.BetMessage
+	if err := db.Where("active = 1 AND bet_id = ?", bet.ID).Find(&secondaryMsgs).Error; err != nil {
+		log.Printf("Error finding secondary messages for bet %d: %v", bet.ID, err)
+		return
+	}
+
+	for _, msg := range secondaryMsgs {
+		msg.Active = false
+		if err := db.Save(&msg).Error; err != nil {
+			log.Printf("Error deactivating secondary message %d for bet %d: %v", msg.ID, bet.ID, err)
+			continue
+		}
+		if msg.MessageID == nil {
+			continue
+		}
+		_, err := s.ChannelMessageEditComplex(&discordgo.MessageEdit{
+			ID:         *msg.MessageID,
+			Channel:    msg.ChannelID,
+			Embeds:     &[]*discordgo.MessageEmbed{embed},
+			Components: &[]discordgo.MessageComponent{},
+		})
+		if err != nil {
+			log.Printf("Error closing secondary Discord message for bet %d: %v", bet.ID, err)
+		}
+	}
+}
 
 func GetAllButtonList(s *discordgo.Session, i *discordgo.InteractionCreate, opt1 string, opt2 string, betId uint) []discordgo.MessageComponent {
 	var buttons []discordgo.MessageComponent
