@@ -10,6 +10,7 @@ func RegisterAllCards(deck *[]models.Card) {
 	registerRareCards(deck)
 	registerEpicCards(deck)
 	registerMythicCards(deck)
+	registerSyndicateCards(deck)
 
 	codeCardDefsByID = make(map[uint]*models.Card, len(*deck))
 	for i := range *deck {

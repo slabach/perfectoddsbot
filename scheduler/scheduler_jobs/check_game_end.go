@@ -295,6 +295,9 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 
 		if entry.AutoCloseWin {
 			payout := common.CalculatePayout(entry.Amount, entry.Option, bet)
+			if diced, diceOn, diceErr := cardService.ApplyLoadedDice(db, user, entry.ID, payout); diceErr == nil && diceOn {
+				payout = diced
+			}
 
 			unoApplied, isWinAfterUno, err := cardService.ApplyUnoReverseIfApplicable(db, user, bet.ID, true)
 			if err != nil {
@@ -306,6 +309,7 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 				user.TotalPointsLost += float64(entry.Amount)
 				db.Save(&user)
 				lostPoolAmount += float64(entry.Amount)
+				cardService.FinishSyndicateLoss(db, user, entry, float64(entry.Amount))
 
 				if spreadDisplay != "" {
 					loserList += fmt.Sprintf("%s - Bet: %s %s - **Lost $%d** (Uno Reverse!)\n", username, betOption, spreadDisplay, entry.Amount)
@@ -372,7 +376,8 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 				log.Printf("Error checking Bet Insurance (Win): %v", err)
 			}
 
-			user.Points += modifiedPayout
+			modifiedPayout, knuckleSteal := cardService.FinishSyndicateWin(db, user, entry, modifiedPayout)
+			user.Points += modifiedPayout + knuckleSteal
 			user.TotalBetsWon++
 			user.TotalPointsWon += modifiedPayout
 
@@ -428,6 +433,20 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 				}
 			}
 		} else {
+			if bet.Spread != nil {
+				push, fixErr := cardService.ApplyFixIsIn(db, user, entry, bet, scoreDiff)
+				if fixErr == nil && push {
+					user.Points += float64(entry.Amount)
+					db.Save(&user)
+					_, _ = cardService.ApplyBrassKnuckles(db, user, entry, false)
+					if spreadDisplay != "" {
+						loserList += fmt.Sprintf("%s - Bet: %s %s - **Push** (The Fix Is In refunded $%d)\n", username, betOption, spreadDisplay, entry.Amount)
+					} else {
+						loserList += fmt.Sprintf("%s - Bet: %s - **Push** (The Fix Is In refunded $%d)\n", username, betOption, entry.Amount)
+					}
+					continue
+				}
+			}
 			unoApplied, isWinAfterUno, err := cardService.ApplyUnoReverseIfApplicable(db, user, bet.ID, false)
 			if err != nil {
 				log.Printf("Error checking Uno Reverse: %v", err)
@@ -435,6 +454,9 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 
 			if unoApplied && isWinAfterUno {
 				payout := common.CalculatePayout(entry.Amount, entry.Option, bet)
+				if diced, diceOn, diceErr := cardService.ApplyLoadedDice(db, user, entry.ID, payout); diceErr == nil && diceOn {
+					payout = diced
+				}
 
 				consumer := func(db *gorm.DB, user models.User, cardID uint) error {
 					return cardService.PlayCardFromInventory(s, db, user, cardID)
@@ -480,7 +502,8 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 					log.Printf("Error checking Bet Insurance (Win/Uno Reverse): %v", err)
 				}
 
-				user.Points += modifiedPayout
+				modifiedPayout, knuckleSteal := cardService.FinishSyndicateWin(db, user, entry, modifiedPayout)
+				user.Points += modifiedPayout + knuckleSteal
 				user.TotalBetsWon++
 				user.TotalPointsWon += modifiedPayout
 
@@ -562,6 +585,7 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 			if jailApplied && jailRefund > 0 {
 				user.Points += jailRefund
 				db.Save(&user)
+				cardService.FinishSyndicateLoss(db, user, entry, 0)
 				if spreadDisplay != "" {
 					loserList += fmt.Sprintf("%s - Bet: %s %s - **Lost $%.0f** (Get Out of Jail Free: Full refund!)\n", username, betOption, spreadDisplay, float64(entry.Amount))
 				} else {
@@ -606,6 +630,18 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 
 			db.Save(&user)
 			lostPoolAmount += actualLoss
+			refunded := 0.0
+			if hedgeApplied && hedgeRefund > 0 {
+				refunded += hedgeRefund
+			}
+			if insuranceApplied && insuranceRefund > 0 {
+				refunded += insuranceRefund
+			}
+			unreimbursed := lossAmount - refunded
+			if unreimbursed < 0 {
+				unreimbursed = 0
+			}
+			cardService.FinishSyndicateLoss(db, user, entry, unreimbursed)
 
 			hedgeMsg := ""
 			if hedgeApplied && hedgeRefund > 0 {
@@ -706,6 +742,7 @@ func ResolveCFBBBet(s *discordgo.Session, bet models.Bet, db *gorm.DB, winningOp
 
 	bet.Active = false
 	db.Save(&bet)
+	_ = cardService.ClearBetAttachments(db, bet.ID)
 	db.Model(&bet).UpdateColumn("paid", true).UpdateColumn("active", false)
 
 	if winningOption > 0 {

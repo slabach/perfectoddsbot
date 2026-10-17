@@ -23,6 +23,7 @@ type Bet struct {
 	CfbdID        *string
 	EspnID        *string
 	GameStartDate *time.Time
-	AdminCreated  bool
-	Spread        *float64
+	AdminCreated   bool
+	Spread         *float64
+	OpeningSpread  *float64
 }

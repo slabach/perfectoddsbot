@@ -13,8 +13,10 @@ type UserInventory struct {
 	CardID   uint   `gorm:"index; index:idx_user_guild_card; not null"`
 	CardCode string `gorm:"index; index:idx_user_guild_card; not null"`
 	// Card         Card   `gorm:"foreignKey:CardID"`
-	TargetBetID  *uint
-	TargetUserID *string `gorm:"size:64"`
+	TargetBetID    *uint
+	TargetEntryID  *uint
+	TargetParlayID *uint
+	TargetUserID   *string `gorm:"size:64"`
 	BetAmount    float64
 	User         User `gorm:"foreignKey:UserID; constraint:OnDelete:CASCADE"`
 	TimesApplied int  `gorm:"not null;default:0"`

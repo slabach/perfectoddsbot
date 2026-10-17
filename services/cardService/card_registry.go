@@ -95,6 +95,9 @@ func PickRandomCard(hasSubscription bool, rarityMultiplier float64, guild *model
 		if !guild.CollegiateExpansion && Deck[i].Expansion == "Collegiate" {
 			continue
 		}
+		if !guild.SyndicateExpansion && Deck[i].Expansion == cards.ExpansionSyndicate {
+			continue
+		}
 		if len(allowedCardIDMap) > 0 {
 			if _, ok := allowedCardIDMap[Deck[i].ID]; !ok {
 				continue
@@ -154,7 +157,7 @@ func PickRandomCard(hasSubscription bool, rarityMultiplier float64, guild *model
 	return eligibleCards[0]
 }
 
-func PickCardByRarity(hasSubscription bool, rarityName string, allowedCardIDs []uint) *models.Card {
+func PickCardByRarity(hasSubscription bool, rarityName string, allowedCardIDs []uint, guild *models.Guild) *models.Card {
 	deckMu.RLock()
 	if len(Deck) == 0 {
 		deckMu.RUnlock()
@@ -172,6 +175,15 @@ func PickCardByRarity(hasSubscription bool, rarityName string, allowedCardIDs []
 	var eligibleCards []*models.Card
 	for i := range Deck {
 		if Deck[i].RequiredSubscription && !hasSubscription {
+			continue
+		}
+		if guild != nil && !guild.TarotExpansion && Deck[i].Expansion == "Tarot" {
+			continue
+		}
+		if guild != nil && !guild.CollegiateExpansion && Deck[i].Expansion == "Collegiate" {
+			continue
+		}
+		if guild != nil && !guild.SyndicateExpansion && Deck[i].Expansion == cards.ExpansionSyndicate {
 			continue
 		}
 		if len(allowedCardIDMap) > 0 {

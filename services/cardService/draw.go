@@ -235,6 +235,18 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 		fullRideInventory = inv
 		drawCardCost = 0
 	}
+	if cursed, curseErr := cards.HasHoochCurse(tx, lockedUser.ID, guildID); curseErr != nil {
+		tx.Rollback()
+		common.SendError(s, i, curseErr, db)
+		return
+	} else if cursed {
+		drawCardCost = cards.HoochCost(drawCardCost)
+		if err := cards.ConsumeHoochCurse(tx, lockedUser.ID, guildID); err != nil {
+			tx.Rollback()
+			common.SendError(s, i, err, db)
+			return
+		}
+	}
 
 	hasLuckyHorseshoe := horseshoeInventory != nil
 	hasUnluckyCat := unluckyCatInventory != nil
@@ -355,7 +367,13 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	*guild = lockedGuild
 
 	user.Points -= drawCardCost
-	guild.Pool += drawCardCost
+	poolShare, holderCut, bagErr := DivertBagman(tx, guild, drawCardCost)
+	if bagErr != nil {
+		tx.Rollback()
+		common.SendError(s, i, bagErr, db)
+		return
+	}
+	guild.Pool += poolShare
 
 	if guild.PoolDrainUntil != nil {
 		if now.After(*guild.PoolDrainUntil) {
@@ -428,12 +446,12 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 	needsEpic := guild.TotalCardDraws >= 100 && (guild.LastEpicDrawAt == 0 || (guild.TotalCardDraws-guild.LastEpicDrawAt) >= 100)
 
 	if needsMythic {
-		card = PickCardByRarity(hasSubscription, "Mythic", allowedCardIDs)
+		card = PickCardByRarity(hasSubscription, "Mythic", allowedCardIDs, guild)
 		if card == nil {
 			card = PickRandomCard(hasSubscription, rarityMultiplier, guild, allowedCardIDs)
 		}
 	} else if needsEpic {
-		card = PickCardByRarity(hasSubscription, "Epic", allowedCardIDs)
+		card = PickCardByRarity(hasSubscription, "Epic", allowedCardIDs, guild)
 		if card == nil {
 			card = PickRandomCard(hasSubscription, rarityMultiplier, guild, allowedCardIDs)
 		}
@@ -906,6 +924,12 @@ func DrawCard(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB)
 
 	username = common.GetUsernameWithDB(db, s, guildID, user.DiscordID)
 	embed := buildCardEmbed(card, cardResult, user, username, targetUsername, guild.Pool, drawCardCost)
+	if embed.Footer != nil {
+		embed.Footer.Text = fmt.Sprintf("Cost: -%.0f points | Added %.0f to pool%s", drawCardCost, poolShare, BagmanNote(holderCut))
+		if card.FlavorText != "" {
+			embed.Footer.Text = card.FlavorText + " · " + embed.Footer.Text
+		}
+	}
 
 	if donorUserID != 0 && donorName != "" {
 		if embed.Footer == nil {

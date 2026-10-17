@@ -115,6 +115,8 @@ func HandleCardUserSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 		err = cardSelection.HandleBlindsideBlockSelection(s, i, db, userID, targetUserID, guildID)
 	case cards.BracketBusterCardID:
 		err = cardSelection.HandleBracketBusterSelection(s, i, db, userID, targetUserID, guildID)
+	case cards.WateredDownHoochCardID, cards.LookoutBoyCardID, cards.ProtectionRacketCardID, cards.ConcreteShoesCardID, cards.LeveragedBuyoutCardID, cards.TheDonsFavorCardID:
+		err = cardSelection.HandleSyndicateUserPlay(s, i, db, cardID, userID, guildID, targetUserID)
 	default:
 		cardService.UnmarkSelectorUsed(customID)
 		return fmt.Errorf("card %d does not support user selection", cardID)
@@ -488,6 +490,14 @@ func HandlePlayCardSelection(s *discordgo.Session, i *discordgo.InteractionCreat
 		return cardSelection.HandleEmperorPlay(s, i, db, selectedCardID, userID, guildID)
 	}
 
+	switch selectedCardID {
+	case cards.BrassKnucklesCardID, cards.WateredDownHoochCardID, cards.LookoutBoyCardID, cards.LoadedDiceCardID,
+		cards.PointShaverCardID, cards.ProtectionRacketCardID, cards.CookedBooksCardID, cards.BackroomWiretapCardID,
+		cards.ConcreteShoesCardID, cards.TheFixIsInCardID, cards.BagmansCutCardID, cards.SpeakeasyParlayCardID,
+		cards.LeveragedBuyoutCardID, cards.TheDonsFavorCardID:
+		return cardSelection.BeginSyndicatePlay(s, i, db, selectedCardID, userID, guildID)
+	}
+
 	return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
@@ -630,9 +640,16 @@ func HandlePlayCardBetSelection(s *discordgo.Session, i *discordgo.InteractionCr
 			return fmt.Errorf("error refunding points: %v", err)
 		}
 
+		ids := make([]uint, 0, len(entries))
+		for _, entry := range entries {
+			ids = append(ids, entry.ID)
+		}
 		result := tx.Where("bet_id = ? AND user_id = ? AND deleted_at IS NULL", betID, txUser.ID).Delete(&models.BetEntry{})
 		if result.Error != nil {
 			return fmt.Errorf("error soft deleting bet entries: %v", result.Error)
+		}
+		if err := cardService.ClearEntryAttachments(tx, ids); err != nil {
+			return err
 		}
 
 		if err := cardService.PlayCardFromInventoryInTransaction(tx, txUser, cardID); err != nil {

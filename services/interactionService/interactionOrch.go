@@ -181,6 +181,35 @@ func HandleComponentInteraction(s *discordgo.Session, i *discordgo.InteractionCr
 		return
 	}
 
+	if strings.HasPrefix(customID, "synentry_") {
+		err := cardSelection.HandleSynEntry(s, i, db)
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
+	if strings.HasPrefix(customID, "synwire_") {
+		err := cardSelection.HandleSynWire(s, i, db)
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
+	if strings.HasPrefix(customID, "synopp_") {
+		err := cardSelection.HandleSynOpp(s, i, db)
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
+	if strings.HasPrefix(customID, "synparlay_") {
+		err := cardSelection.HandleSynParlay(s, i, db)
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
+
 	if strings.HasPrefix(customID, "playcard_bet_") {
 		err := HandlePlayCardBetSelection(s, i, db)
 		if err != nil {

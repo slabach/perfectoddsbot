@@ -6,6 +6,7 @@ import (
 	"math"
 	"perfectOddsBot/models"
 	"perfectOddsBot/services/cardService"
+	"perfectOddsBot/services/cardService/cards"
 	"perfectOddsBot/services/common"
 	"perfectOddsBot/services/guildService"
 	"strconv"
@@ -709,6 +710,7 @@ func HandleParlayAmount(s *discordgo.Session, i *discordgo.InteractionCreate, db
 			BetID:          bet.ID,
 			SelectedOption: option,
 			Spread:         bet.Spread,
+			AmericanOdds:   common.GetOddsFromBet(bet, option),
 			Resolved:       false,
 			Won:            nil,
 		}
@@ -827,19 +829,25 @@ func UpdateParlaysOnBetResolution(s *discordgo.Session, db *gorm.DB, betID uint,
 
 		allResolved := true
 		hasLoss := false
+		lossCount := 0
 		for _, pe := range parlay.ParlayEntries {
 			if pe.ID == entry.ID {
 				continue
 			}
-
 			if !pe.Resolved {
 				allResolved = false
 			}
 			if pe.Won != nil && !*pe.Won {
 				hasLoss = true
+				lossCount++
 			}
 		}
-		if hasLoss {
+		speakeasy, speakeasyErr := cardService.ParlayHasSpeakeasy(db, parlay.ID)
+		if speakeasyErr != nil {
+			log.Printf("Error checking Speakeasy for parlay %d: %v", parlay.ID, speakeasyErr)
+			speakeasy = false
+		}
+		if hasLoss && !speakeasy {
 			entry.Resolved = true
 			db.Save(&entry)
 			continue
@@ -866,11 +874,20 @@ func UpdateParlaysOnBetResolution(s *discordgo.Session, db *gorm.DB, betID uint,
 			}
 		}
 		entry.Resolved = true
-
 		entry.Won = &won
 		db.Save(&entry)
-
+		for i := range parlay.ParlayEntries {
+			if parlay.ParlayEntries[i].ID == entry.ID {
+				parlay.ParlayEntries[i].Won = &won
+				parlay.ParlayEntries[i].Resolved = true
+			}
+		}
 		if !won {
+			lossCount++
+			hasLoss = true
+		}
+
+		if !won && !speakeasy {
 			parlay.Status = "lost"
 			db.Save(&parlay)
 
@@ -880,6 +897,7 @@ func UpdateParlaysOnBetResolution(s *discordgo.Session, db *gorm.DB, betID uint,
 				user.TotalBetsLost++
 				user.TotalPointsLost += float64(parlay.Amount)
 				db.Save(&user)
+				_, _ = cardService.ApplyDonLossBill(db, user, float64(parlay.Amount))
 
 				guild, guildErr := guildService.GetGuildInfo(s, db, parlay.GuildID, "")
 				if guildErr == nil {
@@ -887,28 +905,68 @@ func UpdateParlaysOnBetResolution(s *discordgo.Session, db *gorm.DB, betID uint,
 				}
 				SendParlayResolutionNotification(s, db, parlay, false)
 			}
-		} else if allResolved {
-			if !hasLoss {
-				parlay.Status = "won"
-				db.Save(&parlay)
-
+		} else if allResolved && speakeasy && lossCount >= 2 {
+			parlay.Status = "lost"
+			db.Save(&parlay)
+			_ = cardService.ConsumeParlaySpeakeasy(db, parlay.ID)
+			if previousStatus != "lost" && previousStatus != "won" {
 				var user models.User
 				db.First(&user, parlay.UserID)
-				payout := common.CalculateParlayPayout(parlay.Amount, parlay.TotalOdds)
-				var err error
-				payout, _, err = cardService.ApplyHeismanCampaignIfApplicable(db, user, payout)
-				if err != nil {
-					log.Printf("Error applying Heisman Campaign card for parlay ID %d, user ID %d, payout %.2f: %v", parlay.ID, parlay.UserID, payout, err)
-					return fmt.Errorf("failed to apply Heisman Campaign card for parlay %d (user %d): %w", parlay.ID, parlay.UserID, err)
-				}
-				user.Points += payout
-				user.TotalBetsWon++
-				user.TotalPointsWon += payout
+				user.TotalBetsLost++
+				user.TotalPointsLost += float64(parlay.Amount)
 				db.Save(&user)
-
-				if previousStatus != "lost" && previousStatus != "won" {
-					SendParlayResolutionNotification(s, db, parlay, true, payout)
+				_, _ = cardService.ApplyDonLossBill(db, user, float64(parlay.Amount))
+				guild, guildErr := guildService.GetGuildInfo(s, db, parlay.GuildID, "")
+				if guildErr == nil {
+					db.Model(&models.Guild{}).Where("id = ?", guild.ID).UpdateColumn("pool", gorm.Expr("pool + ?", float64(parlay.Amount)))
 				}
+				SendParlayResolutionNotification(s, db, parlay, false)
+			}
+		} else if allResolved && (!hasLoss || (speakeasy && lossCount == 1)) {
+			parlay.Status = "won"
+			db.Save(&parlay)
+
+			var user models.User
+			db.First(&user, parlay.UserID)
+			payout := common.CalculateParlayPayout(parlay.Amount, parlay.TotalOdds)
+			if speakeasy && lossCount == 1 {
+				legDecimal := speakeasyLegDecimal(parlay)
+				if repriced, ok := cards.SpeakeasyPayout(parlay.Amount, parlay.TotalOdds, legDecimal); ok {
+					payout = repriced
+				} else {
+					parlay.Status = "lost"
+					db.Save(&parlay)
+					_ = cardService.ConsumeParlaySpeakeasy(db, parlay.ID)
+					user.TotalBetsLost++
+					user.TotalPointsLost += float64(parlay.Amount)
+					db.Save(&user)
+					_, _ = cardService.ApplyDonLossBill(db, user, float64(parlay.Amount))
+					guild, guildErr := guildService.GetGuildInfo(s, db, parlay.GuildID, "")
+					if guildErr == nil {
+						db.Model(&models.Guild{}).Where("id = ?", guild.ID).UpdateColumn("pool", gorm.Expr("pool + ?", float64(parlay.Amount)))
+					}
+					SendParlayResolutionNotification(s, db, parlay, false)
+					continue
+				}
+				_ = cardService.ConsumeParlaySpeakeasy(db, parlay.ID)
+			}
+			var err error
+			payout, _, err = cardService.ApplyHeismanCampaignIfApplicable(db, user, payout)
+			if err != nil {
+				log.Printf("Error applying Heisman Campaign card for parlay ID %d, user ID %d, payout %.2f: %v", parlay.ID, parlay.UserID, payout, err)
+				return fmt.Errorf("failed to apply Heisman Campaign card for parlay %d (user %d): %w", parlay.ID, parlay.UserID, err)
+			}
+			payout, _, err = cardService.ApplyDonWinTax(db, user, float64(parlay.Amount), payout)
+			if err != nil {
+				log.Printf("Error applying The Don's Favor to parlay %d: %v", parlay.ID, err)
+			}
+			user.Points += payout
+			user.TotalBetsWon++
+			user.TotalPointsWon += payout
+			db.Save(&user)
+
+			if previousStatus != "lost" && previousStatus != "won" {
+				SendParlayResolutionNotification(s, db, parlay, true, payout)
 			}
 		} else {
 			parlay.Status = "partial"
@@ -917,6 +975,19 @@ func UpdateParlaysOnBetResolution(s *discordgo.Session, db *gorm.DB, betID uint,
 	}
 
 	return nil
+}
+
+func speakeasyLegDecimal(parlay models.Parlay) float64 {
+	for _, leg := range parlay.ParlayEntries {
+		if leg.Won != nil && !*leg.Won {
+			odds := leg.AmericanOdds
+			if odds == 0 && leg.Bet.ID != 0 {
+				odds = common.GetOddsFromBet(leg.Bet, leg.SelectedOption)
+			}
+			return cards.AmericanToDecimal(odds)
+		}
+	}
+	return 0
 }
 
 func SendParlayResolutionNotification(s *discordgo.Session, db *gorm.DB, parlay models.Parlay, won bool, actualPayoutWhenWon ...float64) {

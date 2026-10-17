@@ -95,6 +95,9 @@ func buildCardEmbed(card *models.Card, result *models.CardResult, user models.Us
 	embed.Footer = &discordgo.MessageEmbedFooter{
 		Text: fmt.Sprintf("Cost: -%.0f points | Added %.0f to pool", drawCardCost, drawCardCost),
 	}
+	if card.FlavorText != "" {
+		embed.Footer.Text = card.FlavorText + " · " + embed.Footer.Text
+	}
 
 	return embed
 }

@@ -74,5 +74,26 @@ const (
 	BracketBusterCardID        = 40006
 	TheGoldenWhistleCardID     = 50003
 
+	// Shadows of the Syndicate. IDs are R EE CC: rarity, expansion 01, card.
+	BrassKnucklesCardID    = 10101
+	WateredDownHoochCardID = 10102
+	LookoutBoyCardID       = 10103
+	StreetTaxCardID        = 10104
+	LoadedDiceCardID       = 10105
+	PointShaverCardID      = 20101
+	ProtectionRacketCardID = 20102
+	CookedBooksCardID      = 20103
+	BackroomWiretapCardID  = 20104
+	WiretapOptionOpenLine  = 2010401
+	WiretapOptionRefund    = 2010402
+	ConcreteShoesCardID    = 30101
+	TheFixIsInCardID       = 30102
+	BagmansCutCardID       = 30103
+	SpeakeasyParlayCardID  = 40101
+	LeveragedBuyoutCardID  = 40102
+	TheDonsFavorCardID     = 50101
+
+	ExpansionSyndicate = "Syndicate"
+
 	RoyaltyGuildID = "761721066959667220"
 )

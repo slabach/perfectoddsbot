@@ -132,6 +132,7 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 
 	var entries []models.BetEntry
 	db.Where("bet_id = ? AND deleted_at IS NULL", bet.ID).Find(&entries)
+	_ = cardService.ConsumeFixForBet(db, bet.ID)
 
 	totalPayout := 0.0
 	totalWinningPayouts := 0.0
@@ -146,6 +147,9 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 
 		if entry.Option == winningOption {
 			payout := common.CalculatePayout(entry.Amount, winningOption, bet)
+			if diced, diceOn, diceErr := cardService.ApplyLoadedDice(db, user, entry.ID, payout); diceErr == nil && diceOn {
+				payout = diced
+			}
 
 			unoApplied, isWinAfterUno, err := cardService.ApplyUnoReverseIfApplicable(db, user, bet.ID, true)
 			if err != nil {
@@ -158,6 +162,7 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 				user.TotalPointsLost += float64(entry.Amount)
 				db.Save(&user)
 				lostPoolAmount += float64(entry.Amount)
+				cardService.FinishSyndicateLoss(db, user, entry, float64(entry.Amount))
 				continue
 			}
 
@@ -217,7 +222,8 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 				return
 			}
 
-			user.Points += modifiedPayout
+			modifiedPayout, knuckleSteal := cardService.FinishSyndicateWin(db, user, entry, modifiedPayout)
+			user.Points += modifiedPayout + knuckleSteal
 			user.TotalBetsWon++
 			user.TotalPointsWon += modifiedPayout
 			db.Save(&user)
@@ -266,6 +272,9 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 
 			if unoApplied && isWinAfterUno {
 				payout := common.CalculatePayout(entry.Amount, entry.Option, bet)
+				if diced, diceOn, diceErr := cardService.ApplyLoadedDice(db, user, entry.ID, payout); diceErr == nil && diceOn {
+					payout = diced
+				}
 
 				consumer := func(db *gorm.DB, user models.User, cardID uint) error {
 					return cardService.PlayCardFromInventory(s, db, user, cardID)
@@ -315,7 +324,8 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 					return
 				}
 
-				user.Points += modifiedPayout
+				modifiedPayout, knuckleSteal := cardService.FinishSyndicateWin(db, user, entry, modifiedPayout)
+				user.Points += modifiedPayout + knuckleSteal
 				user.TotalBetsWon++
 				user.TotalPointsWon += modifiedPayout
 
@@ -398,6 +408,7 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 			if jailApplied && jailRefund > 0 {
 				user.Points += jailRefund
 				db.Save(&user)
+				cardService.FinishSyndicateLoss(db, user, entry, 0)
 				username := common.GetUsernameWithDB(db, s, user.GuildID, user.DiscordID)
 				loserList += fmt.Sprintf("%s - **Lost $%.1f** (Get Out of Jail Free: Full refund!)\n", username, float64(entry.Amount))
 				continue
@@ -431,6 +442,14 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 
 			db.Save(&user)
 			lostPoolAmount += actualLoss
+			unreimbursed := lossAmount
+			if insuranceApplied && insuranceRefund > 0 {
+				unreimbursed -= insuranceRefund
+			}
+			if unreimbursed < 0 {
+				unreimbursed = 0
+			}
+			cardService.FinishSyndicateLoss(db, user, entry, unreimbursed)
 		}
 	}
 
@@ -509,6 +528,7 @@ func ResolveBetByID(s *discordgo.Session, i *discordgo.InteractionCreate, betID 
 	}
 
 	bet.Active = false
+	_ = cardService.ClearBetAttachments(db, bet.ID)
 	db.Model(&bet).UpdateColumn("paid", true).UpdateColumn("active", false)
 
 	err = UpdateParlaysOnBetResolution(s, db, bet.ID, winningOption, 0)

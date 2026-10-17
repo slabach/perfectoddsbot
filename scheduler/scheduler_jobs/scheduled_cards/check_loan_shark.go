@@ -9,6 +9,7 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 func CheckLoanShark(s *discordgo.Session, db *gorm.DB) error {
@@ -31,9 +32,18 @@ func CheckLoanShark(s *discordgo.Session, db *gorm.DB) error {
 
 	for _, loan := range loans {
 		var user models.User
+		collected := false
 		err := db.Transaction(func(tx *gorm.DB) error {
-			if err := tx.First(&user, loan.UserID).Error; err != nil {
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&user, loan.UserID).Error; err != nil {
 				return err
+			}
+
+			protected, err := cards.ProtectedByCookedBooks(tx, user.ID, user.GuildID)
+			if err != nil {
+				return err
+			}
+			if protected {
+				return nil
 			}
 
 			deduction := 600.0
@@ -54,11 +64,15 @@ func CheckLoanShark(s *discordgo.Session, db *gorm.DB) error {
 				return err
 			}
 
+			collected = true
 			return nil
 		})
 
 		if err != nil {
 			fmt.Printf("Error processing loan shark for user %d: %v\n", loan.UserID, err)
+			continue
+		}
+		if !collected {
 			continue
 		}
 

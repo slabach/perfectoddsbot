@@ -191,6 +191,9 @@ func TestExecutePickpocketSteal_LocksAndUpdates(t *testing.T) {
 			AddRow(2, "target1", "guild1", 80.0))
 
 	mock.ExpectQuery("SELECT count\\(\\*\\) FROM `user_inventories`").
+		WithArgs(2, "guild1", CookedBooksCardID, sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+	mock.ExpectQuery("SELECT count\\(\\*\\) FROM `user_inventories`").
 		WithArgs(2, "guild1", TheMoonCardID).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 	mock.ExpectQuery("SELECT .* FROM `user_inventories` WHERE .*card_id = \\?.*ORDER BY created_at DESC.*LIMIT \\?").
@@ -219,5 +222,23 @@ func TestExecutePickpocketSteal_LocksAndUpdates(t *testing.T) {
 
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestCheckAndConsumeShieldOrRedshirtIgnoresCookedBooks(t *testing.T) {
+	db, mock := newMockDB(t)
+	mock.ExpectQuery("SELECT .* FROM `user_inventories` WHERE .*card_id = \\?.*ORDER BY created_at DESC.*LIMIT \\?").
+		WithArgs(1, "guild1", RedshirtCardID, 1).
+		WillReturnError(gorm.ErrRecordNotFound)
+	mock.ExpectQuery("SELECT count\\(\\*\\) FROM `user_inventories`").
+		WithArgs(1, "guild1", ShieldCardID).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+
+	blocked, protection, err := CheckAndConsumeShieldOrRedshirt(db, 1, "guild1")
+	if err != nil || blocked || protection != "" {
+		t.Fatalf("blocked=%v protection=%q err=%v", blocked, protection, err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
 	}
 }

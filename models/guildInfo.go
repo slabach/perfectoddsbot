@@ -28,6 +28,8 @@ type Guild struct {
 	PoolDrainUntil          *time.Time
 	EmperorActiveUntil      *time.Time
 	EmperorHolderDiscordID  *string
+	BagmanActiveUntil       *time.Time
+	BagmanHolderDiscordID   *string
 	TotalCardDraws          int `gorm:"default:0"`
 	LastEpicDrawAt          int `gorm:"default:0"`
 	LastMythicDrawAt        int `gorm:"default:0"`
@@ -35,6 +37,7 @@ type Guild struct {
 	// Expansions
 	TarotExpansion      bool `gorm:"default:true"`
 	CollegiateExpansion bool `gorm:"default:true"`
+	SyndicateExpansion  bool `gorm:"default:true"`
 }
 
 func (g *Guild) normalizeRestrictedDrawJSONFields() {

@@ -23,6 +23,7 @@ type ParlayEntry struct {
 	Bet            Bet `gorm:"foreignKey:BetID"`
 	SelectedOption int
 	Spread         *float64
+	AmericanOdds   int
 	Resolved       bool `gorm:"default:false"`
 	Won            *bool
 }

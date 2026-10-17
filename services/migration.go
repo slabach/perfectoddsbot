@@ -726,7 +726,12 @@ func SyncCards(db *gorm.DB) error {
 			// set rarity id to common by default since one is required to be set
 			cardToCreate.RarityID = 1
 			cardToCreate.Weight = 0
-			cardToCreate.Rarity = ""
+			if rarityID, ok := rarityMap[codeCard.Rarity]; ok && codeCard.Rarity != "" {
+				cardToCreate.RarityID = rarityID
+				cardToCreate.Rarity = codeCard.Rarity
+			} else {
+				cardToCreate.Rarity = ""
+			}
 			cardToCreate.HandlerName = codeCard.HandlerName
 			cardToCreate.AddToInventory = codeCard.AddToInventory
 			cardToCreate.RequiredSubscription = codeCard.RequiredSubscription
@@ -800,6 +805,18 @@ func SyncCards(db *gorm.DB) error {
 		}
 		if dbCard.UserPlayable != codeCard.UserPlayable {
 			updateFields["user_playable"] = codeCard.UserPlayable
+			needsUpdate = true
+		}
+		if dbCard.FlavorText != codeCard.FlavorText {
+			updateFields["flavor_text"] = codeCard.FlavorText
+			needsUpdate = true
+		}
+		if dbCard.Expansion != codeCard.Expansion {
+			updateFields["expansion"] = codeCard.Expansion
+			needsUpdate = true
+		}
+		if dbCard.IsPositive != codeCard.IsPositive {
+			updateFields["is_positive"] = codeCard.IsPositive
 			needsUpdate = true
 		}
 

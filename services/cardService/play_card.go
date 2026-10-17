@@ -3,6 +3,7 @@ package cardService
 import (
 	"fmt"
 	"perfectOddsBot/models"
+	"perfectOddsBot/services/cardService/cards"
 	"perfectOddsBot/services/common"
 	"perfectOddsBot/services/guildService"
 	"time"
@@ -56,6 +57,9 @@ func showPlayableCardSelectMenu(s *discordgo.Session, i *discordgo.InteractionCr
 	now := time.Now()
 	for _, item := range inventory {
 		if item.ExpiresAt != nil && item.ExpiresAt.Before(now) {
+			continue
+		}
+		if !cards.IsHeldCopy(item) {
 			continue
 		}
 		inventoryMap[item.CardID]++

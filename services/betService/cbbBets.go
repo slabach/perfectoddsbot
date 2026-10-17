@@ -158,6 +158,10 @@ func CreateCBBBet(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm
 			AdminCreated:  common.IsAdmin(s, i),
 			Spread:        &line.Spread,
 		}
+		if dbBet.Spread != nil {
+			opening := *dbBet.Spread
+			dbBet.OpeningSpread = &opening
+		}
 		db.Create(&dbBet)
 	}
 
@@ -610,6 +614,10 @@ func CreateCBBBetFromGameID(s *discordgo.Session, i *discordgo.InteractionCreate
 			AdminCreated:  common.IsAdmin(s, i),
 			Spread:        spreadValue,
 		}
+		if dbBet.Spread != nil {
+			opening := *dbBet.Spread
+			dbBet.OpeningSpread = &opening
+		}
 		db.Create(&dbBet)
 	}
 
@@ -771,6 +779,10 @@ func AutoCreateCBBBet(s *discordgo.Session, db *gorm.DB, guildId string, channel
 			EspnID:        &gameId,
 			AdminCreated:  true,
 			Spread:        &lineValue,
+		}
+		if dbBet.Spread != nil {
+			opening := *dbBet.Spread
+			dbBet.OpeningSpread = &opening
 		}
 		db.Create(&dbBet)
 

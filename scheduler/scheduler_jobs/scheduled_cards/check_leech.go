@@ -46,6 +46,14 @@ func CheckLeech(s *discordgo.Session, db *gorm.DB) error {
 				return err
 			}
 
+			protected, err := cards.ProtectedByCookedBooks(tx, richestPlayer.ID, leech.GuildID)
+			if err != nil {
+				return err
+			}
+			if protected {
+				return nil
+			}
+
 			siphonAmount := richestPlayer.Points * 0.01
 			if siphonAmount <= 0 {
 				return nil

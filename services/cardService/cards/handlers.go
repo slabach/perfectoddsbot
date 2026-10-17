@@ -117,6 +117,21 @@ func ExecutePickpocketSteal(db *gorm.DB, userID string, targetUserID string, gui
 
 	targetMention := "<@" + targetUserID + ">"
 
+	books, err := ProtectedByCookedBooks(db, targetUser.ID, guildID)
+	if err != nil {
+		return nil, err
+	}
+	if books {
+		targetID := targetUserID
+		return &models.CardResult{
+			Message:           fmt.Sprintf("%s's Cooked Books blocked the theft attempt!", targetMention),
+			PointsDelta:       0,
+			PoolDelta:         0,
+			TargetUserID:      &targetID,
+			TargetPointsDelta: 0,
+		}, nil
+	}
+
 	moonRedirected, err := CheckAndConsumeMoon(db, targetUser.ID, guildID)
 	if err != nil {
 		return nil, err
@@ -173,7 +188,7 @@ func ExecutePickpocketSteal(db *gorm.DB, userID string, targetUserID string, gui
 	if blocked {
 		targetID := targetUserID
 		return &models.CardResult{
-			Message:           fmt.Sprintf("%s's %s blocked the theft attempt!", targetMention, protectionName(blockedByRedshirt)),
+			Message:           fmt.Sprintf("%s's %s blocked the theft attempt!", targetMention, blockedByRedshirt),
 			PointsDelta:       0,
 			PoolDelta:         0,
 			TargetUserID:      &targetID,
@@ -459,7 +474,7 @@ func handleTimeout(s *discordgo.Session, db *gorm.DB, userID string, guildID str
 			}
 			if shieldBlocked {
 				return &models.CardResult{
-					Message:     fmt.Sprintf("<@%s>'s Moon illusion tried to redirect, but no eligible users found. %s blocked the Timeout instead!", userID, protectionName(blockedByRedshirt)),
+					Message:     fmt.Sprintf("<@%s>'s Moon illusion tried to redirect, but no eligible users found. %s blocked the Timeout instead!", userID, blockedByRedshirt),
 					PointsDelta: 0,
 					PoolDelta:   0,
 				}, nil
@@ -500,7 +515,7 @@ func handleTimeout(s *discordgo.Session, db *gorm.DB, userID string, guildID str
 	}
 	if shieldBlocked {
 		return &models.CardResult{
-			Message:     fmt.Sprintf("<@%s>'s %s blocked the Timeout! The card fizzles out.", userID, protectionName(blockedByRedshirt)),
+			Message:     fmt.Sprintf("<@%s>'s %s blocked the Timeout! The card fizzles out.", userID, blockedByRedshirt),
 			PointsDelta: 0,
 			PoolDelta:   0,
 		}, nil
@@ -1240,7 +1255,7 @@ func handleJudgement(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 				return err
 			}
 			if blocked {
-				top50Details = append(top50Details, fmt.Sprintf("%s: %s blocked", username, protectionName(blockedByRedshirt)))
+				top50Details = append(top50Details, fmt.Sprintf("%s: %s blocked", username, blockedByRedshirt))
 				continue
 			}
 
@@ -1469,7 +1484,7 @@ func ExecuteJesterMute(s *discordgo.Session, db *gorm.DB, userID string, targetU
 				}
 				if blocked {
 					return &models.CardResult{
-						Message:           fmt.Sprintf("%s's Moon illusion tried to redirect, but no eligible users found. %s blocked the Jester's curse instead!", targetMention, protectionName(blockedByRedshirt)),
+						Message:           fmt.Sprintf("%s's Moon illusion tried to redirect, but no eligible users found. %s blocked the Jester's curse instead!", targetMention, blockedByRedshirt),
 						PointsDelta:       0,
 						PoolDelta:         0,
 						TargetUserID:      &targetID,
@@ -1524,7 +1539,7 @@ func ExecuteJesterMute(s *discordgo.Session, db *gorm.DB, userID string, targetU
 		}
 		if blocked {
 			return &models.CardResult{
-				Message:           fmt.Sprintf("%s's %s blocked the Jester's (%s) curse!", targetMention, protectionName(blockedByRedshirt), userMention),
+				Message:           fmt.Sprintf("%s's %s blocked the Jester's (%s) curse!", targetMention, blockedByRedshirt, userMention),
 				PointsDelta:       0,
 				PoolDelta:         0,
 				TargetUserID:      &targetID,
@@ -1604,7 +1619,7 @@ func handleGenerousDonation(s *discordgo.Session, db *gorm.DB, userID string, gu
 					return nil, fmt.Errorf("failed to remove blocked donation card: %v", err)
 				}
 				return &models.CardResult{
-					Message:     fmt.Sprintf("Your Moon illusion tried to redirect, but no eligible users found. Your %s blocked the Generous Donation instead! The card fizzles out.", protectionName(blockedByRedshirt)),
+					Message:     fmt.Sprintf("Your Moon illusion tried to redirect, but no eligible users found. Your %s blocked the Generous Donation instead! The card fizzles out.", blockedByRedshirt),
 					PointsDelta: 0,
 					PoolDelta:   0,
 				}, nil
@@ -1652,7 +1667,7 @@ func handleGenerousDonation(s *discordgo.Session, db *gorm.DB, userID string, gu
 			return nil, fmt.Errorf("failed to remove blocked donation card: %v", err)
 		}
 		return &models.CardResult{
-			Message:     fmt.Sprintf("Your %s blocked the Generous Donation! The card fizzles out.", protectionName(blockedByRedshirt)),
+			Message:     fmt.Sprintf("Your %s blocked the Generous Donation! The card fizzles out.", blockedByRedshirt),
 			PointsDelta: 0,
 			PoolDelta:   0,
 		}, nil
@@ -1917,7 +1932,7 @@ func ExecuteBetFreeze(s *discordgo.Session, db *gorm.DB, userID string, targetUs
 			if blocked {
 				targetID := targetUserID
 				return &models.CardResult{
-					Message:           fmt.Sprintf("%s's Moon illusion tried to redirect, but no eligible users found. %s blocked the Bet Freeze instead!", targetMention, protectionName(blockedByRedshirt)),
+					Message:           fmt.Sprintf("%s's Moon illusion tried to redirect, but no eligible users found. %s blocked the Bet Freeze instead!", targetMention, blockedByRedshirt),
 					PointsDelta:       0,
 					PoolDelta:         0,
 					TargetUserID:      &targetID,
@@ -1965,7 +1980,7 @@ func ExecuteBetFreeze(s *discordgo.Session, db *gorm.DB, userID string, targetUs
 	if blocked {
 		targetID := targetUserID
 		return &models.CardResult{
-			Message:           fmt.Sprintf("%s's %s blocked the Bet Freeze!", targetMention, protectionName(blockedByRedshirt)),
+			Message:           fmt.Sprintf("%s's %s blocked the Bet Freeze!", targetMention, blockedByRedshirt),
 			PointsDelta:       0,
 			PoolDelta:         0,
 			TargetUserID:      &targetID,
@@ -2070,7 +2085,7 @@ func handleGreenShells(s *discordgo.Session, db *gorm.DB, userID string, guildID
 						displayName = *targetName
 					}
 					if blocked {
-						message += fmt.Sprintf("%s's Moon illusion tried to redirect, but no eligible users found. %s blocked a shell! ", displayName, protectionName(blockedByRedshirt))
+						message += fmt.Sprintf("%s's Moon illusion tried to redirect, but no eligible users found. %s blocked a shell! ", displayName, blockedByRedshirt)
 					} else {
 						message += fmt.Sprintf("%s's Moon illusion tried to redirect, but no eligible users found. ", displayName)
 					}
@@ -2122,7 +2137,7 @@ func handleGreenShells(s *discordgo.Session, db *gorm.DB, userID string, guildID
 			displayName := fmt.Sprintf("<@%s>", lockedTarget.DiscordID)
 
 			if blocked {
-				message += fmt.Sprintf("%s's %s blocked a shell! ", displayName, protectionName(blockedByRedshirt))
+				message += fmt.Sprintf("%s's %s blocked a shell! ", displayName, blockedByRedshirt)
 				continue
 			}
 
@@ -2212,7 +2227,7 @@ func handleWhackAMole(s *discordgo.Session, db *gorm.DB, userID string, guildID 
 			}
 
 			if blocked {
-				message += fmt.Sprintf("%s's %s blocked the hammer! ", displayName, protectionName(blockedByRedshirt))
+				message += fmt.Sprintf("%s's %s blocked the hammer! ", displayName, blockedByRedshirt)
 				continue
 			}
 
@@ -2370,6 +2385,15 @@ func handleSocialism(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 				takeAmount = lockedTop.Points
 			}
 
+			books, err := ProtectedByCookedBooks(tx, lockedTop.ID, guildID)
+			if err != nil {
+				return err
+			}
+			if books {
+				topMessage += fmt.Sprintf("%s's Cooked Books blocked!\n", topDisplayName)
+				continue
+			}
+
 			moonRedirected, err := CheckAndConsumeMoon(tx, lockedTop.ID, guildID)
 			if err != nil {
 				return err
@@ -2382,7 +2406,7 @@ func handleSocialism(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 						return err
 					}
 					if blocked {
-						topMessage += fmt.Sprintf("%s's Moon had no one to redirect to; %s blocked!\n", topDisplayName, protectionName(blockedByRedshirt))
+						topMessage += fmt.Sprintf("%s's Moon had no one to redirect to; %s blocked!\n", topDisplayName, blockedByRedshirt)
 					} else {
 						topMessage += fmt.Sprintf("%s's Moon had no one to redirect to; fizzles.\n", topDisplayName)
 					}
@@ -2426,7 +2450,7 @@ func handleSocialism(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 			}
 
 			if blocked {
-				topMessage += fmt.Sprintf("%s's %s blocked!\n", topDisplayName, protectionName(blockedByRedshirt))
+				topMessage += fmt.Sprintf("%s's %s blocked!\n", topDisplayName, blockedByRedshirt)
 				continue
 			}
 
@@ -2568,6 +2592,17 @@ func handleRobinHood(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 			bottomDisplayName = *bottomPlayerName
 		}
 
+		books, err := ProtectedByCookedBooks(tx, lockedTop.ID, guildID)
+		if err != nil {
+			return err
+		}
+		if books {
+			result = &models.CardResult{
+				Message: fmt.Sprintf("Robin Hood attempted to steal from %s, but their Cooked Books parried the thief! The card fizzles out.", topDisplayName),
+			}
+			return nil
+		}
+
 		moonRedirected, err := CheckAndConsumeMoon(tx, lockedTop.ID, guildID)
 		if err != nil {
 			return err
@@ -2584,7 +2619,7 @@ func handleRobinHood(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 				}
 				if blocked {
 					result = &models.CardResult{
-						Message:     fmt.Sprintf("Robin Hood attempted to steal from %s, but their Moon illusion tried to redirect with no eligible users. %s parried the thief instead! The card fizzles out.", topDisplayName, protectionName(blockedByRedshirt)),
+						Message:     fmt.Sprintf("Robin Hood attempted to steal from %s, but their Moon illusion tried to redirect with no eligible users. %s parried the thief instead! The card fizzles out.", topDisplayName, blockedByRedshirt),
 						PointsDelta: 0,
 						PoolDelta:   0,
 					}
@@ -2654,7 +2689,7 @@ func handleRobinHood(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 
 		if blocked {
 			result = &models.CardResult{
-				Message:     fmt.Sprintf("Robin Hood attempted to steal from %s, but their %s parried the thief! The card fizzles out.", topDisplayName, protectionName(blockedByRedshirt)),
+				Message:     fmt.Sprintf("Robin Hood attempted to steal from %s, but their %s parried the thief! The card fizzles out.", topDisplayName, blockedByRedshirt),
 				PointsDelta: 0,
 				PoolDelta:   0,
 			}
@@ -2804,7 +2839,7 @@ func handleRedShells(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 						displayName = *targetName
 					}
 					if blocked {
-						message += fmt.Sprintf("%s's Moon illusion tried to redirect, but no eligible users found. %s blocked a shell! ", displayName, protectionName(blockedByRedshirt))
+						message += fmt.Sprintf("%s's Moon illusion tried to redirect, but no eligible users found. %s blocked a shell! ", displayName, blockedByRedshirt)
 					} else {
 						message += fmt.Sprintf("%s's Moon illusion tried to redirect, but no eligible users found. ", displayName)
 					}
@@ -2868,7 +2903,7 @@ func handleRedShells(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 			}
 
 			if blocked {
-				message += fmt.Sprintf("%s's %s blocked a shell! ", displayName, protectionName(blockedByRedshirt))
+				message += fmt.Sprintf("%s's %s blocked a shell! ", displayName, blockedByRedshirt)
 				continue
 			}
 
@@ -2910,13 +2945,6 @@ func handleRedShells(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 	}
 
 	return result, nil
-}
-
-func protectionName(blockedByRedshirt bool) string {
-	if blockedByRedshirt {
-		return "Redshirt"
-	}
-	return "Shield"
 }
 
 // CheckAndConsumeShield removes one Shield from the user's inventory if present; returns true if consumed.
@@ -2987,16 +3015,17 @@ func BurnExpiredRedshirts(db *gorm.DB, userID uint, guildID string) error {
 	return nil
 }
 
-// CheckAndConsumeShieldOrRedshirt checks Redshirt first (active = block without consume); if expired, burns it and falls through to Shield.
-// Returns (blocked, blockedByRedshirt, err). When blockedByRedshirt is true, Shield was not consumed.
-func CheckAndConsumeShieldOrRedshirt(db *gorm.DB, userID uint, guildID string) (blocked bool, blockedByRedshirt bool, err error) {
+// CheckAndConsumeShieldOrRedshirt checks an active Redshirt, then Shield.
+// The protection string is "Redshirt" or "Shield" when blocked, and empty otherwise.
+// Redshirt does not consume a Shield. Cooked Books is not checked here; point steals check it themselves.
+func CheckAndConsumeShieldOrRedshirt(db *gorm.DB, userID uint, guildID string) (blocked bool, protection string, err error) {
 	var redshirt models.UserInventory
 	err = db.Where("user_id = ? AND guild_id = ? AND card_id = ? AND deleted_at IS NULL", userID, guildID, RedshirtCardID).
 		Order("created_at DESC").Limit(1).First(&redshirt).Error
 	if err != nil {
 		// If error is not ErrRecordNotFound, return immediately
 		if err != gorm.ErrRecordNotFound {
-			return false, false, err
+			return false, "", err
 		}
 		// If NotFound, fall through to CheckAndConsumeShield
 	} else {
@@ -3008,16 +3037,19 @@ func CheckAndConsumeShieldOrRedshirt(db *gorm.DB, userID uint, guildID string) (
 			active = time.Since(redshirt.CreatedAt) < 2*time.Hour
 		}
 		if active {
-			return true, true, nil
+			return true, "Redshirt", nil
 		}
 		// Expired - delete it and propagate any error
 		if err = db.Delete(&redshirt).Error; err != nil {
-			return false, false, err
+			return false, "", err
 		}
 		// Deletion succeeded, fall through to CheckAndConsumeShield
 	}
 	blocked, err = CheckAndConsumeShield(db, userID, guildID)
-	return blocked, false, err
+	if err != nil || !blocked {
+		return blocked, "", err
+	}
+	return true, "Shield", nil
 }
 
 func checkAndConsumeSpareKey(db *gorm.DB, userID uint, guildID string) (bool, error) {
@@ -3114,7 +3146,7 @@ func ExecuteHostileTakeover(tx *gorm.DB, userID string, targetUserID string, gui
 					}
 					if blocked {
 						result = &models.CardResult{
-							Message:           fmt.Sprintf("Hostile Takeover: %s's Moon had no one to redirect to and their %s blocked the swap! The card fizzles.", targetMention, protectionName(blockedByRedshirt)),
+							Message:           fmt.Sprintf("Hostile Takeover: %s's Moon had no one to redirect to and their %s blocked the swap! The card fizzles.", targetMention, blockedByRedshirt),
 							PointsDelta:       0,
 							PoolDelta:         0,
 							TargetUserID:      &targetUserID,
@@ -3159,7 +3191,7 @@ func ExecuteHostileTakeover(tx *gorm.DB, userID string, targetUserID string, gui
 			}
 			if blocked {
 				result = &models.CardResult{
-					Message:           fmt.Sprintf("Hostile Takeover: %s's %s blocked the swap! The card fizzles.", targetMention, protectionName(blockedByRedshirt)),
+					Message:           fmt.Sprintf("Hostile Takeover: %s's %s blocked the swap! The card fizzles.", targetMention, blockedByRedshirt),
 					PointsDelta:       0,
 					PoolDelta:         0,
 					TargetUserID:      &targetUserID,
@@ -3181,7 +3213,7 @@ func ExecuteHostileTakeover(tx *gorm.DB, userID string, targetUserID string, gui
 					}
 					if blocked {
 						result = &models.CardResult{
-							Message:           fmt.Sprintf("Hostile Takeover: %s's Moon had no one to redirect to and their %s blocked the swap! The card fizzles.", drawerMention, protectionName(blockedByRedshirt)),
+							Message:           fmt.Sprintf("Hostile Takeover: %s's Moon had no one to redirect to and their %s blocked the swap! The card fizzles.", drawerMention, blockedByRedshirt),
 							PointsDelta:       0,
 							PoolDelta:         0,
 							TargetUserID:      &targetUserID,
@@ -3226,7 +3258,7 @@ func ExecuteHostileTakeover(tx *gorm.DB, userID string, targetUserID string, gui
 			}
 			if blocked {
 				result = &models.CardResult{
-					Message:           fmt.Sprintf("Hostile Takeover: %s's %s blocked the swap! The card fizzles.", drawerMention, protectionName(blockedByRedshirt)),
+					Message:           fmt.Sprintf("Hostile Takeover: %s's %s blocked the swap! The card fizzles.", drawerMention, blockedByRedshirt),
 					PointsDelta:       0,
 					PoolDelta:         0,
 					TargetUserID:      &targetUserID,
@@ -3429,7 +3461,7 @@ func handleBlueShell(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 				}
 				if blocked {
 					result = &models.CardResult{
-						Message:     fmt.Sprintf("The Blue Shell was thrown at %s, but their Moon illusion tried to redirect with no eligible users. %s blocked it instead!", displayName, protectionName(blockedByRedshirt)),
+						Message:     fmt.Sprintf("The Blue Shell was thrown at %s, but their Moon illusion tried to redirect with no eligible users. %s blocked it instead!", displayName, blockedByRedshirt),
 						PointsDelta: 0,
 						PoolDelta:   0,
 					}
@@ -3502,7 +3534,7 @@ func handleBlueShell(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 			}
 
 			result = &models.CardResult{
-				Message:     fmt.Sprintf("The Blue Shell was thrown at %s, but their %s blocked it!", displayName, protectionName(blockedByRedshirt)),
+				Message:     fmt.Sprintf("The Blue Shell was thrown at %s, but their %s blocked it!", displayName, blockedByRedshirt),
 				PointsDelta: 0,
 				PoolDelta:   0,
 			}
@@ -3750,6 +3782,17 @@ func handleRobbingTheHood(s *discordgo.Session, db *gorm.DB, userID string, guil
 			poorestDisplayName = *poorestUser.Username
 		}
 
+		books, err := ProtectedByCookedBooks(tx, poorestUser.ID, guildID)
+		if err != nil {
+			return err
+		}
+		if books {
+			result = &models.CardResult{
+				Message: fmt.Sprintf("Robbing the Hood targeted %s, but their Cooked Books blocked the theft! The card fizzles out.", poorestDisplayName),
+			}
+			return nil
+		}
+
 		moonRedirected, err := CheckAndConsumeMoon(tx, poorestUser.ID, guildID)
 		if err != nil {
 			return err
@@ -3763,7 +3806,7 @@ func handleRobbingTheHood(s *discordgo.Session, db *gorm.DB, userID string, guil
 				}
 				if blocked {
 					result = &models.CardResult{
-						Message:     fmt.Sprintf("Robbing the Hood targeted %s, but their Moon illusion tried to redirect with no eligible users. %s blocked the theft! The card fizzles out.", poorestDisplayName, protectionName(blockedByRedshirt)),
+						Message:     fmt.Sprintf("Robbing the Hood targeted %s, but their Moon illusion tried to redirect with no eligible users. %s blocked the theft! The card fizzles out.", poorestDisplayName, blockedByRedshirt),
 						PointsDelta: 0,
 						PoolDelta:   0,
 					}
@@ -3819,7 +3862,7 @@ func handleRobbingTheHood(s *discordgo.Session, db *gorm.DB, userID string, guil
 		}
 		if blocked {
 			result = &models.CardResult{
-				Message:     fmt.Sprintf("Robbing the Hood targeted %s, but their %s blocked the theft! The card fizzles out.", poorestDisplayName, protectionName(blockedByRedshirt)),
+				Message:     fmt.Sprintf("Robbing the Hood targeted %s, but their %s blocked the theft! The card fizzles out.", poorestDisplayName, blockedByRedshirt),
 				PointsDelta: 0,
 				PoolDelta:   0,
 			}
@@ -4051,7 +4094,7 @@ func handleHotPotato(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 					return err
 				}
 				if shieldBlocked {
-					messageParts = append(messageParts, fmt.Sprintf("%s's Moon tried to redirect but no eligible users. %s blocked your loss!", userMention, protectionName(blockedByRedshirt)))
+					messageParts = append(messageParts, fmt.Sprintf("%s's Moon tried to redirect but no eligible users. %s blocked your loss!", userMention, blockedByRedshirt))
 				} else {
 					messageParts = append(messageParts, fmt.Sprintf("%s's Moon tried to redirect but no eligible users. Your loss fizzles.", userMention))
 				}
@@ -4081,7 +4124,7 @@ func handleHotPotato(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 			}
 			if shieldBlocked {
 				drawerActualLoss = 0
-				messageParts = append(messageParts, fmt.Sprintf("%s's %s blocked your loss!", userMention, protectionName(blockedByRedshirt)))
+				messageParts = append(messageParts, fmt.Sprintf("%s's %s blocked your loss!", userMention, blockedByRedshirt))
 			} else {
 				drawerActualLoss = userLoss
 				user.Points -= userLoss
@@ -4104,7 +4147,7 @@ func handleHotPotato(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 					return err
 				}
 				if shieldBlocked {
-					messageParts = append(messageParts, fmt.Sprintf("%s's Moon tried to redirect but no eligible users. %s blocked their loss!", targetMention, protectionName(blockedByRedshirt)))
+					messageParts = append(messageParts, fmt.Sprintf("%s's Moon tried to redirect but no eligible users. %s blocked their loss!", targetMention, blockedByRedshirt))
 				} else {
 					messageParts = append(messageParts, fmt.Sprintf("%s's Moon tried to redirect but no eligible users. Their loss fizzles.", targetMention))
 				}
@@ -4134,7 +4177,7 @@ func handleHotPotato(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 			}
 			if shieldBlocked {
 				targetActualLoss = 0
-				messageParts = append(messageParts, fmt.Sprintf("%s's %s blocked the hot potato!", targetMention, protectionName(blockedByRedshirt)))
+				messageParts = append(messageParts, fmt.Sprintf("%s's %s blocked the hot potato!", targetMention, blockedByRedshirt))
 			} else {
 				targetActualLoss = targetLoss
 				lockedTarget.Points -= targetLoss
@@ -4228,7 +4271,7 @@ func ExecuteDuel(db *gorm.DB, userID string, targetUserID string, guildID string
 					}
 					if blocked {
 						result = &models.CardResult{
-							Message:           fmt.Sprintf("⚔️ DUEL! %s rolled %d, %s rolled %d. You win! But %s's Moon had no one to redirect to and their %s blocked the loss! The duel fizzles.", userMention, userRoll, targetMention, targetRoll, targetMention, protectionName(blockedByRedshirt)),
+							Message:           fmt.Sprintf("⚔️ DUEL! %s rolled %d, %s rolled %d. You win! But %s's Moon had no one to redirect to and their %s blocked the loss! The duel fizzles.", userMention, userRoll, targetMention, targetRoll, targetMention, blockedByRedshirt),
 							PointsDelta:       0,
 							PoolDelta:         0,
 							TargetUserID:      &targetID,
@@ -4276,7 +4319,7 @@ func ExecuteDuel(db *gorm.DB, userID string, targetUserID string, guildID string
 			}
 			if blocked {
 				result = &models.CardResult{
-					Message:           fmt.Sprintf("⚔️ DUEL! %s rolled %d, %s rolled %d. You win! But %s's %s blocked the loss! The duel fizzles.", userMention, userRoll, targetMention, targetRoll, targetMention, protectionName(blockedByRedshirt)),
+					Message:           fmt.Sprintf("⚔️ DUEL! %s rolled %d, %s rolled %d. You win! But %s's %s blocked the loss! The duel fizzles.", userMention, userRoll, targetMention, targetRoll, targetMention, blockedByRedshirt),
 					PointsDelta:       0,
 					PoolDelta:         0,
 					TargetUserID:      &targetID,
@@ -4321,7 +4364,7 @@ func ExecuteDuel(db *gorm.DB, userID string, targetUserID string, guildID string
 					}
 					if blocked {
 						result = &models.CardResult{
-							Message:           fmt.Sprintf("⚔️ DUEL! %s rolled %d, %s rolled %d. You lose! Your Moon had no one to redirect to and your %s blocked the loss! The duel fizzles.", userMention, userRoll, targetMention, targetRoll, protectionName(blockedByRedshirt)),
+							Message:           fmt.Sprintf("⚔️ DUEL! %s rolled %d, %s rolled %d. You lose! Your Moon had no one to redirect to and your %s blocked the loss! The duel fizzles.", userMention, userRoll, targetMention, targetRoll, blockedByRedshirt),
 							PointsDelta:       0,
 							PoolDelta:         0,
 							TargetUserID:      &targetID,
@@ -4369,7 +4412,7 @@ func ExecuteDuel(db *gorm.DB, userID string, targetUserID string, guildID string
 			}
 			if blocked {
 				result = &models.CardResult{
-					Message:           fmt.Sprintf("⚔️ DUEL! %s rolled %d, %s rolled %d. You lose! But your %s blocked the loss! The duel fizzles.", userMention, userRoll, targetMention, targetRoll, protectionName(blockedByRedshirt)),
+					Message:           fmt.Sprintf("⚔️ DUEL! %s rolled %d, %s rolled %d. You lose! But your %s blocked the loss! The duel fizzles.", userMention, userRoll, targetMention, targetRoll, blockedByRedshirt),
 					PointsDelta:       0,
 					PoolDelta:         0,
 					TargetUserID:      &targetID,
@@ -4763,7 +4806,7 @@ func ExecuteSocialDistancing(db *gorm.DB, userID string, targetUserID string, gu
 			if blocked {
 				targetID := targetUserID
 				return &models.CardResult{
-					Message:           fmt.Sprintf("%s's Moon illusion tried to redirect, but no eligible users found. %s blocked the Social Distancing instead!", targetMention, protectionName(blockedByRedshirt)),
+					Message:           fmt.Sprintf("%s's Moon illusion tried to redirect, but no eligible users found. %s blocked the Social Distancing instead!", targetMention, blockedByRedshirt),
 					PointsDelta:       0,
 					PoolDelta:         0,
 					TargetUserID:      &targetID,
@@ -4834,7 +4877,7 @@ func ExecuteSocialDistancing(db *gorm.DB, userID string, targetUserID string, gu
 	if blocked {
 		targetID := targetUserID
 		return &models.CardResult{
-			Message:           fmt.Sprintf("%s's %s blocked the Social Distancing!", targetMention, protectionName(blockedByRedshirt)),
+			Message:           fmt.Sprintf("%s's %s blocked the Social Distancing!", targetMention, blockedByRedshirt),
 			PointsDelta:       0,
 			PoolDelta:         0,
 			TargetUserID:      &targetID,
@@ -4900,7 +4943,8 @@ func handleTheHermit(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 	if moonRedirected {
 		randomUserID, err := GetRandomUserForMoon(db, guildID, []uint{user.ID})
 		if err != nil {
-			var shieldBlocked, blockedByRedshirt, spareKeyBlocked bool
+			var shieldBlocked, spareKeyBlocked bool
+			var blockedByRedshirt string
 			shieldBlocked, blockedByRedshirt, err = CheckAndConsumeShieldOrRedshirt(db, user.ID, guildID)
 			if err != nil {
 				return nil, err
@@ -4923,7 +4967,7 @@ func handleTheHermit(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 
 			var message string
 			if shieldBlocked {
-				message = fmt.Sprintf("You went into seclusion and gained a Shield! Your Moon illusion tried to redirect, but no eligible users found. Your existing %s protected you from the timeout, so you can still buy cards.", protectionName(blockedByRedshirt))
+				message = fmt.Sprintf("You went into seclusion and gained a Shield! Your Moon illusion tried to redirect, but no eligible users found. Your existing %s protected you from the timeout, so you can still buy cards.", blockedByRedshirt)
 			} else if spareKeyBlocked {
 				message = "You went into seclusion and gained a Shield! Your Moon illusion tried to redirect, but no eligible users found. Your Spare Key protected you from the timeout, so you can still buy cards."
 			} else {
@@ -4976,7 +5020,8 @@ func handleTheHermit(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 		}, nil
 	}
 
-	var shieldBlocked, blockedByRedshirt, spareKeyBlocked bool
+	var shieldBlocked, spareKeyBlocked bool
+	var blockedByRedshirt string
 	shieldBlocked, blockedByRedshirt, err = CheckAndConsumeShieldOrRedshirt(db, user.ID, guildID)
 	if err != nil {
 		return nil, err
@@ -4999,7 +5044,7 @@ func handleTheHermit(s *discordgo.Session, db *gorm.DB, userID string, guildID s
 
 	var message string
 	if shieldBlocked {
-		message = fmt.Sprintf("You went into seclusion and gained a Shield! Your existing %s protected you from the timeout, so you can still buy cards.", protectionName(blockedByRedshirt))
+		message = fmt.Sprintf("You went into seclusion and gained a Shield! Your existing %s protected you from the timeout, so you can still buy cards.", blockedByRedshirt)
 	} else if spareKeyBlocked {
 		message = "You went into seclusion and gained a Shield! Your Spare Key protected you from the timeout, so you can still buy cards."
 	} else {
@@ -5148,7 +5193,7 @@ func ExecuteJustice(s *discordgo.Session, db *gorm.DB, userID string, targetUser
 			if blocked {
 				targetID := targetUserID
 				return &models.CardResult{
-					Message:           fmt.Sprintf("%s's Moon illusion tried to redirect, but no eligible users found. %s blocked Justice instead!", targetMention, protectionName(blockedByRedshirt)),
+					Message:           fmt.Sprintf("%s's Moon illusion tried to redirect, but no eligible users found. %s blocked Justice instead!", targetMention, blockedByRedshirt),
 					PointsDelta:       0,
 					PoolDelta:         0,
 					TargetUserID:      &targetID,
@@ -5203,7 +5248,7 @@ func ExecuteJustice(s *discordgo.Session, db *gorm.DB, userID string, targetUser
 	if blocked {
 		targetID := targetUserID
 		return &models.CardResult{
-			Message:           fmt.Sprintf("%s's %s blocked Justice!", targetMention, protectionName(blockedByRedshirt)),
+			Message:           fmt.Sprintf("%s's %s blocked Justice!", targetMention, blockedByRedshirt),
 			PointsDelta:       0,
 			PoolDelta:         0,
 			TargetUserID:      &targetID,
@@ -5900,6 +5945,9 @@ func handleTheWorld(s *discordgo.Session, db *gorm.DB, userID string, guildID st
 		if err := tx.Delete(&entry).Error; err != nil {
 			return err
 		}
+		if err := tx.Where("target_entry_id = ? AND deleted_at IS NULL", entry.ID).Delete(&models.UserInventory{}).Error; err != nil {
+			return err
+		}
 
 		betName := bet.Description
 		result = &models.CardResult{
@@ -5999,6 +6047,9 @@ func handleTheGoldenWhistle(s *discordgo.Session, db *gorm.DB, userID string, gu
 
 			for _, e := range res.Entries {
 				if err := tx.Delete(&e).Error; err != nil {
+					return err
+				}
+				if err := tx.Where("target_entry_id = ? AND deleted_at IS NULL", e.ID).Delete(&models.UserInventory{}).Error; err != nil {
 					return err
 				}
 			}
@@ -6201,7 +6252,7 @@ func ExecuteBlindsideBlock(db *gorm.DB, userID string, targetUserID string, guil
 			if blocked {
 				targetID := targetUserID
 				return &models.CardResult{
-					Message:           fmt.Sprintf("Blindside block! %s's Moon illusion tried to redirect, but no eligible users found. %s blocked it instead!", targetMention, protectionName(blockedByRedshirt)),
+					Message:           fmt.Sprintf("Blindside block! %s's Moon illusion tried to redirect, but no eligible users found. %s blocked it instead!", targetMention, blockedByRedshirt),
 					PointsDelta:       0,
 					PoolDelta:         0,
 					TargetUserID:      &targetID,
@@ -6266,7 +6317,7 @@ func ExecuteBlindsideBlock(db *gorm.DB, userID string, targetUserID string, guil
 	if blocked {
 		targetID := targetUserID
 		return &models.CardResult{
-			Message:           fmt.Sprintf("Blindside block! %s's %s blocked it!", targetMention, protectionName(blockedByRedshirt)),
+			Message:           fmt.Sprintf("Blindside block! %s's %s blocked it!", targetMention, blockedByRedshirt),
 			PointsDelta:       0,
 			PoolDelta:         0,
 			TargetUserID:      &targetID,

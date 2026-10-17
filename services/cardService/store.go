@@ -63,6 +63,44 @@ func ShowStore(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 		common.SendError(s, i, fmt.Errorf("error fetching purchasable cards: %v", err), db)
 		return
 	}
+	filteredCards := make([]models.Card, 0, len(purchasableCards))
+	for _, card := range purchasableCards {
+		if !guild.SyndicateExpansion && card.Expansion == cards.ExpansionSyndicate {
+			continue
+		}
+		if !guild.TarotExpansion && card.Expansion == "Tarot" {
+			continue
+		}
+		if !guild.CollegiateExpansion && card.Expansion == "Collegiate" {
+			continue
+		}
+		filteredCards = append(filteredCards, card)
+	}
+	purchasableCards = filteredCards
+
+	shoed, shoesErr := cards.ConcreteShoesActive(db, user.ID, guildID)
+	if shoesErr != nil {
+		common.SendError(s, i, shoesErr, db)
+		return
+	}
+	if shoed {
+		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "Concrete Shoes keep you out of the store.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		if err != nil {
+			common.SendError(s, i, err, db)
+		}
+		return
+	}
+	hooch, hoochErr := cards.HasHoochCurse(db, user.ID, guildID)
+	if hoochErr != nil {
+		common.SendError(s, i, hoochErr, db)
+		return
+	}
 
 	if len(purchasableCards) == 0 {
 		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -106,6 +144,9 @@ func ShowStore(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 			cost := 0.0
 			if card.StoreCost != nil {
 				cost = *card.StoreCost
+			}
+			if hooch {
+				cost = cards.HoochCost(cost)
 			}
 			cardEntry := fmt.Sprintf("**%s** - %.0f points\n%s\n\n", card.Name, cost, card.Description)
 			// Truncate fieldValue to Discord's 1024 character limit per field
@@ -152,6 +193,9 @@ func ShowStore(s *discordgo.Session, i *discordgo.InteractionCreate, db *gorm.DB
 		cost := 0.0
 		if card.StoreCost != nil {
 			cost = *card.StoreCost
+		}
+		if hooch {
+			cost = cards.HoochCost(cost)
 		}
 
 		label := card.Name
@@ -318,6 +362,31 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 		common.SendError(s, i, fmt.Errorf("error locking user: %v", err), db)
 		return err
 	}
+	shoed, shoesErr := cards.ConcreteShoesActive(tx, lockedUser.ID, guildID)
+	if shoesErr != nil {
+		tx.Rollback()
+		return shoesErr
+	}
+	if shoed {
+		tx.Rollback()
+		return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "Concrete Shoes keep you out of the store.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+	}
+	if cursed, curseErr := cards.HasHoochCurse(tx, lockedUser.ID, guildID); curseErr != nil {
+		tx.Rollback()
+		return curseErr
+	} else if cursed {
+		storeCost = cards.HoochCost(storeCost)
+		if err := cards.ConsumeHoochCurse(tx, lockedUser.ID, guildID); err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
 
 	if lockedUser.CardDrawTimeoutUntil != nil && now.Before(*lockedUser.CardDrawTimeoutUntil) {
 		tx.Rollback()
@@ -360,7 +429,12 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 	*guild = lockedGuild
 
 	user.Points -= storeCost
-	guild.Pool += storeCost
+	poolShare, holderCut, bagErr := DivertBagman(tx, guild, storeCost)
+	if bagErr != nil {
+		tx.Rollback()
+		return bagErr
+	}
+	guild.Pool += poolShare
 
 	if guild.PoolDrainUntil != nil {
 		if now.After(*guild.PoolDrainUntil) {
@@ -816,7 +890,10 @@ func ProcessStorePurchase(s *discordgo.Session, i *discordgo.InteractionCreate, 
 
 	embed.Title = strings.Replace(embed.Title, " Drew: ", " Purchased: ", 1)
 	if embed.Footer != nil {
-		embed.Footer.Text = fmt.Sprintf("Store Purchase: -%.0f points | Added %.0f to pool", storeCost, storeCost)
+		embed.Footer.Text = fmt.Sprintf("Store Purchase: -%.0f points | Added %.0f to pool%s", storeCost, poolShare, BagmanNote(holderCut))
+		if card.FlavorText != "" {
+			embed.Footer.Text = card.FlavorText + " · " + embed.Footer.Text
+		}
 	}
 
 	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{

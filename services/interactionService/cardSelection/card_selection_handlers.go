@@ -392,6 +392,17 @@ func HandleTransferPortalSelection(s *discordgo.Session, i *discordgo.Interactio
 			First(&drawer).Error; err != nil {
 			return err
 		}
+		if shoed, shoesErr := cards.ConcreteShoesActive(tx, drawer.ID, guildID); shoesErr != nil {
+			return shoesErr
+		} else if shoed {
+			return s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "Concrete Shoes keep you out of the Transfer Portal.",
+					Flags:   discordgo.MessageFlagsEphemeral,
+				},
+			})
+		}
 		var targetUser models.User
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			Where("discord_id = ? AND guild_id = ?", targetUserID, guildID).
@@ -582,6 +593,9 @@ func HandleBracketBusterSelection(s *discordgo.Session, i *discordgo.Interaction
 			return err
 		}
 		if err := tx.Delete(&entry).Error; err != nil {
+			return err
+		}
+		if err := cardService.ClearEntryAttachments(tx, []uint{entry.ID}); err != nil {
 			return err
 		}
 
